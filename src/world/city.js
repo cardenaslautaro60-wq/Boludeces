@@ -28,6 +28,27 @@ const STYLES = {
   industrial: { w0: 22, w1: 38, d0: 18, d1: 30, setback: 6, gap: 6, maxSlope: 4, empty: 0.25 },
 };
 
+// Muelle más largo cerca del puerto que termine en el agua (el Muelle de Ultramar).
+// Devuelve la base (en tierra), la punta y la dirección base→punta.
+export function findPortPier(terrain) {
+  const port = LANDMARKS.puerto || LANDMARKS.museoFerro || LANDMARKS.catedral;
+  if (!port) return null;
+  let best = null, bl = 0;
+  for (const p of META.piers || []) {
+    if (Math.min(...p.map((q) => Math.hypot(q[0] - port.x, q[1] - port.z))) > 1500) continue;
+    const e0 = p[0], e1 = p[p.length - 1];
+    if (Math.min(terrain.heightAt(e0[0], e0[1]), terrain.heightAt(e1[0], e1[1])) > -1) continue;
+    let L = 0;
+    for (let k = 0; k < p.length - 1; k++) L += Math.hypot(p[k + 1][0] - p[k][0], p[k + 1][1] - p[k][1]);
+    if (L > bl) { bl = L; best = p; }
+  }
+  if (!best) return null;
+  let [b, t] = [best[0], best[best.length - 1]];
+  if (terrain.heightAt(b[0], b[1]) < terrain.heightAt(t[0], t[1])) [b, t] = [t, b];
+  const L = Math.hypot(t[0] - b[0], t[1] - b[1]) || 1;
+  return { x: b[0], z: b[1], tx: t[0], tz: t[1], dx: (t[0] - b[0]) / L, dz: (t[1] - b[1]) / L };
+}
+
 export class City {
   constructor() {
     this.blocks = []; // compatibilidad: ya no hay manzanas rectangulares
@@ -837,7 +858,8 @@ export class City {
       const z0 = s < 0 ? -pd - 7 : pd + 2.5, z1 = s < 0 ? -pd - 2.5 : pd + 7;
       for (let k = 0; k < 4; k++) {
         const yy = y + k * 0.7;
-        const za = s < 0 ? z0 + k * 1.1 : z0, zb = s < 0 ? z1 : z1 - k * 1.1;
+        // cada escalón más alto queda más lejos de la cancha
+        const za = s < 0 ? z0 : z0 + k * 1.1, zb = s < 0 ? z1 - k * 1.1 : z1;
         pl.box(-pw + 2, pw - 2, yy, yy + 0.7, za, zb, k % 2 ? navy : wh);
       }
       this.addCollider(-pw + 2, pw - 2, z0, z1, y - 1, y + 2.8, 'tribuna');
@@ -856,7 +878,8 @@ export class City {
     wall(X1 - 0.3, X1, Z0, Z1);
     this.addSign(['LA MADRIGUERA'], X0 - 0.05, y + 4.3, 0, 12, 1.6, -Math.PI / 2, { bg: '#1c2f6b', fg: '#ffffff' });
     this.addSign(['CLUB ATLÉTICO JORGE NEWBERY'], X1 + 0.05, y + 2.3, 0, 16, 1.2, Math.PI / 2, { bg: '#ffffff', fg: '#1c2f6b' });
-    this.marker('madriguera', X0 - 1.5, 0);
+    // la entrada, con el marco de la cancha (las misiones ubican cosas relativas a ella)
+    this.marker('madriguera', X0 - 1.5, 0, { cx, cz, ax, az, pw, pd, gy: y });
     const [mx, mz] = this.W(0, 0);
     POI.madriguera = { x: mx, z: mz, name: 'La Madriguera' };
     this.reserve({ cx, cz, ax, az, hw: X1 + 1, hd: Z1 + 1 });
@@ -875,7 +898,9 @@ export class City {
       for (let x = -d.hw + 3; x < d.hw; x += 8) for (const zz of [-d.hd + 0.6, d.hd - 0.6]) gb.box(x - 0.35, x + 0.35, -8, d.h - 0.5, zz - 0.35, zz + 0.35, hexColor(0x5a5650));
       this.clearFrame();
     }
-    const pt = LANDMARKS.puerto || LANDMARKS.museoFerro;
+    // el puerto va en la base del muelle largo real (si está en los datos)
+    const pier = findPortPier(t);
+    const pt = pier ? { x: pier.x - pier.dx * 70, z: pier.z - pier.dz * 70 } : LANDMARKS.puerto || LANDMARKS.museoFerro;
     if (!pt) return;
     // galpones del puerto
     for (let k = 0; k < 4; k++) {

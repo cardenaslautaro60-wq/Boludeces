@@ -321,6 +321,11 @@ export class Missions {
   defs() {
     const g = this.game;
     const M = () => g.city.markers;
+    // La Madriguera: coordenadas locales de la cancha (x a lo largo, z a lo ancho) → mundo.
+    // ME(a, b): relativo a la entrada, con +a hacia adentro de la cancha
+    const MS = (lx, lz) => { const m = M().madriguera, ax = m.ax ?? 1, az = m.az ?? 0, cx = m.cx ?? m.x, cz = m.cz ?? m.z; return [cx + ax * lx - az * lz, cz + az * lx + ax * lz]; };
+    const xz = ([x, z], y) => [x, y, z];
+    const ME = (a, b) => { const m = M().madriguera; return m.pw ? MS(a - m.pw - 9, b) : [m.x + a, m.z + b]; };
     const garage = () => ({ x: M().garagePetroca.x + 2, z: M().garagePetroca.z });
     return [
       // ------------------------------------------------------------------
@@ -630,15 +635,15 @@ export class Missions {
       // ------------------------------------------------------------------
       {
         id: 'trapo', title: 'El trapo del Lobo', giver: 'N', hint: 'Los chetos se afanaron el trapo de la hinchada de Newbery. Recuperalo antes del clásico.', reward: 1500, respect: 12, needPetroca: true, needGordopin: true,
-        start: () => ({ x: M().madriguera.x - 1, z: M().madriguera.z + 4 }),
+        start: () => { const [x, z] = ME(-1, 4); return { x, z }; },
         run: async (c, g) => {
           const G = g.player, P = g.companion;
-          const mx = M().madriguera.x, mz = M().madriguera.z;
-          const cacho = c.spawnPed('lobo', mx - 1.5, mz - 2, { name: 'Cacho, el utilero', look: { ...randomLook('lobo'), fat: 0.6, hair: 0xb0b0b0, hairStyle: 'beanie', mustache: true } });
+          const [mx, mz] = ME(-1, 0);
+          const cacho = c.spawnPed('lobo', ...ME(-1.5, -2), { name: 'Cacho, el utilero', look: { ...randomLook('lobo'), fat: 0.6, hair: 0xb0b0b0, hairStyle: 'beanie', mustache: true } });
           c.script(cacho, () => {});
           await c.cutscene(async () => {
             c.face(cacho, G); c.face(G, cacho);
-            c.cam(V3(mx - 6, G.pos.y + 2, mz + 5), V3(mx - 5, G.pos.y + 1.9, mz + 4), V3(mx - 1, G.pos.y + 1.5, mz), 8);
+            c.cam(V3(...xz(ME(-6, 5), G.pos.y + 2)), V3(...xz(ME(-5, 4), G.pos.y + 1.9)), V3(...xz(ME(-1, 0), G.pos.y + 1.5)), 8);
             await c.say('Cacho, el utilero', 'Gordopin, una desgracia. Los chetos de Rada Tilly se afanaron el trapo grande de la hinchada. El de "LA BANDA DEL LOBO".');
             await c.say('Cacho, el utilero', 'Y el domingo es el clásico con Huracán. ¡No podemos salir sin el trapo!');
             await c.say('Gordopin', '¿Sin el trapo? Eso es peor que perder.');
@@ -681,20 +686,24 @@ export class Missions {
           g.traffic.cars.push(chase);
           chase.blip = '#ff3030';
           c.timer(210, 'CLÁSICO');
-          await c.goTo(mx - 1, mz, { text: 'Llevá el trapo a <b>La Madriguera</b> antes del clásico.', radius: 3 });
+          await c.goTo(mx, mz, { text: 'Llevá el trapo a <b>La Madriguera</b> antes del clásico.', radius: 3 });
           // colgar el trapo
           const banner = new THREE.Mesh(new THREE.PlaneGeometry(22, 3.2), new THREE.MeshBasicMaterial({ map: signTexture(['LA BANDA DEL LOBO'], { w: 1024, h: 150, bg: '#f4f4f4', fg: '#1c2f6b', borderColor: '#1c2f6b' }), side: THREE.DoubleSide }));
-          const by = g.world.footGround(mx + 35, mz) + 3.4;
-          banner.position.set(mx + 35, by, mz - 18.4);
+          // colgado adelante de la tribuna, mirando a la cancha
+          const MG = M().madriguera, pd = MG.pd ?? 18;
+          const [bx, bz] = MS(0, -pd - 2.3);
+          const by = (MG.gy ?? g.world.footGround(bx, bz)) + 1.75;
+          banner.position.set(bx, by, bz);
+          banner.rotation.y = Math.atan2(-(MG.az ?? 0), MG.ax ?? 1);
           g.scene.add(banner);
           const fans = [];
           for (let i = 0; i < 8; i++) {
-            const q = g.spawnPed('lobo', mx + 20 + (i % 4) * 5, mz - 8 + Math.floor(i / 4) * 4, {});
+            const q = g.spawnPed('lobo', ...MS(-9 + (i % 4) * 6, -pd + 2.5 + Math.floor(i / 4) * 3), {});
             q.persistent = true; q.dance = true; q.brain = new Brain(g, q, 'idle'); q.isFriend = true;
             fans.push(q);
           }
           await c.cutscene(async () => {
-            c.cam(V3(mx + 30, by + 6, mz + 10), V3(mx + 34, by + 1, mz + 4), V3(mx + 35, by, mz - 18), 7);
+            c.cam(V3(...xz(MS(-16, -pd + 20), by + 6)), V3(...xz(MS(-10, -pd + 15), by + 2)), V3(bx, by, bz), 7);
             await c.say('Cacho, el utilero', '¡Vamos Lobo, carajo! ¡Volvió el trapo!', 3);
             await c.say('Gordopin', 'Aguante Newbery. Y que Don Crudo se vaya a perforar a la luna.', 3.5);
           });
@@ -762,14 +771,14 @@ export class Missions {
       // ------------------------------------------------------------------
       {
         id: 'final', title: 'Tenpesos, final del recorrido', giver: 'N', hint: 'Frená a Tenpesos antes de que clausure La Madriguera.', reward: 10000, respect: 20, needPetroca: true, needGordopin: true,
-        start: () => ({ x: M().madriguera.x - 1, z: M().madriguera.z + 4 }),
+        start: () => { const [x, z] = ME(-1, 4); return { x, z }; },
         run: async (c, g) => {
           const G = g.player, P = g.companion;
-          const mx = M().madriguera.x, mz = M().madriguera.z;
+          const [mx, mz] = ME(0, 0);
           await c.cutscene(async () => {
-            c.place(P, mx - 2.5, mz + 1.5, 0);
+            c.place(P, ...ME(-2.5, 1.5), 0);
             c.face(P, G); c.face(G, P);
-            c.cam(V3(mx - 7, G.pos.y + 2.2, mz + 5), V3(mx - 6, G.pos.y + 2, mz + 4), V3(mx - 1.5, G.pos.y + 1.5, mz + 1), 8);
+            c.cam(V3(...xz(ME(-7, 5), G.pos.y + 2.2)), V3(...xz(ME(-6, 4), G.pos.y + 2)), V3(...xz(ME(-1.5, 1), G.pos.y + 1.5)), 8);
             await c.say('Petroca', 'Gordo, se pudrió todo. Tenpesos sabe que fuimos nosotros.');
             await c.say('Petroca', 'Viene para acá con una orden trucha firmada por Crudo para clausurar La Madriguera.');
             await c.say('Gordopin', 'Entonces lo paramos en el camino. A mí no me van a sacar nunca de la calle. Y al Lobo, de su cancha, tampoco.');
@@ -787,12 +796,13 @@ export class Missions {
           c.script(ten, () => {});
           c.script(pul, (dt, b) => { if (pul.vehicle && dist(car.pos.x, car.pos.z, G.pos.x, G.pos.z) < 45) b.shootFromCar(dt, g.player.vehicle || g.player); });
           car.ai = new DriverAI(g, car, 'route', { speedMul: 1.2 });
-          car.ai.planRoute(mx - 10, mz);
+          car.ai.planRoute(...ME(-10, 0));
           g.traffic.cars.push(car);
           car.blip = '#ff3030';
           c.objective('Subite a un auto y frená el <b>patrullero de Tenpesos</b> antes de que llegue a La Madriguera.');
           c.failIf(() => dist(car.pos.x, car.pos.z, mx, mz) < 25 && !car.dead && car.health > 250, 'Tenpesos clausuró La Madriguera.');
-          await c.until(() => dist(car.pos.x, car.pos.z, G.pos.x, G.pos.z) < 70);
+          // (si lo rompen de lejos, también cuenta: si no, la misión quedaba esperando)
+          await c.until(() => dist(car.pos.x, car.pos.z, G.pos.x, G.pos.z) < 70 || car.health < 300);
           car.ai.mode = 'flee'; car.ai.target = G; car.ai.speedMul = 1.25;
           c.fails = c.fails.filter((f) => f.reason !== 'Tenpesos clausuró La Madriguera.');
           g.hud.showToast('¡Tenpesos se escapa!', 2);

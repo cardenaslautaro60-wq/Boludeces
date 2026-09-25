@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Terrain, buildWater } from './terrain.js';
 import { RoadNetwork } from './roads.js';
-import { City } from './city.js';
+import { City, findPortPier } from './city.js';
 import { Props } from './props.js';
 import { Zones } from './zones.js';
 import { StaticColliders } from './collision.js';
@@ -181,21 +181,10 @@ export class World {
       POI.chori = sw ? { x: sw.x, z: sw.z, name: 'El Chori del Viento' } : { x: sob.x, z: sob.z, name: 'El Chori del Viento' };
     }
     // Muelle más largo del puerto (Muelle de Ultramar) y el puerto
-    let best = null, bl = 0;
-    const port = LANDMARKS.puerto || LANDMARKS.museoFerro || cat;
-    for (const p of META.piers || []) {
-      if (Math.min(...p.map((q) => Math.hypot(q[0] - port.x, q[1] - port.z))) > 700) continue;
-      let L = 0;
-      for (let k = 0; k < p.length - 1; k++) L += Math.hypot(p[k + 1][0] - p[k][0], p[k + 1][1] - p[k][1]);
-      if (L > bl) { bl = L; best = p; }
-    }
-    if (best) {
-      let [b, t] = [best[0], best[best.length - 1]];
-      if (terrain.heightAt(b[0], b[1]) < terrain.heightAt(t[0], t[1])) [b, t] = [t, b];
-      const L = Math.hypot(t[0] - b[0], t[1] - b[1]) || 1;
-      const dx = (t[0] - b[0]) / L, dz = (t[1] - b[1]) / L;
-      POI.muelle = { x: b[0], z: b[1], tx: t[0], tz: t[1], dx, dz, name: 'Muelle de Ultramar' };
-      POI.puerto = { x: b[0] - dx * 40, z: b[1] - dz * 40, name: 'Puerto' };
+    const pier = findPortPier(terrain);
+    if (pier) {
+      POI.muelle = { ...pier, name: 'Muelle de Ultramar' };
+      POI.puerto = { x: pier.x - pier.dx * 40, z: pier.z - pier.dz * 40, name: 'Puerto' };
     } else if (LANDMARKS.puerto) {
       // el espigón del puerto es parte de la costa: la punta de tierra que más entra al mar
       const b0 = LANDMARKS.puerto;
