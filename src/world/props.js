@@ -244,7 +244,8 @@ export class Props {
   // ---- Luminarias ----
   buildLamps(terrain, roads, city, colliders, T) {
     const jc = POI.semaforo && POI.semaforo.corner;
-    const spots = city.lampSpots.filter(([x, z]) => !jc || Math.hypot(x - jc.x, z - jc.z) > 9);
+    // (un farol que cae sobre la calzada de otra calle, en cruces raros, no se pone)
+    const spots = city.lampSpots.filter(([x, z]) => (!jc || Math.hypot(x - jc.x, z - jc.z) > 9) && roads.clearance(x, z, 6) > 0.3);
     // rutas fuera de la ciudad: faroles cada tanto
     for (const e of roads.edges) {
       if (e.kind !== 'ruta' || e.sw || e.len < 30) continue;
@@ -353,6 +354,13 @@ export class Props {
         }
       }
     }
+    // ningún árbol sobre la calzada: los de vereda quedan a 2 m del cordón, pero en esquinas
+    // raras o con calles muy juntas la vereda de una pisa la otra (y las plazas de OSM a veces
+    // incluyen un pedazo de calle)
+    const n0 = spots.length;
+    const ok = spots.filter(([x, z]) => roads.clearance(x, z, 6) > 1.1);
+    spots.length = 0; spots.push(...ok);
+    this.treesOnRoad = n0 - spots.length;
     const trunk = new GeoBuilder();
     trunk.cylinder(0, 0, 0.2, 0.08, 4.5, hexColor(0x4a3a2a), 6, false);
     const mat = vcMat();
@@ -608,6 +616,7 @@ export class Props {
   buildBenches(city, terrain, colliders) {
     const gb = new GeoBuilder();
     for (const [x, z] of city.benches) {
+      if (this.game.roads.clearance(x, z, 6) < 1) continue; // nada de bancos en la calle
       const y = terrain.heightAt(x, z) + 0.3;
       gb.box(x - 1, x + 1, y + 0.4, y + 0.5, z - 0.3, z + 0.3, hexColor(0x6a4a2a));
       gb.box(x - 1, x + 1, y + 0.5, y + 0.9, z + 0.25, z + 0.35, hexColor(0x6a4a2a));
