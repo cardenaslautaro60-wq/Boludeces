@@ -312,6 +312,13 @@ export class Props {
       }
     }
     // cortinas de álamos (rompevientos) junto a chacras y canchas de las afueras
+    // (adentro de La Madriguera no: ahí están las tribunas)
+    const MG = city.markers && city.markers.madriguera;
+    const inStadium = (x, z) => {
+      if (!MG || !MG.pw) return false;
+      const dx = x - MG.cx, dz = z - MG.cz;
+      return Math.abs(dx * MG.ax + dz * MG.az) < MG.pw + 10 && Math.abs(-dx * MG.az + dz * MG.ax) < MG.pd + 11;
+    };
     for (const ar of this.game.zones.areas) {
       if (ar.kind !== 'cancha' && ar.kind !== 'escuela') continue;
       const P = ar.pts;
@@ -321,7 +328,7 @@ export class Props {
         if (L < 25 || !rng.chance(0.5)) continue;
         for (let d = 3; d < L - 3; d += 6) {
           const x = P[i] + ((P[j] - P[i]) * d) / L, z = P[i + 1] + ((P[j + 1] - P[i + 1]) * d) / L;
-          if (roads.clearance(x, z, 8) < 2.5) continue;
+          if (roads.clearance(x, z, 8) < 2.5 || inStadium(x, z)) continue;
           spots.push([x, z, 'alamo']);
         }
       }

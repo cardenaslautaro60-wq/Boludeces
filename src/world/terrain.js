@@ -368,7 +368,7 @@ export function buildWater(terrain) {
         vec3 p = position;
         float w = sin(p.x*0.05 + uTime*1.3)*0.18 + sin(p.z*0.07 - uTime*1.1)*0.14;
         p.y += w * clamp(depth*0.4, 0.0, 1.0);
-        vWorld = p;
+        vWorld = (modelMatrix * vec4(p, 1.0)).xyz;
         vec4 mvPosition = modelViewMatrix * vec4(p,1.0);
         gl_Position = projectionMatrix * mvPosition;
         #include <fog_vertex>
@@ -381,7 +381,7 @@ export function buildWater(terrain) {
       float noise(vec2 p){ vec2 i=floor(p); vec2 f=fract(p); f=f*f*(3.0-2.0*f);
         return mix(mix(hash(i),hash(i+vec2(1,0)),f.x), mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x), f.y); }
       void main(){
-        float d = clamp(vDepth/10.0, 0.0, 1.0);
+        float d = clamp(vDepth/8.0, 0.0, 1.0);
         vec3 c = mix(uShallow, uDeep, d);
         float n = noise(vWorld.xz*0.08 + vec2(uTime*0.25, uTime*0.18)) * 0.6 + noise(vWorld.xz*0.25 - vec2(uTime*0.4, 0.0))*0.4;
         c = mix(c, uSky, n*0.22);
@@ -413,7 +413,8 @@ export function buildWater(terrain) {
     const a = j * na + i, b = a + 1, c = a + na, d = c + 1;
     const lo = Math.min(g0[a], g0[b], g0[c], g0[d]), hi = Math.max(g0[a], g0[b], g0[c], g0[d]);
     // solo celdas con agua y que no sean mar profundo (ahí alcanza el plano)
-    if (lo > 0.6 || hi < -9) continue;
+    // (el borde de la malla llega a 12 m, donde el color ya es igual al del plano)
+    if (lo > 0.6 || hi < -12) continue;
     idx.push(a, b, c, b, d, c);
   }
   const geo = new THREE.BufferGeometry();

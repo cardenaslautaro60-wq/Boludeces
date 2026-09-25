@@ -919,6 +919,8 @@ export class City {
       for (let i = 0; i < 12; i++) {
         const lx = -33 + (i % 6) * 13, lz = 4 + Math.floor(i / 6) * 6;
         const [x, z] = this.W(lx, lz);
+        // solo sobre tierra firme y seca (no en la bajada a la playa)
+        if (t.heightAt(x, z) < 1.5 || t.seaDist(x, z) < 12) continue;
         const stack = rng.int(1, 3);
         for (let s = 0; s < stack; s++) this.containers.push({ x, z, y: t.heightAt(x, z) + s * 2.6, color: rng.pick(cols), rot });
         this.addCollider(lx - 6.1, lx + 6.1, lz - 1.25, lz + 1.25, -2, t.heightAt(x, z) + stack * 2.6, 'container');
