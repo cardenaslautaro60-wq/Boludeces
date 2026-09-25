@@ -407,6 +407,12 @@ export class City {
       if (face) { lb.tri(...a, 0, 0, ...b, 1, 0, ...c, 1, 1); lb.tri(...a, 0, 0, ...c, 1, 1, ...d, 0, 1); }
       else { lb.tri(...a, 0, 0, ...c, 1, 1, ...b, 1, 0); lb.tri(...a, 0, 0, ...d, 0, 1, ...c, 1, 1); }
     };
+    // una vereda no puede quedar encima de otra calzada (pasaba en cruces raros y calles muy
+    // juntas: "calles cruzadas"). onRoad: el punto está sobre alguna calle (con un margen)
+    const onRoad = (x, z) => R.clearance(x, z, 6) < -0.15;
+    const triOnRoad = (a, b, c) => onRoad((a[0] + b[0] + c[0]) / 3, (a[2] + b[2] + c[2]) / 3);
+    const upOK = (lb, a, b, c) => { if (!triOnRoad(a, b, c)) up(lb, a, b, c); };
+    this.sidewalkSkipped = 0;
     for (const e of R.edges) {
       if (!e.sw) continue;
       const A = R.nodes[e.a];
@@ -417,27 +423,45 @@ export class City {
         const nx = -e.dz * s, nz = e.dx * s;
         const n = Math.max(1, Math.ceil((t1 - t0) / 7));
         const lb = this.lean.get(A.x + e.dx * (t0 + t1) / 2, A.z + e.dz * (t0 + t1) / 2, 'sidewalk');
+        // tramos de vereda consecutivos que no pisan otra calle (el cordón va por tramo)
+        let runStart = -1;
+        const flushCurb = (ka, kb) => {
+          const ta = t0 + ((t1 - t0) * ka) / n, tb = t0 + ((t1 - t0) * kb) / n;
+          curbFace(A.x + e.dx * ta + nx * h, A.z + e.dz * ta + nz * h, A.x + e.dx * tb + nx * h, A.z + e.dz * tb + nz * h, -nx, -nz);
+        };
         for (let k = 0; k < n; k++) {
           const ta = t0 + ((t1 - t0) * k) / n, tb = t0 + ((t1 - t0) * (k + 1)) / n;
+          const tm = (ta + tb) / 2;
+          const mx = A.x + e.dx * tm + nx * (h + SW / 2), mz = A.z + e.dz * tm + nz * (h + SW / 2);
+          const ox = A.x + e.dx * tm + nx * (h + SW - 0.3), oz = A.z + e.dz * tm + nz * (h + SW - 0.3);
+          if (onRoad(mx, mz) || onRoad(ox, oz)) {
+            this.sidewalkSkipped++;
+            if (runStart >= 0) { flushCurb(runStart, k); runStart = -1; }
+            continue;
+          }
+          if (runStart < 0) runStart = k;
           const ax = A.x + e.dx * ta, az = A.z + e.dz * ta, bx = A.x + e.dx * tb, bz = A.z + e.dz * tb;
           const i0 = P3(ax + nx * h, az + nz * h), o0 = P3(ax + nx * (h + SW), az + nz * (h + SW));
           const i1 = P3(bx + nx * h, bz + nz * h), o1 = P3(bx + nx * (h + SW), bz + nz * (h + SW));
           up(lb, i0, i1, o1);
           up(lb, i0, o1, o0);
         }
-        curbFace(A.x + e.dx * t0 + nx * h, A.z + e.dz * t0 + nz * h, A.x + e.dx * t1 + nx * h, A.z + e.dz * t1 + nz * h, -nx, -nz);
+        if (runStart >= 0) flushCurb(runStart, n);
       }
     }
-    // esquinas
+    // esquinas (las de ángulo muy agudo se van lejos del cruce: se descartan)
     for (const c of this.corners) {
       const { n, P, Q, tP, tQ, hP, hQ, pP, pQ, nPx, nPz, nQx, nQz } = c;
+      const reach = Math.max(hP, hQ, pP, pQ) * 2.5 + 4;
+      if (Math.hypot(c.c.x - n.x, c.c.z - n.z) > reach || Math.hypot(c.p.x - n.x, c.p.z - n.z) > reach) { this.sidewalkSkipped++; continue; }
       const lb = this.lean.get(n.x, n.z, 'sidewalk');
       const Cc = P3(c.c.x, c.c.z), Cp = P3(c.p.x, c.p.z);
       const Pc = P3(n.x + P.ox * tP + nPx * hP, n.z + P.oz * tP + nPz * hP), Pp = P3(n.x + P.ox * tP + nPx * pP, n.z + P.oz * tP + nPz * pP);
       const Qc = P3(n.x + Q.ox * tQ + nQx * hQ, n.z + Q.oz * tQ + nQz * hQ), Qp = P3(n.x + Q.ox * tQ + nQx * pQ, n.z + Q.oz * tQ + nQz * pQ);
-      up(lb, Cc, Pc, Pp); up(lb, Cc, Pp, Cp); up(lb, Cc, Cp, Qp); up(lb, Cc, Qp, Qc);
-      curbFace(Cc[0], Cc[2], Pc[0], Pc[2], -nPx, -nPz);
-      curbFace(Cc[0], Cc[2], Qc[0], Qc[2], -nQx, -nQz);
+      upOK(lb, Cc, Pc, Pp); upOK(lb, Cc, Pp, Cp); upOK(lb, Cc, Cp, Qp); upOK(lb, Cc, Qp, Qc);
+      // el cordón solo donde quedó vereda (si no, queda una línea suelta sobre la calle)
+      if (!triOnRoad(Cc, Pc, Pp)) curbFace(Cc[0], Cc[2], Pc[0], Pc[2], -nPx, -nPz);
+      if (!triOnRoad(Cc, Qp, Qc)) curbFace(Cc[0], Cc[2], Qc[0], Qc[2], -nQx, -nQz);
     }
     // abanicos (lado de afuera de las curvas y puntas de calles sin salida)
     for (const f of this.fans) {
@@ -449,7 +473,8 @@ export class City {
         const b0 = a0 + (span * k) / seg, b1 = a0 + (span * (k + 1)) / seg;
         const i0 = P3(n.x + Math.cos(b0) * h, n.z + Math.sin(b0) * h), o0 = P3(n.x + Math.cos(b0) * (h + SW), n.z + Math.sin(b0) * (h + SW));
         const i1 = P3(n.x + Math.cos(b1) * h, n.z + Math.sin(b1) * h), o1 = P3(n.x + Math.cos(b1) * (h + SW), n.z + Math.sin(b1) * (h + SW));
-        up(lb, i0, i1, o1); up(lb, i0, o1, o0);
+        if (triOnRoad(i0, i1, o1) && triOnRoad(i0, o1, o0)) { this.sidewalkSkipped++; continue; }
+        upOK(lb, i0, i1, o1); upOK(lb, i0, o1, o0);
         const mx = Math.cos((b0 + b1) / 2), mz = Math.sin((b0 + b1) / 2);
         curbFace(i0[0], i0[2], i1[0], i1[2], -mx, -mz);
       }
@@ -1044,6 +1069,7 @@ export class City {
       const gb = this.chunkFor(chunks, 0, 0, 'plain');
       gb.box(-6.2, -5.8, y, y + 3.4, -0.2, 0.2, hexColor(0x777777));
       gb.box(5.8, 6.2, y, y + 3.4, -0.2, 0.2, hexColor(0x777777));
+      for (const lx of [-6, 6]) { const [px2, pz2] = this.W(lx, 0); this.colliders.addCircle(px2, pz2, 0.3, y - 1, y + 3.4, 'cartel'); }
       this.addSign(lines, 0, y + 5, 0, 14, 3, Math.PI / 2, { bg: '#1d6b3a', fg: '#ffffff', sizes, double: true });
       this.clearFrame();
     };

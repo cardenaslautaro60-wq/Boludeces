@@ -65,7 +65,7 @@ export class World {
     // versión realista: fotos y fachadas con relieve en lugar de las texturas PS2
     if (STYLE.realista) STYLE.realTextures(textures, STYLE.tex);
     g.textures = textures;
-    this.terrainMesh = terrain.buildMesh();
+    this.terrainMesh = terrain.buildMesh(roads);
     g.scene.add(this.terrainMesh);
     this.water = buildWater(terrain);
     g.scene.add(this.water);

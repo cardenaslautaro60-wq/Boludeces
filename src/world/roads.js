@@ -331,10 +331,35 @@ export class RoadNetwork {
     };
 
     const isCross = (n) => n.edges.length > 2 || n.edges.length === 1;
+    // ¿el punto está sobre una calle pavimentada? (las de tierra no se dibujan encima del asfalto)
+    const onPaved = (x, z) => {
+      for (const e2 of this.edgesNear(x, z)) {
+        if (e2.kind === 'tierra') continue;
+        const P = this.nodes[e2.a], Q = this.nodes[e2.b];
+        if (pointSegDist(x, z, P.x, P.z, Q.x, Q.z).d < e2.width / 2 - 0.3) return true;
+      }
+      return false;
+    };
     for (const e of this.edges) {
       const A = this.nodes[e.a], B = this.nodes[e.b];
       const dirt = e.kind === 'tierra';
       const mat = dirt ? 'dirt' : e.kind === 'peatonal' ? 'paving' : 'asphalt';
+      if (dirt) {
+        // tramos de tierra: se saltean los pedazos que caen sobre el asfalto
+        const n = Math.max(1, Math.ceil(e.len / 6));
+        let run = -1;
+        for (let k = 0; k <= n; k++) {
+          const t = (k + 0.5) / n;
+          const bad = k === n || onPaved(A.x + (B.x - A.x) * t, A.z + (B.z - A.z) * t);
+          if (!bad && run < 0) run = k;
+          if (bad && run >= 0) {
+            const t0 = run / n, t1 = k / n;
+            ribbon(mat, A.x + (B.x - A.x) * t0, A.z + (B.z - A.z) * t0, A.x + (B.x - A.x) * t1, A.z + (B.z - A.z) * t1, e.width, Y - 0.03, 8);
+            run = -1;
+          }
+        }
+        continue;
+      }
       ribbon(mat, A.x, A.z, B.x, B.z, e.width, dirt ? Y - 0.03 : Y, 8);
       if (dirt || e.kind === 'muelle' || e.kind === 'peatonal' || e.kind === 'calle') continue;
       const trimA = isCross(A) ? A.maxW / 2 + 1.5 : 0;
@@ -353,6 +378,7 @@ export class RoadNetwork {
       const deg = n.edges.length;
       const es = n.edges.map((i) => this.edges[i]);
       const allDirt = es.every((e) => e.kind === 'tierra');
+      if (allDirt && onPaved(n.x, n.z)) continue;
       if (deg >= 3) { disc(allDirt ? 'patchD' : 'patchA', n.x, n.z, n.maxW / 2 * 1.12 + 0.8, Y + 0.015, 12); continue; }
       if (deg === 1) { disc(allDirt ? 'patchD' : 'patchA', n.x, n.z, n.maxW / 2, Y + 0.012, 10); continue; }
       if (deg === 2) {

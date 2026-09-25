@@ -42,7 +42,7 @@ export class Props {
     this.buildContainers(city);
     this.buildBoats(terrain, colliders);
     this.buildRamps(terrain, colliders);
-    this.buildFences(terrain);
+    this.buildFences(terrain, colliders);
     this.buildLoberia(terrain);
     this.buildTrafficLight(terrain, colliders);
     this.buildBenches(city, terrain, colliders);
@@ -504,12 +504,14 @@ export class Props {
   }
 
   // Alambrados donde se enganchan las bolsitas
-  buildFences(terrain) {
+  buildFences(terrain, colliders) {
     const gb = new GeoBuilder();
     const post = hexColor(0x6a5a44), wire = hexColor(0x9a9a9a);
     for (const [x, z] of BAGS) {
       const rot = (x * 13 + z * 7) % 3;
       const dx = Math.cos(rot), dz = Math.sin(rot);
+      // el alambrado también frena (antes se podía atravesar)
+      if (colliders) { const y = terrain.groundAt(x, z); colliders.addOBB(x, z, dx, dz, 5.05, 0.1, y - 1, y + 1.35, 'alambrado'); }
       for (let k = -2; k <= 2; k++) {
         const px = x + dx * k * 2.5, pz = z + dz * k * 2.5;
         const y = terrain.groundAt(px, pz);

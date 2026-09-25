@@ -234,6 +234,35 @@ export class Game {
       mission(id) { const d = g.missions.list.find((m) => m.id === id); if (d) g.missions.start(d); },
       car(key) { return g.cheats.spawnNear(key); },
       poi: POI,
+      // Auditoría de colisiones: rayos hacia abajo en una grilla alrededor de (cx, cz); donde
+      // hay algo sólido de más de 1 m sobre el piso y ningún colisionador, lo informa
+      collisionAudit(cx, cz, R = 250, step = 3) {
+        const rc = new THREE.Raycaster();
+        const down = new THREE.Vector3(0, -1, 0), o = new THREE.Vector3();
+        const skip = (obj) => obj.isPoints || obj.isSkinnedMesh || (obj.material && [].concat(obj.material).some((m) => m.transparent || m.alphaTest > 0));
+        const targets = [g.city.group, g.props.group].filter(Boolean);
+        const found = new Map();
+        let tested = 0;
+        for (let x = cx - R; x <= cx + R; x += step) for (let z = cz - R; z <= cz + R; z += step) {
+          const gy = g.terrain.groundAt(x, z);
+          o.set(x, gy + 120, z);
+          rc.set(o, down); rc.far = 125;
+          const hit = rc.intersectObjects(targets, true).find((h) => !skip(h.object) && h.object.visible);
+          if (!hit) continue;
+          const top = hit.point.y;
+          if (top < gy + 1.0) continue;
+          tested++;
+          const p = { x, z };
+          const hitCol = g.colliders.resolveCircle(p, 0.05, gy + 0.2, Math.min(top - gy, 3));
+          if (hitCol) continue;
+          const ob = hit.object;
+          const key = (ob.name || ob.type) + ':' + [].concat(ob.material).map((m) => m.type + (m.map ? '+map' : '') + (m.vertexColors ? '+vc' : '')).join(',') + ':' + (ob.geometry.attributes.position.count);
+          const f = found.get(key) || { n: 0, pts: [] };
+          f.n++; if (f.pts.length < 6) f.pts.push([Math.round(x), Math.round(z), +(top - gy).toFixed(1)]);
+          found.set(key, f);
+        }
+        return { tested, sin: [...found.entries()].sort((a, b) => b[1].n - a[1].n).slice(0, 25) };
+      },
       // qué objeto se ve en un punto de la pantalla (coordenadas -1..1), para depurar
       pick(x, y) {
         const rc = new THREE.Raycaster();

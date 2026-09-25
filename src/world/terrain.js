@@ -239,7 +239,7 @@ export class Terrain {
   }
 
   // Malla por mosaicos con dos niveles de detalle (cerca: completo; lejos: 1 de cada 3) y faldones
-  buildMesh() {
+  buildMesh(roads = null) {
     const group = new THREE.Group();
     const T = 48;
     const real = STYLE.realista;
@@ -258,6 +258,12 @@ export class Terrain {
       P[k * 3] = x; P[k * 3 + 1] = h; P[k * 3 + 2] = z;
       this.normalAt(x, z, nrm);
       const urban = this.urban ? this.urban[k] : 0, sd = this.coast[k];
+      // lo que se dibuja del terreno queda un poco por debajo de las calles (la altura física no
+      // cambia): así el suelo no asoma por encima del asfalto entre los quiebres de la malla
+      if (roads && h > 0.3) {
+        const cl = roads.clearance(x, z, 6);
+        if (cl < 3) P[k * 3 + 1] = h - 0.32 * (1 - smoothstep(0.5, 3, cl));
+      }
       const c = this.colorFor(x, z, h, nrm.y, urban, sd);
       C[k * 3] = c[0]; C[k * 3 + 1] = c[1]; C[k * 3 + 2] = c[2];
       if (SP) {
@@ -275,13 +281,15 @@ export class Terrain {
       for (let i = i0; i < i1; i += st) is.push(i); is.push(i1);
       for (let j = j0; j < j1; j += st) js.push(j); js.push(j1);
       const w = is.length, hgt = js.length;
-      const n = w * hgt + (w + hgt) * 2 * 2;
+      const n = w * hgt + (w + hgt) * 2 * 4;
       const pos = new Float32Array(n * 3), col = new Float32Array(n * 3);
       const spl = SP ? new Float32Array(n * 4) : null, urb = UR ? new Float32Array(n) : null;
       let p = 0;
       let allUnder = true;
+      // de lejos (mosaico grueso) el terreno baja un poco más: no tapa calles ni veredas
+      const lodDrop = st > 1 ? -0.7 : 0;
       const put = (k, dy = 0) => {
-        pos[p * 3] = P[k * 3]; pos[p * 3 + 1] = P[k * 3 + 1] + dy; pos[p * 3 + 2] = P[k * 3 + 2];
+        pos[p * 3] = P[k * 3]; pos[p * 3 + 1] = P[k * 3 + 1] + dy + lodDrop; pos[p * 3 + 2] = P[k * 3 + 2];
         col[p * 3] = C[k * 3]; col[p * 3 + 1] = C[k * 3 + 1]; col[p * 3 + 2] = C[k * 3 + 2];
         if (spl) { for (let q = 0; q < 4; q++) spl[p * 4 + q] = SP[k * 4 + q]; urb[p] = UR[k]; }
         return p++;
@@ -298,9 +306,10 @@ export class Terrain {
         const skirt = (list) => {
           for (let q = 0; q < list.length - 1; q++) {
             const [ka, pa] = list[q], [kb, pb] = list[q + 1];
-            const la = put(ka, -4), lb = put(kb, -4);
-            pairs.push(la, pa, lb, pb);
-            idx.push(pa, lb, pb, pa, la, lb, pa, pb, lb, pa, lb, la);
+            // el faldón arranca a la altura del mosaico de al lado (que no está hundido)
+            const la = put(ka, -4), lb = put(kb, -4), ta = put(ka, 0.05 - lodDrop), tb = put(kb, 0.05 - lodDrop);
+            pairs.push(la, pa, lb, pb, ta, pa, tb, pb);
+            idx.push(ta, lb, tb, ta, la, lb, ta, tb, lb, ta, lb, la);
           }
         };
         const row = (y) => is.map((i, x) => [js[y] * na + i, y * w + x]);

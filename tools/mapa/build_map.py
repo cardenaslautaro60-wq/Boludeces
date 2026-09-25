@@ -592,6 +592,82 @@ for p in pieces:
             start = k
     p['ids'] = out
 
+# Calles que se cruzan sin esquina (puentes, pasos a nivel distinto y errores de OSM): en el
+# juego todo va al ras del piso, así que se parten las dos en el punto de cruce y se forma una
+# esquina de verdad (si no, las veredas y las marcas de una pasan por encima de la otra)
+def seg_cross(a, b, c, d):
+    (x1, z1), (x2, z2), (x3, z3), (x4, z4) = a, b, c, d
+    den = (x2 - x1) * (z4 - z3) - (z2 - z1) * (x4 - x3)
+    if abs(den) < 1e-9:
+        return None
+    t = ((x3 - x1) * (z4 - z3) - (z3 - z1) * (x4 - x3)) / den
+    u = ((x3 - x1) * (z2 - z1) - (z3 - z1) * (x2 - x1)) / den
+    if 0.02 < t < 0.98 and 0.02 < u < 0.98:
+        return (x1 + t * (x2 - x1), z1 + t * (z2 - z1), t, u)
+    return None
+
+
+def split_crossings():
+    CG = 60.0
+    segs = []
+    sgrid = defaultdict(list)
+    for pi, p in enumerate(pieces):
+        ids = p['ids']
+        for k in range(len(ids) - 1):
+            a, b = G[ids[k]], G[ids[k + 1]]
+            si = len(segs)
+            segs.append((pi, k))
+            for gx in range(int(min(a[0], b[0]) // CG), int(max(a[0], b[0]) // CG) + 1):
+                for gz in range(int(min(a[1], b[1]) // CG), int(max(a[1], b[1]) // CG) + 1):
+                    sgrid[(gx, gz)].append(si)
+    cuts = defaultdict(list)   # (pieza, tramo) -> [(t, id)]
+    seen = set()
+    nid = 0
+    for cell, lst in sgrid.items():
+        for ii in range(len(lst)):
+            for jj in range(ii + 1, len(lst)):
+                s1, s2 = lst[ii], lst[jj]
+                key = (min(s1, s2), max(s1, s2))
+                if key in seen:
+                    continue
+                seen.add(key)
+                (p1, k1), (p2, k2) = segs[s1], segs[s2]
+                i1a, i1b = pieces[p1]['ids'][k1], pieces[p1]['ids'][k1 + 1]
+                i2a, i2b = pieces[p2]['ids'][k2], pieces[p2]['ids'][k2 + 1]
+                if len({i1a, i1b, i2a, i2b}) < 4:
+                    continue
+                r = seg_cross(G[i1a], G[i1b], G[i2a], G[i2b])
+                if not r:
+                    continue
+                x, z, t, u = r
+                # si el cruce cae casi sobre una punta, se usa esa punta (evita tramitos de 1 m)
+                ends = [(math.hypot(G[e][0] - x, G[e][1] - z), e) for e in (i1a, i1b, i2a, i2b)]
+                dmin, emin = min(ends)
+                if dmin < 2.5:
+                    if emin not in (i1a, i1b):
+                        cuts[(p1, k1)].append((t, emin))
+                    if emin not in (i2a, i2b):
+                        cuts[(p2, k2)].append((u, emin))
+                    continue
+                new = ('x', nid)
+                nid += 1
+                G[new] = (x, z)
+                cuts[(p1, k1)].append((t, new))
+                cuts[(p2, k2)].append((u, new))
+    for pi, p in enumerate(pieces):
+        ids = p['ids']
+        out = [ids[0]]
+        for k in range(len(ids) - 1):
+            for _, new in sorted(cuts.get((pi, k), [])):
+                out.append(new)
+            out.append(ids[k + 1])
+        p['ids'] = out
+    return nid
+
+
+n_cross = split_crossings()
+print('  cruces sin esquina convertidos en esquina', n_cross)
+
 # Quitar componentes chiquitos aislados
 adj = defaultdict(set)
 for p in pieces:
