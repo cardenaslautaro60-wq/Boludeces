@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { lam, STYLE } from '../render/style.js';
-import { META, LANDMARKS, POI, SPAWNS, DECKS, RAMPS } from './mapdata.js';
+import { META, MAP, LANDMARKS, POI, SPAWNS, DECKS, RAMPS } from './mapdata.js';
 import { ChunkedGeo, LeanChunks, hexColor } from './geom.js';
 import { signTexture } from '../render/textures.js';
 import { RNG, clamp, pointSegDist } from '../util.js';
@@ -17,6 +17,8 @@ const PAL = {
   metal: [0xc9ccce, 0x9fb0b8, 0xb9a88a, 0x8f9aa0, 0xa7b8a0],
   rada: [0xf7f5f0, 0xe8e0d0, 0xd0c0a8, 0xf0e8d8, 0xc8d0d8],
   block: [0xd8cfc0, 0xc8c0b0, 0xe0d8c8, 0xb8b0a0, 0xd0c8b8],
+  brickHouse: [0xc0785a, 0xb06848, 0xcc8a66, 0xa86a50],
+  publico: [0xe8e2d4, 0xd6cbb4, 0xefe9dc, 0xc9c2b4, 0xe2d2b0],
 };
 
 // Estilos de lote por tipo de zona
@@ -153,7 +155,9 @@ export class City {
     this.buildSpecials(chunks, rng, T);
     this.buildPuerto(chunks, rng);
     this.buildOutside(chunks, rng, T);
-    this.placeLots(chunks, rng);
+    // edificios reales donde hay datos; si no, lotes inventados a lo largo de las calles
+    if (MAP.bldPos && MAP.bldPos.length) this.placeRealBuildings(chunks, rng);
+    else this.placeLots(chunks, rng);
     this.streetFurniture(rng);
 
     const mats = this.materials(T);
@@ -173,6 +177,7 @@ export class City {
     const M = {
       office: vc({ map: T.office, emissive: 0xffffff, emissiveMap: T.officeE, emissiveIntensity: 0 }, 'office'),
       house: vc({ map: T.house, emissive: 0xffffff, emissiveMap: T.houseE, emissiveIntensity: 0 }, 'house'),
+      shop: vc({ map: T.shop, emissive: 0xffffff, emissiveMap: T.shopE, emissiveIntensity: 0 }, 'shop'),
       metal: vc({ map: T.metal }, 'metal'),
       brick: vc({ map: T.brick }, 'brick'),
       plain: vc({ map: T.plain || null }, 'plain'),
@@ -271,7 +276,9 @@ export class City {
     const { min, max } = this.footprintHeights(x0, x1, z0, z1);
     const base = min - 0.6;
     const floor = max + (opts.curb ? CURB : 0.05);
-    const top = floor + floors * fh;
+    // opts.shop: planta baja con locales (4 m), los pisos de arriba con la fachada normal
+    const shopH = opts.shop ? 4 : 0;
+    const top = floor + shopH + (floors - (opts.shop ? 1 : 0)) * fh;
     const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
     const mat = opts.mat || 'office';
     const color = hexColor(opts.color || 0xd8d2c4);
@@ -286,7 +293,11 @@ export class City {
     if (mat === 'metal') { uS = 3; vS = 3; }
     if (mat === 'brick') { uS = 2.5; vS = 2; }
     if (mat === 'plain') { uS = 4; vS = 3; }
-    gb.walls(x0, x1, z0, z1, floor, top, color, uS, vS, (opts.vOff || 0), uOff);
+    if (shopH) {
+      const sg = this.chunkFor(chunks, cx, cz, 'shop');
+      sg.walls(x0, x1, z0, z1, floor, floor + shopH, hexColor(0xffffff), 64, 8, Math.random() < 0.5 ? 0.5 : 0, Math.floor(Math.random() * 8) / 8);
+    }
+    if (top > floor + shopH + 0.01) gb.walls(x0, x1, z0, z1, floor + shopH, top, color, uS, vS, (opts.vOff || 0), uOff);
     if (opts.roof === 'gable') {
       const rg = this.chunkFor(chunks, cx, cz, 'roof');
       const along = opts.ridgeX !== undefined ? opts.ridgeX : (x1 - x0) >= (z1 - z0);
@@ -1143,6 +1154,118 @@ export class City {
       }
     }
     this.lotCount = count;
+  }
+
+  // ------------------------------------------------------------------
+  // Edificios reales: cada huella (Microsoft Global ML Building Footprints y OSM, ver
+  // tools/mapa/build_map.py) va en su lugar, con el frente a la calle. El tipo y la altura
+  // salen de OSM cuando está cargado y si no de la zona y del tamaño real.
+  // ------------------------------------------------------------------
+  placeRealBuildings(chunks, rng) {
+    const P = MAP.bldPos, D = MAP.bldDim, t = this.terrain, R = this.roads, Z = this.zones, H = this.houses;
+    const n = P.length >> 1;
+    const skip = { area: 0, calle: 0, ocupado: 0, agua: 0, pendiente: 0 };
+    const stat = { casa: 0, casona: 0, garaje: 0, galpon: 0, publico: 0, edificio: 0, monoblock: 0, comercio: 0 };
+    const cand = [];
+    // 1) filtro: plazas y canchas, calles del juego, lugares ya ocupados (hitos, rampas, puerto...)
+    for (let i = 0; i < n; i++) {
+      const cx = P[2 * i] / 2, cz = P[2 * i + 1] / 2;
+      const ang = (D[6 * i] / 255) * Math.PI * 2;
+      const o = { cx, cz, ax: Math.cos(ang), az: Math.sin(ang), hw: D[6 * i + 1] / 4, hd: D[6 * i + 2] / 4 };
+      const ar = Z.areaAt(cx, cz);
+      if (ar && (ar.kind === 'plaza' || ar.kind === 'cancha' || ar.kind === 'cementerio')) { skip.area++; continue; }
+      let ok = false;
+      for (let k = 0; k < 3 && !ok; k++) {
+        ok = true;
+        for (const [x, z] of this.obbCorners(o)) if (R.clearance(x, z, 8) < 1.9) { ok = false; break; }
+        if (!ok) { o.hw *= 0.85; o.hd *= 0.85; }
+      }
+      if (!ok || o.hw < 1.2 || o.hd < 1.2) { skip.calle++; continue; }
+      if (!this.isFree(o)) { skip.ocupado++; continue; }
+      cand.push({ o, lv: D[6 * i + 3], kind: D[6 * i + 4], ra: D[6 * i + 5] * 4, ar });
+    }
+    // 2) tipo, altura y construcción
+    this.footprints = [];
+    for (const { o, lv, kind, ra, ar } of cand) {
+      const hs = this.obbCorners(o).map(([x, z]) => t.heightAt(x, z));
+      hs.push(t.heightAt(o.cx, o.cz));
+      const mn = Math.min(...hs), mx = Math.max(...hs);
+      if (mn < 0.6) { skip.agua++; continue; }
+      const zt = this.zoneTypeAt(o.cx, o.cz);
+      const A = o.hw * o.hd * 4, big = Math.max(o.hw, o.hd) * 2;
+      let type;
+      if (kind === 4 || (zt === 'industrial' && A > 90) || (!zt && A > 350) || (A > 1500 && zt !== 'centro')) type = 'galpon';
+      else if (kind === 5 || (ar && (ar.kind === 'escuela' || ar.kind === 'militar') && A > 60)) type = 'publico';
+      else if (kind === 6 || A < 15) type = 'garaje';
+      else if (zt === 'centro' && (A > 45 || lv > 2)) type = 'edificio';
+      else if (kind === 2 || lv >= 3 || (zt === 'viviendas' && A > 110)) type = 'monoblock';
+      else if (kind === 3 && A > 110) type = 'comercio';
+      else if (A > 280) type = (zt === 'barrio' || zt === 'km') && rng.chance(0.5) ? 'monoblock' : 'comercio';
+      else type = big > 17 ? 'casona' : 'casa';
+      if (mx - mn > (type === 'casa' || type === 'garaje' ? 3.2 : 7)) { skip.pendiente++; continue; }
+      this.emitReal(chunks, o, type, zt, lv, A, rng);
+      this.reserve(o);
+      this.footprints.push(o);
+      stat[type]++;
+      void ra;
+    }
+    this.lotCount = this.footprints.length;
+    this.realStats = { total: n, ...stat, descartados: skip };
+  }
+
+  emitReal(chunks, o, type, zt, lv, A, rng) {
+    const H = this.houses;
+    if (type === 'casa') {
+      const floors = lv ? Math.min(2, lv) : zt === 'rada' ? (rng.chance(0.5) ? 2 : 1) : zt === 'km' ? 1 : rng.chance(0.2) ? 2 : 1;
+      const flat = zt === 'rada' ? rng.chance(0.35) : zt === 'km' ? rng.chance(0.05) : zt === 'centro' ? rng.chance(0.6) : rng.chance(0.3);
+      const brick = zt !== 'km' && rng.chance(zt === 'rada' ? 0.15 : 0.22);
+      const wall = brick ? rng.pick(PAL.brickHouse) : zt === 'km' ? (rng.chance(0.7) ? 0xf2efe6 : rng.pick(PAL.house)) : zt === 'rada' ? rng.pick(PAL.rada) : rng.pick(PAL.house);
+      const roof = flat ? 0x9d9890 : zt === 'km' ? (rng.chance(0.7) ? 0xa33a2a : 0x2f6b3a) : rng.pick(PAL.roof);
+      H.add(o, floors, flat, wall, roof, this.terrain);
+      return;
+    }
+    this.setFrame(o.cx, o.cz, o.ax, o.az);
+    const x0 = -o.hw, x1 = o.hw, z0 = -o.hd, z1 = o.hd;
+    if (type === 'garaje') {
+      this.addBuilding(chunks, x0, x1, z0, z1, 1, { mat: 'metal', floorH: 2.5, color: rng.pick(PAL.metal), roofColor: 0x8f9396 });
+    } else if (type === 'galpon') {
+      this.addBuilding(chunks, x0, x1, z0, z1, A > 1400 ? 3 : 2, { mat: 'metal', floorH: 3.1, color: rng.pick(PAL.metal), roof: 'gable', roofColor: rng.pick([0x9aa0a4, 0x8a9096, 0xa33a2a, 0x7c8a8f]), rise: Math.min(3, Math.min(o.hw, o.hd) * 0.3), ridgeX: o.hw >= o.hd });
+    } else if (type === 'publico') {
+      const floors = lv || (A > 500 ? 3 : 2);
+      this.addBuilding(chunks, x0, x1, z0, z1, floors, { mat: rng.chance(0.5) ? 'brick' : 'office', floorH: 3.6, color: rng.pick(PAL.publico), roofColor: 0xa29d94 });
+    } else if (type === 'edificio') {
+      // edificación entre medianeras: las huellas grandes se parten en lotes de 7 a 14 m de
+      // frente (y en dos si la manzana es profunda), cada uno con su altura, color y locales
+      const rows = o.hd * 2 > 26 ? 2 : 1;
+      for (let r = 0; r < rows; r++) {
+        const za = rows === 1 ? z0 : r === 0 ? z0 : 0, zb = rows === 1 ? z1 : r === 0 ? 0 : z1;
+        for (let xa = x0; xa < x1 - 0.5;) {
+          let w = x1 - x0 > 16 ? rng.range(7, 14) : x1 - x0;
+          if (x1 - xa - w < 5) w = x1 - xa;
+          const sub = w * (zb - za);
+          let floors = lv;
+          if (!floors) {
+            const q = rng.next();
+            if (sub < 60) floors = q < 0.6 ? rng.int(1, 3) : rng.int(4, 6);
+            else floors = q < 0.4 ? rng.int(2, 4) : q < 0.75 ? rng.int(5, 8) : q < 0.95 ? rng.int(9, 13) : rng.int(14, 19);
+          }
+          const brick = floors < 6 && rng.chance(0.2);
+          const shop = floors <= 12 && rng.chance(0.8);
+          this.addBuilding(chunks, xa, xa + w, za, zb, floors, { mat: brick ? 'brick' : 'office', color: rng.pick(PAL.centro), shop });
+          xa += w;
+        }
+      }
+    } else if (type === 'monoblock') {
+      this.addBuilding(chunks, x0, x1, z0, z1, lv || rng.int(3, 4), { mat: 'house', floorH: 2.8, color: rng.pick(PAL.block), roofColor: 0x9d9890 });
+    } else if (type === 'comercio') {
+      this.addBuilding(chunks, x0, x1, z0, z1, lv || rng.int(1, 2), { mat: 'office', color: rng.pick(PAL.centro), shop: true });
+    } else {
+      // casona: casa grande (ventanas a escala con la textura de casa)
+      const floors = lv ? Math.min(3, lv) : rng.chance(0.35) ? 2 : 1;
+      const flat = rng.chance(zt === 'km' ? 0.1 : 0.4);
+      this.addBuilding(chunks, x0, x1, z0, z1, floors, { mat: 'house', floorH: 2.8, color: rng.pick(zt === 'rada' ? PAL.rada : PAL.house), roof: flat ? undefined : 'gable', roofColor: flat ? 0x9d9890 : rng.pick(PAL.roof), rise: 1.6 });
+    }
+    this.clearFrame();
   }
 
   lotOK(o, S) {

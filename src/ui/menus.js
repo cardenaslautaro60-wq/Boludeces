@@ -305,7 +305,7 @@ export class Menus {
       html = `<h2>Créditos</h2><div class="pane">
         <p><b>GTA: San Jorge</b> es un juego de fans, gratuito, inspirado en <i>Grand Theft Auto: San Andreas</i> (Rockstar Games, 2004). No está afiliado ni respaldado por Rockstar.</p>
         <p>El mapa es <b>Comodoro Rivadavia</b> con sus calles reales, comprimido en los tramos vacíos entre barrios: el Cerro Chenque, el Centro, la Costanera, el Puerto, el Km 3, los barrios, Rada Tilly, Punta del Marqués y la meseta con sus cigüeñas.</p>
-        <p class="note">Datos del mapa © colaboradores de OpenStreetMap (ODbL). Relieve: Terrain Tiles de Mapzen (SRTM y otras fuentes).</p>
+        <p class="note">Datos del mapa © colaboradores de OpenStreetMap (ODbL). Huellas de edificios: Microsoft Global ML Building Footprints (ODbL). Relieve: Terrain Tiles de Mapzen (SRTM y otras fuentes).</p>
         <p><b>El Gordopin</b>: malabarista de semáforo e hincha del Lobo (Club Atlético Jorge Newbery). "A mí no me van a sacar nunca de la calle".</p>
         <p><b>El Petroca</b>: petrolero con guita, anteojos negros, camisa de jean y botas. "¡Buena petroca!"</p>
         <p><b>La radio</b>: homenaje a <b>La Ciudad Perdida</b> (1992–2016), el programa creado y conducido por <b>Santiago Sánchez</b> en la radio de Comodoro. Los textos que dice en el juego son ficción escrita en homenaje, en el espíritu del programa: humor para mirar la realidad desde otro lado. "Yo sé de qué me río".</p>

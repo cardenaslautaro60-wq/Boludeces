@@ -544,6 +544,8 @@ export class Game {
     const e = clamp((n - 0.25) * 1.6, 0, 1);
     mats.office.emissiveIntensity = e * 0.9;
     mats.house.emissiveIntensity = e * 0.8;
+    if (mats.shop) mats.shop.emissiveIntensity = e * 1.1;
+    if (this.city.houses && this.city.houses.material) this.city.houses.material.emissiveIntensity = e * 0.8;
     const cm = carMaterials();
     cm.setLights(e);
     cm.setEnvIntensity(0.25 + this.env.dayLight * 0.8);

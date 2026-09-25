@@ -137,9 +137,17 @@ export class HouseInstances {
     mat.onBeforeCompile = (sh) => {
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', '#include <common>\nattribute float tint;\nattribute vec3 roofColor;')
+        // ventanas a tamaño real: la u de cada pared se estira con la escala de la instancia
+        .replace('#include <uv_vertex>', `vec2 uvI = uv;
+#ifdef USE_INSTANCING
+  uvI.x *= abs(normal.x) > 0.5 ? length(instanceMatrix[2].xyz) : length(instanceMatrix[0].xyz);
+#endif
+#define uv uvI
+#include <uv_vertex>
+#undef uv`)
         .replace('#include <color_vertex>', '#include <color_vertex>\n#ifdef USE_INSTANCING_COLOR\n  vColor.rgb = tint < 0.5 ? instanceColor : (tint < 1.5 ? roofColor : vec3(0.78));\n#endif');
     };
-    mat.customProgramCacheKey = () => 'houses-v1';
+    mat.customProgramCacheKey = () => 'houses-v2';
     if (STYLE.realista) STYLE.tintMask(mat);
     this.material = mat;
     this.templates = { '1g': template(1, false), '2g': template(2, false), '1f': template(1, true), '2f': template(2, true) };

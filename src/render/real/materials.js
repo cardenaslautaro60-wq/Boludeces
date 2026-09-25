@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { shopFacade } from '../textures.js';
 
 // Materiales de la versión realista armados con las texturas fotográficas (STYLE.tex).
 //  - worldUV: el piso (calles, veredas, plazas) se texturiza por posición en el mundo, así
@@ -238,6 +239,10 @@ export function realTextures(T, R) {
   // fachadas compuestas
   const off = officeFacade(R);
   T.office = off.map; T.officeE = off.emissive;
+  // locales de planta baja: la misma textura, a doble resolución
+  const shop = shopFacade(2);
+  T.shop = shop.map; T.shopE = shop.emissive;
+  P.shop = { roughness: 0.55, metalness: 0 };
   P.office = { normalMap: off.normalMap, roughnessMap: off.orm, metalnessMap: off.orm, roughness: 1, metalness: 1 };
   const hou = houseFacade(R);
   T.house = hou.map; T.houseE = hou.emissive;

@@ -2,6 +2,8 @@
 # Descarga los datos crudos de Comodoro Rivadavia que usa build_map.py:
 #   - calles, costa, barrios y lugares de OpenStreetMap (Overpass API)
 #   - relieve (tiles "terrarium" públicos de AWS, zoom 13)
+#   - huellas de edificios de Microsoft Global ML Building Footprints (ODbL), tiles 212013113 y 212102002
+#   - edificios y comercios cargados en OpenStreetMap (tipo, pisos, nombres)
 # Uso: tools/mapa/descargar.sh [carpeta]   (por defecto tools/mapa/cache)
 set -euo pipefail
 DIR="${1:-$(dirname "$0")/cache}"
@@ -22,6 +24,17 @@ q roads.json "[out:json][timeout:240];way[\"highway\"~\"^(motorway|trunk|primary
 q feat.json "[out:json][timeout:240];(way[\"natural\"=\"coastline\"]($WIDE);node[\"place\"]($WIDE);nwr[\"natural\"=\"peak\"]($WIDE);nwr[\"amenity\"~\"^(hospital|police|bus_station|place_of_worship|townhall|university|casino|marketplace|fire_station)$\"]($BBOX);nwr[\"tourism\"~\"^(museum|viewpoint|attraction)$\"]($WIDE);nwr[\"leisure\"~\"^(stadium)$\"]($BBOX);way[\"aeroway\"~\"^(runway|aerodrome)$\"]($WIDE););out geom tags;"
 q admin.json "[out:json][timeout:240];relation[\"boundary\"=\"administrative\"][\"admin_level\"~\"^(8|9|10)$\"]($WIDE);out geom;"
 q extra.json "[out:json][timeout:240];(way[\"landuse\"~\"^(industrial|commercial|retail|cemetery|military|port)$\"]($BBOX);way[\"leisure\"~\"^(park|pitch|stadium|sports_centre|golf_course)$\"]($BBOX);node[\"amenity\"~\"^(fuel|school)$\"]($BBOX);way[\"amenity\"~\"^(fuel|school|hospital)$\"]($BBOX);node[\"power\"=\"generator\"](-45.99,-67.95,-45.60,-67.33);node[\"man_made\"~\"^(mast|tower|communications_tower|lighthouse|storage_tank|petroleum_well)$\"]($WIDE);way[\"man_made\"~\"^(storage_tank|pier|breakwater|groyne)$\"]($WIDE);way[\"building\"][\"name\"]($BBOX););out geom tags;"
+
+q bld_osm.json "[out:json][timeout:240];way[\"building\"]($BBOX);out geom tags;"
+q pois.json "[out:json][timeout:240];(nwr[\"shop\"]($BBOX);nwr[\"amenity\"~\"^(school|clinic|place_of_worship|police|fuel|bank|community_centre|pharmacy|cafe|hospital|fast_food|restaurant|ice_cream|kindergarten|library|bus_station|bar|post_office|townhall|cinema|marketplace|theatre)$\"]($BBOX);nwr[\"tourism\"~\"^(hotel|museum|attraction)$\"]($BBOX););out center tags;"
+
+# Huellas de edificios de Microsoft: la lista de archivos por quadkey está en dataset-links.csv
+MS="https://minedbuildings.z5.web.core.windows.net/global-buildings/dataset-links.csv"
+curl -sS -m 300 "$MS" -o "$DIR/ms_links.csv"
+for qk in 212013113 212102002; do
+  url=$(grep "^Argentina,$qk," "$DIR/ms_links.csv" | head -1 | cut -d, -f3)
+  [ -n "$url" ] && curl -sS -m 600 "$url" -o "$DIR/ms_$qk.csv.gz"
+done
 
 python3 - "$DIR" <<'EOF'
 import math, os, sys

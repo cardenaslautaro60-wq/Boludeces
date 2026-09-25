@@ -55,7 +55,7 @@ export async function loadMapData() {
   const bytes = b64ToBytes(MAP_BLOB);
   const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'));
   const buf = await new Response(stream).arrayBuffer();
-  const T = { i2: Int16Array, u2: Uint16Array, u4: Uint32Array, i4: Int32Array };
+  const T = { i2: Int16Array, u2: Uint16Array, u4: Uint32Array, i4: Int32Array, u1: Uint8Array, i1: Int8Array };
   for (const [name, s] of Object.entries(MAP_META.sections)) MAP[name] = new T[s.t](buf, s.off, s.n);
   MAP.ready = true;
   return MAP;

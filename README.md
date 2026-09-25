@@ -40,7 +40,9 @@ Comodoro Rivadavia de verdad: **las calles, la costa, los barrios, las plazas, l
 
 Están el Centro con la Catedral, la plaza San Martín, la Terminal y los edificios altos; la Costanera y el Puerto con el Muelle; el Cerro Chenque con las antenas; Km 3 con el Museo del Petróleo; Km 5, Km 8 y Caleta Córdova hacia el norte; Pietrobelli, Jorge Newbery con **La Madriguera** (en 2004 todavía de tierra), Juan XXIII, 9 de Julio y los demás barrios; Rada Tilly con la playa; Punta del Marqués con la lobería; el Aeropuerto, el parque eólico y los yacimientos de la meseta.
 
-El radar y el mapa de pausa se dibujan con las mismas calles y muestran el nombre del barrio en el que estás.
+**Cada casa y cada edificio está en su lugar real**: son unas 40.000 huellas de edificios (el relevamiento satelital de Microsoft, más los edificios cargados en OpenStreetMap), cada una orientada con el frente a su calle. En los barrios son casas de una o dos plantas con techo de chapa o losa (y las casas blancas de techo rojo de los kilómetros de YPF); en el Centro, edificación entre medianeras con locales en planta baja (kioscos, farmacias, locutorios, videoclubs...) y torres de hasta 19 pisos; en los parques industriales, galpones. Donde OSM tiene cargados los pisos o el tipo de edificio (escuelas, iglesias, depósitos), se respetan.
+
+El radar y el mapa de pausa se dibujan con las mismas calles y las huellas reales de los edificios, y muestran el nombre del barrio en el que estás.
 
 ## Lo que tiene de San Andreas
 
@@ -102,7 +104,7 @@ Se escriben durante el juego: `HESOYAM`, `AEZAKMI`, `ASNAEB`, `OSRBLHH`, `LXGIWY
 
 Es un juego de fans, gratis y sin fines de lucro, inspirado en *Grand Theft Auto: San Andreas* (Rockstar Games, 2004). No está afiliado a Rockstar. Los personajes, empresas y situaciones son ficticios o paródicos, y el Gordopin y el Petroca aparecen como homenaje cariñoso a dos personajes de la cultura comodorense. Todo el arte y el sonido se generan con código.
 
-Datos del mapa © colaboradores de [OpenStreetMap](https://www.openstreetmap.org/copyright), bajo licencia ODbL. Relieve: Terrain Tiles de Mapzen en AWS (SRTM y otras fuentes).
+Datos del mapa © colaboradores de [OpenStreetMap](https://www.openstreetmap.org/copyright), bajo licencia ODbL. Huellas de edificios: [Microsoft Global ML Building Footprints](https://github.com/microsoft/GlobalMLBuildingFootprints), bajo licencia ODbL. Relieve: Terrain Tiles de Mapzen en AWS (SRTM y otras fuentes).
 
 ## Estructura del código
 

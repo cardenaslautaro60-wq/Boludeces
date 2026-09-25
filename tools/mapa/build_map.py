@@ -979,6 +979,234 @@ for e in feat:
 print('  pistas', len(runways))
 
 # ---------------------------------------------------------------------------
+# Edificios reales: huellas de Microsoft Global ML Building Footprints (ODbL) y OSM
+# ---------------------------------------------------------------------------
+# Cada edificio va en su lugar real. Se agranda un poco respecto de la escala del mapa (0,55)
+# para que la gente y los autos del juego (a tamaño real) no queden gigantes; se recorta donde
+# pisaría calles o veredas y se orienta con el frente hacia la calle más cercana.
+print('edificios...')
+import glob
+import gzip
+from shapely.affinity import rotate as sh_rotate, scale as sh_scale, translate as sh_translate
+from shapely.strtree import STRtree
+
+K_BLD = 1.15      # barrios: casas un poco más grandes que la escala del mapa
+K_BLD_CENTRO = 1.0  # Centro: edificación continua entre medianeras, a escala del mapa
+SW_GAME = 2.6 + 0.35       # vereda + margen (city.js: SW)
+bld_files = sorted(glob.glob(os.path.join(CACHE, 'ms_*.csv.gz')))
+
+
+def h_game(X, Z):
+    a, b = game_ab(X, Z)
+    fi, fj = (a - A0) / HC, (b - B0) / HC
+    i, j = int(np.clip(fi, 0, NA - 2)), int(np.clip(fj, 0, NB - 2))
+    return float(H[j, i])
+
+
+# pasillos de las calles (calzada + vereda) en el marco del juego
+corr = []
+for p in pieces:
+    pts = [G[i] for i in p['ids']]
+    if len(pts) < 2:
+        continue
+    half = p['width'] / 2 + (SW_GAME if p['kind'] in ('calle', 'avenida', 'peatonal') else 2.0)
+    corr.append(LineString(pts).buffer(half, cap_style=2, join_style=2, resolution=2))
+corr_tree = STRtree(corr)
+road_lines = [LineString([G[i] for i in p['ids']]) for p in pieces if len(p['ids']) >= 2]
+road_tree = STRtree(road_lines)
+# plazas, canchas y cementerios: sin edificios adentro
+open_areas = [Polygon(ar['poly']) if not hasattr(ar['poly'], 'geom_type') else ar['poly'] for ar in areas if ar['k'] in ('plaza', 'cancha', 'cementerio')]
+open_areas = [g.buffer(0) for g in open_areas if g.is_valid or g.buffer(0).is_valid]
+area_tree = STRtree(open_areas) if open_areas else None
+from shapely.prepared import prep
+centro_zone = prep(unary_union([z['poly'] for z in zones if z['type'] == 'centro']).buffer(20))
+
+# tipo y pisos de OSM (los pocos edificios cargados con datos)
+osm_b = []
+try:
+    for e in load('bld_osm.json'):
+        t = e.get('tags', {})
+        if e['type'] != 'way' or not e.get('geometry'):
+            continue
+        try:
+            pg = Polygon([proj(g['lat'], g['lon']) for g in e['geometry']])
+        except Exception:
+            continue
+        if not pg.is_valid or pg.area < 10:
+            continue
+        osm_b.append((pg, t))
+except FileNotFoundError:
+    pass
+osm_tree = STRtree([pg for pg, _ in osm_b]) if osm_b else None
+BKIND = {'house': 1, 'detached': 1, 'residential': 1, 'semidetached_house': 1, 'terrace': 1, 'bungalow': 1,
+         'apartments': 2, 'dormitory': 2, 'hotel': 2,
+         'commercial': 3, 'retail': 3, 'office': 3, 'supermarket': 3, 'kiosk': 3,
+         'industrial': 4, 'warehouse': 4, 'hangar': 4, 'manufacture': 4, 'service': 4, 'storage_tank': 4,
+         'church': 5, 'cathedral': 5, 'chapel': 5, 'public': 5, 'school': 5, 'university': 5, 'hospital': 5,
+         'civic': 5, 'government': 5, 'college': 5, 'kindergarten': 5, 'sports_hall': 5, 'stadium': 5, 'train_station': 5,
+         'garage': 6, 'garages': 6, 'shed': 6, 'roof': 6, 'carport': 6, 'hut': 6}
+
+
+def osm_info(pg):
+    if not osm_tree:
+        return 0, 0
+    best, ba = None, 0
+    for k in osm_tree.query(pg):
+        o = osm_b[int(k)][0]
+        a = o.intersection(pg).area if o.intersects(pg) else 0
+        if a > ba:
+            ba, best = a, osm_b[int(k)][1]
+    if not best or ba < pg.area * 0.3:
+        return 0, 0
+    lv = 0
+    try:
+        lv = int(float(str(best.get('building:levels', '0')).split(';')[0]))
+    except ValueError:
+        lv = 0
+    return min(60, max(0, lv)), BKIND.get(best.get('building', ''), 0)
+
+
+raw = []
+seen_osm = set()
+for f in bld_files:
+    for line in gzip.open(f, 'rt'):
+        d = json.loads(line)
+        ring = d['geometry']['coordinates'][0]
+        lon = ring[0][0]; lat = ring[0][1]
+        if not (-45.995 < lat < -45.685 and -67.73 < lon < -67.32):
+            continue
+        try:
+            pg = Polygon([proj(la, lo) for lo, la in ring])
+        except Exception:
+            continue
+        if not pg.is_valid:
+            pg = pg.buffer(0)
+            if pg.geom_type != 'Polygon':
+                continue
+        if pg.area < 16 or pg.area > 40000:
+            continue
+        c = pg.centroid
+        if not inside_world(c.x, c.y, 150):
+            continue
+        raw.append(pg)
+print('  huellas leídas', len(raw))
+# edificios de OSM que no están en el relevamiento de Microsoft
+if osm_b:
+    raw_tree = STRtree(raw)
+    extra = 0
+    for pg, t in osm_b:
+        if any(raw[int(k)].intersects(pg) for k in raw_tree.query(pg)):
+            continue
+        c = pg.centroid
+        if inside_world(c.x, c.y, 150):
+            raw.append(pg)
+            extra += 1
+    print('  sumados de OSM', extra)
+
+acc_grid = defaultdict(list)
+AG = 30.0
+out_b = []
+dropped = defaultdict(int)
+raw.sort(key=lambda g: -g.area)
+for pg in raw:
+    rect = pg.minimum_rotated_rectangle
+    if rect.geom_type != 'Polygon':
+        dropped['forma'] += 1
+        continue
+    rc = list(rect.exterior.coords)[:4]
+    e1 = (rc[1][0] - rc[0][0], rc[1][1] - rc[0][1]); e2 = (rc[2][0] - rc[1][0], rc[2][1] - rc[1][1])
+    L1, L2 = math.hypot(*e1), math.hypot(*e2)
+    ang = math.atan2(e1[1], e1[0])
+    c = rect.centroid
+    a, b = ab(c.x, c.y)
+    sA = slope_a(a)
+    sB = B_SL[0] if b < B_BP[1] else B_SL[1]
+    X, Z = warp(c.x, c.y)
+    sc = min(0.55, math.sqrt(sA * sB)) * (K_BLD_CENTRO if centro_zone.contains(Point(X, Z)) else K_BLD)
+    if h_game(X, Z) < 0.9:
+        dropped['agua'] += 1
+        continue
+    # rectángulo en el juego (el marco del mapa solo rota y escala: el ángulo se conserva)
+    w1, w2 = L1 * sc, L2 * sc
+    g_rect = Polygon([(-w1 / 2, -w2 / 2), (w1 / 2, -w2 / 2), (w1 / 2, w2 / 2), (-w1 / 2, w2 / 2)])
+    g_rect = sh_translate(sh_rotate(g_rect, ang, use_radians=True, origin=(0, 0)), X, Z)
+    if area_tree is not None and any(open_areas[int(k)].contains(Point(X, Z)) for k in area_tree.query(Point(X, Z))):
+        dropped['plaza'] += 1
+        continue
+    # recorte contra calles y veredas
+    hits = [corr[int(k)] for k in corr_tree.query(g_rect) if corr[int(k)].intersects(g_rect)]
+    if hits:
+        rest = g_rect.difference(unary_union(hits))
+        if rest.is_empty:
+            dropped['calle'] += 1
+            continue
+        if rest.geom_type != 'Polygon':
+            rest = max(rest.geoms, key=lambda q: q.area) if hasattr(rest, 'geoms') else rest
+        if rest.area < max(10.0, g_rect.area * 0.35):
+            dropped['calle'] += 1
+            continue
+        g_rect = rest.minimum_rotated_rectangle.buffer(-0.25, join_style=2)
+        if g_rect.is_empty or g_rect.geom_type != 'Polygon':
+            dropped['calle'] += 1
+            continue
+    # superposición con los ya aceptados (filas de casas pegadas: se achica un poco)
+    ok = True
+    for tries in range(4):
+        cxg, czg = g_rect.centroid.x, g_rect.centroid.y
+        near = []
+        for gx in (int(cxg // AG) - 1, int(cxg // AG), int(cxg // AG) + 1):
+            for gz in (int(czg // AG) - 1, int(czg // AG), int(czg // AG) + 1):
+                near.extend(acc_grid.get((gx, gz), []))
+        hits = [q for q in near if q.intersects(g_rect)]
+        over = sum(g_rect.intersection(q).area for q in hits)
+        if over <= g_rect.area * 0.18:
+            break
+        # casas pegadas (al agrandarlas se pisan): primero se recorta contra las vecinas
+        if tries == 0:
+            rest = g_rect.difference(unary_union(hits))
+            if not rest.is_empty and rest.geom_type != 'Polygon' and hasattr(rest, 'geoms'):
+                rest = max(rest.geoms, key=lambda q: q.area)
+            if not rest.is_empty and rest.geom_type == 'Polygon' and rest.area >= g_rect.area * 0.4:
+                r2 = rest.minimum_rotated_rectangle.buffer(-0.1, join_style=2)
+                if not r2.is_empty and r2.geom_type == 'Polygon':
+                    g_rect = r2
+                    continue
+        g_rect = sh_scale(g_rect, 0.85, 0.85, origin='centroid')
+        if tries == 3:
+            ok = False
+    if not ok or g_rect.area < 9:
+        dropped['encimado'] += 1
+        continue
+    # medidas finales y frente hacia la calle más cercana
+    rc = list(g_rect.exterior.coords)[:4]
+    e1 = (rc[1][0] - rc[0][0], rc[1][1] - rc[0][1]); e2 = (rc[2][0] - rc[1][0], rc[2][1] - rc[1][1])
+    L1, L2 = math.hypot(*e1), math.hypot(*e2)
+    if min(L1, L2) < 2.4:
+        dropped['finito'] += 1
+        continue
+    u = (e1[0] / L1, e1[1] / L1)
+    ctr = g_rect.centroid
+    near_road = road_lines[int(road_tree.nearest(ctr))]
+    pr = near_road.interpolate(near_road.project(ctr))
+    nx, nz = pr.x - ctr.x, pr.y - ctr.y
+    nl = math.hypot(nx, nz) or 1
+    nx, nz = nx / nl, nz / nl
+    # eje de ancho = el más perpendicular a la calle; el frente (-z local) mira a la calle
+    if abs(nx * u[0] + nz * u[1]) > 0.7071:
+        wax, waz, width, depth = -u[1], u[0], L2, L1
+    else:
+        wax, waz, width, depth = u[0], u[1], L1, L2
+    if waz * nx - wax * nz < 0:
+        wax, waz = -wax, -waz
+    lv, kind = osm_info(pg)
+    real_area = pg.area
+    out_b.append((ctr.x, ctr.y, math.atan2(waz, wax), width, depth, lv, kind, real_area))
+    for gx in range(int(g_rect.bounds[0] // AG), int(g_rect.bounds[2] // AG) + 1):
+        for gz in range(int(g_rect.bounds[1] // AG), int(g_rect.bounds[3] // AG) + 1):
+            acc_grid[(gx, gz)].append(g_rect)
+print('  edificios en el juego', len(out_b), 'descartados', dict(dropped))
+
+# ---------------------------------------------------------------------------
 # Salida
 # ---------------------------------------------------------------------------
 print('escribiendo...')
@@ -1051,6 +1279,15 @@ for (X, Z) in masts:
 for (X, Z) in tanks:
     pts_flat.extend([3, q(X), q(Z)])
 add_section('points', np.array(pts_flat, dtype=np.int16))
+
+# edificios: centro (medios metros), ángulo del eje de ancho, ancho y fondo (medios metros),
+# pisos de OSM, tipo de OSM y superficie real (m², /4 hasta 1020)
+bpos, bdim = [], []
+for X, Z, angb, width, depth, lv, kind, ra in out_b:
+    bpos.extend([q(X), q(Z)])
+    bdim.extend([int(round(((angb % (2 * math.pi)) / (2 * math.pi)) * 255)) % 256, min(255, int(round(width * 2))), min(255, int(round(depth * 2))), lv, kind, min(255, int(round(ra / 4)))])
+add_section('bldPos', np.array(bpos, dtype=np.int16))
+add_section('bldDim', np.array(bdim, dtype=np.uint8))
 
 comp_blob = zlib.compress(bytes(blob), 9)
 b64 = base64.b64encode(comp_blob).decode('ascii')

@@ -136,7 +136,18 @@ export class HUD {
     }
     // casas y edificios
     ctx.fillStyle = 'rgba(95,92,84,0.7)';
-    for (const it of g.city.houses.items) {
+    if (g.city.footprints) {
+      // huellas reales, con su forma y orientación
+      for (const o of g.city.footprints) {
+        const bx = -o.az, bz = o.ax;
+        ctx.beginPath();
+        for (const [s1, t1] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+          const [u, v] = tp(o.cx + o.ax * o.hw * s1 + bx * o.hd * t1, o.cz + o.az * o.hw * s1 + bz * o.hd * t1);
+          if (s1 === -1 && t1 === -1) ctx.moveTo(u, v); else ctx.lineTo(u, v);
+        }
+        ctx.closePath(); ctx.fill();
+      }
+    } else for (const it of g.city.houses.items) {
       const [u, v] = tp(it.cx, it.cz);
       const s = Math.max(1.2, (it.hw + it.hd) / S);
       ctx.fillRect(u - s / 2, v - s / 2, s, s);
