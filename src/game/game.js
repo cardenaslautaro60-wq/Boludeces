@@ -141,9 +141,23 @@ export class Game {
     for (const v of this.vehicles || []) v.shadow.material.opacity = on ? 0.55 : 0.9;
   }
 
+  // Resolución dinámica: si la máquina no llega a ~30 cuadros, baja la resolución de a poco
+  // (hasta 55 %) y la vuelve a subir cuando sobra
+  adaptResolution(dt) {
+    if (this.dynScale === undefined) { this.dynScale = 1; this.dynT = 0; }
+    this.dynT += dt;
+    const slow = this.fps < 27, fast = this.fps > 50;
+    if (!slow && !fast) { this.dynT = 0; return; }
+    if (slow && this.dynT > 3 && this.dynScale > 0.55) {
+      this.dynScale = Math.max(0.55, this.dynScale - 0.1); this.dynT = 0; this.onResize();
+    } else if (fast && this.dynT > 8 && this.dynScale < 1) {
+      this.dynScale = Math.min(1, this.dynScale + 0.1); this.dynT = 0; this.onResize();
+    } else if ((slow && this.dynScale <= 0.55) || (fast && this.dynScale >= 1)) this.dynT = 0;
+  }
+
   onResize() {
     const w = window.innerWidth, h = window.innerHeight;
-    const scale = (this.renderScale || 1) * Math.min(window.devicePixelRatio || 1, 1.5) * (this.post && this.post.enabled ? 0.75 : 1);
+    const scale = (this.renderScale || 1) * (this.dynScale || 1) * Math.min(window.devicePixelRatio || 1, 1.5) * (this.post && this.post.enabled ? 0.75 : 1);
     this.renderer.setSize(w, h, false);
     this.renderer.setPixelRatio(this.post && this.post.enabled ? 1 : scale);
     this.post && this.post.setSize(w, h, scale);
@@ -394,6 +408,7 @@ export class Game {
     if (dt > 0.1) dt = 0.1;
     if (dt <= 0) dt = 0.001;
     this.fps = this.fps ? this.fps * 0.95 + (1 / dt) * 0.05 : 60;
+    if (this.started && !this.paused && !document.hidden) this.adaptResolution(dt);
     this.input.pollPad();
     if (this.menus) this.menus.update(dt);
     if (this.touch) this.touch.update();

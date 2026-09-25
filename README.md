@@ -36,7 +36,11 @@ Funciona en Chrome, Firefox, Edge y Safari con WebGL. En el celular aparecen con
 
 ## El mapa
 
-Versión libre y comprimida de Comodoro Rivadavia: Cerro Chenque con sus antenas y la Ruta 3 por la costa, el Centro con la Catedral, la Terminal y la Torre Crudo, la Costanera, el Puerto con el Muelle de Ultramar, Km 3 (con el Museo del Petróleo y la torre del Pozo N°2), Km 5, Km 8, Caleta Córdova, el Aeropuerto, los barrios Pietrobelli, Juan XXIII, 9 de Julio (con **La Madriguera**, que en 2004 todavía era de tierra), 30 de Octubre, Industrial y Pueyrredón, Rada Tilly, Punta del Marqués con la lobería, y la meseta de Pampa del Castillo con cigüeñas por todos lados y el parque eólico.
+Comodoro Rivadavia de verdad: **las calles, la costa, los barrios, las plazas, las canchas y los lugares conocidos salen de OpenStreetMap**, y el relieve (el Chenque, las lomas de los barrios, la meseta) sale de un modelo de elevación real. Para que se pueda recorrer, el mapa está comprimido en los tramos vacíos entre barrios (sobre todo por la Ruta 3), pero dentro de cada barrio las cuadras mantienen su forma y sus nombres.
+
+Están el Centro con la Catedral, la plaza San Martín, la Terminal y los edificios altos; la Costanera y el Puerto con el Muelle; el Cerro Chenque con las antenas; Km 3 con el Museo del Petróleo; Km 5, Km 8 y Caleta Córdova hacia el norte; Pietrobelli, Jorge Newbery con **La Madriguera** (en 2004 todavía de tierra), Juan XXIII, 9 de Julio y los demás barrios; Rada Tilly con la playa; Punta del Marqués con la lobería; el Aeropuerto, el parque eólico y los yacimientos de la meseta.
+
+El radar y el mapa de pausa se dibujan con las mismas calles y muestran el nombre del barrio en el que estás.
 
 ## Lo que tiene de San Andreas
 
@@ -46,9 +50,29 @@ Versión libre y comprimida de Comodoro Rivadavia: Cerro Chenque con sus antenas
 - Nivel de búsqueda de 1 a 6 estrellas, patrulleros que persiguen, arrestos y helicóptero.
 - HUD como el original: reloj, plata en verde, vida, chaleco, arma, estrellas, radar redondo que rota, nombre de la zona y del vehículo.
 - Ciclo de día y noche (1 segundo = 1 minuto), clima y el **viento de Comodoro**: polvo, bolsas volando y temporales que empujan los autos.
-- 7 radios con música procedural: cumbia villera, rock nacional, boliche, chacarera, tango, radio AM de charla y apagada.
+- 7 radios con música procedural: cumbia villera, rock nacional, boliche, chacarera, tango, radio AM de charla y apagada. La AM es un homenaje a **La Ciudad Perdida**, el programa de **Santiago Sánchez** (los textos son ficción escrita en homenaje).
+- Con 4 estrellas o más suena **Novishok** en la persecución (ver *Intro y música*).
 - Actividades: malabares en el semáforo (minijuego de ritmo), remisero (subite a un remís y apretá 2), comida, gimnasio, armería, Chapa y Pintura de Don Tito, 24 bolsitas de La Anómala para juntar y 6 saltos únicos.
 - Guardado en la Casa de la Abuela, estadísticas, mapa con destino marcable y filtro "PS2" con estela.
+
+## Intro y música
+
+Desde el menú, **Intro y música**:
+
+- **Video de intro**: subí el video (MP4 o WebM, hasta 20 MB), por ejemplo el de "GTA Comodoro Rivadavia", y se reproduce con audio cada vez que abrís el juego.
+- **Novishok**: subí los temas y suenan cuando la cana te persigue con 4 estrellas o más. Si no hay temas cargados, suena un thrash generado por el juego.
+
+En la versión publicada en claude.ai los archivos quedan guardados en el artifact y los ve todo el que abre el link (solo quien lo edita puede subirlos). Abriendo el juego desde el repo, se usa `media/intro.mp4` si existe, y lo que subas queda guardado en tu navegador.
+
+## Rendimiento
+
+El mapa entero tiene unas 18.000 casas, miles de postes, árboles y bombas de petróleo, así que el juego dibuja solo lo que se ve:
+
+- casas, postes, árboles y props agrupados por sector (el navegador descarta los que quedan fuera de cámara) y apagados más allá de la niebla;
+- terreno en mosaicos con dos niveles de detalle;
+- agua detallada solo en la orilla.
+
+En una vista típica se dibujan entre 250.000 y 450.000 triángulos. Si anda lento, bajá **Calidad de imagen** en Opciones o apagá las sombras.
 
 ## Controles
 
@@ -77,6 +101,8 @@ Se escriben durante el juego: `HESOYAM`, `AEZAKMI`, `ASNAEB`, `OSRBLHH`, `LXGIWY
 
 Es un juego de fans, gratis y sin fines de lucro, inspirado en *Grand Theft Auto: San Andreas* (Rockstar Games, 2004). No está afiliado a Rockstar. Los personajes, empresas y situaciones son ficticios o paródicos, y el Gordopin y el Petroca aparecen como homenaje cariñoso a dos personajes de la cultura comodorense. Todo el arte y el sonido se generan con código.
 
+Datos del mapa © colaboradores de [OpenStreetMap](https://www.openstreetmap.org/copyright), bajo licencia ODbL. Relieve: Terrain Tiles de Mapzen en AWS (SRTM y otras fuentes).
+
 ## Estructura del código
 
 ```
@@ -89,4 +115,18 @@ src/
   audio/             efectos y radios sintetizadas con WebAudio
   ui/                HUD, menús, controles táctiles y entrada
 scripts/build.mjs    compilación con esbuild
+tools/mapa/          descarga de OpenStreetMap y del relieve, y armado de src/world/comodoro-data.js
 ```
+
+## Regenerar el mapa
+
+Hace falta Python 3 con `shapely`, `numpy` y `pillow`.
+
+```bash
+bash tools/mapa/descargar.sh                      # baja OSM (Overpass) y el relieve a tools/mapa/cache/
+python3 tools/mapa/build_map.py tools/mapa/cache src/world/comodoro-data.js
+python3 tools/mapa/preview.py src/world/comodoro-data.js mapa.png   # vista previa en PNG
+npm run build
+```
+
+`build_map.py` endereza la costa, comprime los tramos vacíos, une las avenidas de doble mano, simplifica las rotondas, arma los barrios y guarda todo comprimido (unos 420 KB).

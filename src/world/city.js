@@ -577,6 +577,20 @@ export class City {
       rg.gable(-4, 4, 0.5, 8.5, res.floor + 31, 6, hexColor(0x5d6a70), false, 0.2);
       gb.box(-0.25, 0.25, res.floor + 37, res.floor + 41, 4.25, 4.75, hexColor(0xe8e8e8));
       gb.box(-1.3, 1.3, res.floor + 39.2, res.floor + 39.7, 4.25, 4.75, hexColor(0xe8e8e8));
+      // vitrales altos y pilastras a los costados de la nave
+      const glass = hexColor(0x34465e), pil = hexColor(0xf4efe2);
+      for (let z = 12; z <= 39; z += 4.5) {
+        for (const sx of [-1, 1]) {
+          const xo = sx * 11;
+          gb.box(Math.min(xo, xo + sx * 0.12), Math.max(xo, xo + sx * 0.12), res.floor + 2.4, res.floor + 10.5, z - 0.75, z + 0.75, glass);
+          gb.box(Math.min(xo, xo + sx * 0.4), Math.max(xo, xo + sx * 0.4), res.base, res.floor + 13.2, z + 1.9, z + 2.6, pil);
+        }
+      }
+      // campanario: aberturas arriba, puerta y rosetón
+      for (const [z0, z1] of [[0.38, 0.5], [8.5, 8.62]]) gb.box(-1.4, 1.4, res.floor + 25, res.floor + 28.5, z0, z1, glass);
+      for (const x of [-4.12, 4]) gb.box(x, x + 0.12, res.floor + 25, res.floor + 28.5, 3.1, 5.9, glass);
+      gb.box(-1.7, 1.7, res.floor, res.floor + 4.6, 0.36, 0.5, hexColor(0x4a3020));
+      gb.box(-1.6, 1.6, res.floor + 8, res.floor + 11.2, 0.36, 0.5, glass);
       this.addCollider(-4, 4, 0.5, 8.5, res.base, res.floor + 40, 'catedral');
       poi('catedral', 'Catedral San Juan Bosco', 0, 20);
     });

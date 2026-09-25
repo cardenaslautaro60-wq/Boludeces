@@ -24,7 +24,11 @@ export class World {
     this.game = game;
   }
 
-  async build(progress = () => {}) {
+  async build(report = () => {}) {
+    // tiempos de cada etapa de la carga (para medir: __game.world.timings)
+    const t0 = performance.now();
+    this.timings = [];
+    const progress = (f, msg) => { this.timings.push([msg, Math.round(performance.now() - t0)]); report(f, msg); };
     const g = this.game;
     progress(0.04, 'Bajando el mapa de Comodoro...');
     await nextFrame();
@@ -90,6 +94,7 @@ export class World {
     this.culler.addTree(this.roadMesh);
     this.culler.addTree(props.group);
     this.zoneCache = { x: 1e9, z: 1e9, name: '' };
+    this.timings.push(['fin', Math.round(performance.now() - t0)]);
   }
 
   // Muelles reales (OSM) como plataformas elevadas
