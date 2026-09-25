@@ -61,12 +61,14 @@ class Ctx {
 
   // ---- utilidades de escena ----
   spawnVehicle(key, x, z, rot, opts = {}) {
+    if (!opts.exact) ({ x, z } = this.game.safeSpot(x, z, 2.2, true));
     const v = this.game.spawnVehicle(key, x, z, rot, opts);
     v.missionOwned = true;
     this.cleanup.push(() => { if (!v.removed && !(v.driver && v.driver.isPlayer) && !opts.keep) { v.missionOwned = false; } });
     return v;
   }
   spawnPed(kind, x, z, opts = {}) {
+    if (!opts.exact) ({ x, z } = this.game.safeSpot(x, z, 0.5));
     const p = this.game.spawnPed(kind, x, z, { look: opts.look || randomLook(kind), ...opts });
     p.persistent = true;
     this.cleanup.push(() => { if (!p.removed) { p.blip = null; if (opts.keep) return; if (p.vehicle && p.vehicle.driver === this.game.player) { p.exitVehicle(); } p.persistent = false; p.spawned = true; if (p.brain && p.brain.mode === 'script') p.brain.setMode('wander'); } });
@@ -401,7 +403,8 @@ export class Missions {
           await c.until(() => G.vehicle === empresa);
           empresa.blip = null;
           // en el puerto
-          const jx = 505, jz = 452;
+          const PU = POI.puerto || POI.terminal;
+          const jx = PU.x, jz = PU.z;
           const jilux = c.spawnVehicle('jilux', jx, jz, Math.PI / 2, { color: 0xb01818 });
           jilux.locked = false;
           const chetos = [];
@@ -414,7 +417,7 @@ export class Missions {
             chetos.push(q);
           }
           c.failIf(() => jilux.dead, '¡Hiciste bolsa la chata del Petroca!');
-          await c.goTo(460, 440, { text: 'Andá al <b>Puerto</b>.', vehicle: true, radius: 12 });
+          await c.goTo(jx, jz, { text: 'Andá al <b>Puerto</b>.', vehicle: true, radius: 14 });
           c.objective('Recuperá la <b>Jilux roja</b> del Petroca.');
           jilux.blip = '#40a0ff';
           await c.until(() => G.vehicle === jilux);
@@ -685,18 +688,19 @@ export class Missions {
           c.failIf(() => { hp(); return false; }, '');
           c.cleanup.push(() => g.hud.removeCounter('truck'));
           c.objective('Tirá la cisterna al mar desde la punta del <b>Muelle de Ultramar</b> (Puerto).');
-          const mb = c.blip(725, 390, '#ffd21a');
-          const mk = c.marker(722, 390, 0xffd21a, { r: 4, h: 1, y: 2.6 });
-          await c.until(() => { mk.update(1 / 60); return truck.sinking > 0.3 || (truck.pos.y < -0.5 && truck.pos.x > 700); });
+          const MU = POI.muelle || { x: truck.pos.x, z: truck.pos.z, tx: truck.pos.x, tz: truck.pos.z };
+          const mb = c.blip(MU.tx, MU.tz, '#ffd21a');
+          const mk = c.marker(MU.tx - MU.dx * 4, MU.tz - MU.dz * 4, 0xffd21a, { r: 4, h: 1, y: 2.6 });
+          await c.until(() => { mk.update(1 / 60); return truck.sinking > 0.3 || (truck.pos.y < -0.5 && g.terrain.heightAt(truck.pos.x, truck.pos.z) < -1); });
           c.removeBlip(mb); mk.dispose();
           if (G.vehicle === truck) G.exitVehicle();
           g.police.clear();
           await c.cutscene(async () => {
-            c.cam(V3(700, 10, 405), V3(705, 6, 400), V3(truck.pos.x, 0, truck.pos.z), 6);
+            c.cam(V3(MU.tx - MU.dx * 25 - MU.dz * 12, 10, MU.tz - MU.dz * 25 + MU.dx * 12), V3(MU.tx - MU.dx * 18 - MU.dz * 8, 6, MU.tz - MU.dz * 18 + MU.dx * 8), V3(truck.pos.x, 0, truck.pos.z), 6);
             await c.say('', 'Los permisos truchos de Don Crudo se hunden en el Golfo San Jorge...', 3.5);
             await c.say('Petroca', '¡Buena petroca! ¡Ahora que venga Crudo a perforar con un snorkel!', 3.5);
           });
-          c.place(G, 700, 390, -Math.PI / 2);
+          c.place(G, MU.tx - MU.dx * 20, MU.tz - MU.dz * 20, Math.atan2(-MU.dx, -MU.dz));
           G.pos.y = 2.6;
           void P;
         },

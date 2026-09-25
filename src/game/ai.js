@@ -2,6 +2,7 @@ import { rand, pick, chance, clamp, dist, angleDiff } from '../util.js';
 import { WEAPONS } from './weapons.js';
 import { sayLine, PED_LINES } from '../entities/ped.js';
 import { SW } from '../world/city.js';
+void SW;
 
 // Cerebro de los personajes no jugables
 export class Brain {
@@ -27,7 +28,7 @@ export class Brain {
     this.onDeathCb = null;
     this.stuckT = 0;
     this.lastPos = { x: ped.pos.x, z: ped.pos.z };
-    if (mode === 'wander' && !this.block) this.block = game.city.blockAt(ped.pos.x, ped.pos.z);
+    this.sw = null;
   }
 
   onAttacked(attacker) {
@@ -106,12 +107,64 @@ export class Brain {
     }
   }
 
-  // --- Caminar por las veredas ---
+  // --- Caminar por las veredas (de las calles reales) ---
+  lanePoint(e, side, atB) {
+    const C = this.game.city, R = this.game.roads;
+    const A = R.nodes[e.a];
+    const t = atB ? e.len - C.trimOf(e, 1, side) : C.trimOf(e, 0, side);
+    const off = (e.width / 2 + 1.3) * side;
+    const tt = Math.max(0.5, Math.min(e.len - 0.5, t));
+    return { x: A.x + e.dx * tt - e.dz * off, z: A.z + e.dz * tt + e.dx * off };
+  }
+
+  initSidewalk() {
+    const p = this.ped, R = this.game.roads;
+    const n = R.nearestEdge(p.pos.x, p.pos.z, 30, (e) => e.sw);
+    if (!n) return null;
+    const e = n.edge, A = R.nodes[e.a];
+    const cross = e.dx * (p.pos.z - A.z) - e.dz * (p.pos.x - A.x);
+    return { e, side: cross >= 0 ? 1 : -1, toB: chance(0.5) };
+  }
+
+  // Al llegar a una esquina: doblar siguiendo la vereda o cruzar la calle
+  nextLane() {
+    const R = this.game.roads;
+    const w = this.sw;
+    const e = w.e;
+    const nid = w.toB ? e.b : e.a;
+    const N = R.nodes[nid];
+    if (N.edges.length > 1 && chance(0.78)) {
+      const list = N.edges.map((i) => {
+        const f = R.edges[i];
+        const atA = f.a === nid;
+        const ox = atA ? f.dx : -f.dx, oz = atA ? f.dz : -f.dz;
+        return { f, atA, ang: Math.atan2(oz, ox), ox, oz };
+      }).sort((a, b) => a.ang - b.ang);
+      const k = list.findIndex((q) => q.f === e);
+      const me = list[k];
+      const nx = -e.dz * w.side, nz = e.dx * w.side;
+      const ccw = me.ox * nz - me.oz * nx > 0;
+      const nb = ccw ? list[(k + 1) % list.length] : list[(k - 1 + list.length) % list.length];
+      if (nb && nb.f !== e && nb.f.sw) {
+        const side = ccw ? (nb.atA ? -1 : 1) : (nb.atA ? 1 : -1);
+        this.sw = { e: nb.f, side, toB: nb.atA };
+        return;
+      }
+    }
+    // cruzar al frente y volver por la otra vereda
+    this.sw = { e, side: -w.side, toB: !w.toB };
+    this.crossing = true;
+  }
+
   wander(dt) {
     const p = this.ped;
     const g = this.game;
     if (this.idleT > 0) { this.idleT -= dt; this.stop(); return; }
-    if (!this.block) {
+    if (!this.sw && !this.noSidewalk) {
+      this.sw = this.initSidewalk();
+      if (!this.sw) this.noSidewalk = true;
+    }
+    if (!this.sw) {
       // fuera de la ciudad: paseo aleatorio
       if (!this.wp || this.moveTo(this.wp.x, this.wp.z, 0)) {
         const a = rand(0, Math.PI * 2);
@@ -120,11 +173,21 @@ export class Brain {
       }
       return;
     }
-    if (!this.wp) this.wp = this.nextCorner();
-    if (this.moveTo(this.wp.x, this.wp.z, 0, 0.8)) {
-      if (this.wp.cross) this.block = this.wp.cross;
+    if (!this.wp) {
+      const w = this.sw;
+      if (this.crossing) {
+        // primero cruzar al punto de la otra vereda en la misma esquina
+        this.wp = this.lanePoint(w.e, w.side, !w.toB);
+        this.crossing = false;
+        this.wp.crossStep = true;
+      } else this.wp = this.lanePoint(w.e, w.side, w.toB);
+    }
+    if (this.stuck) { this.stuck = false; this.nextLane(); this.wp = null; return; }
+    if (this.moveTo(this.wp.x, this.wp.z, 0, 0.9)) {
+      const was = this.wp;
       this.wp = null;
-      if (chance(0.08)) this.idleT = rand(2, 7);
+      if (!was.crossStep) this.nextLane();
+      if (chance(0.06)) this.idleT = rand(2, 7);
     }
     // saludar al Gordopin (es famoso)
     const pl = g.player;
@@ -135,53 +198,10 @@ export class Brain {
     if (g.env.windSpeed > 24 && chance(dt * 0.02)) sayLine(p, pick(PED_LINES.wind));
   }
 
-  nextCorner() {
-    const b = this.block;
-    const i = SW / 2;
-    const corners = [[b.x0 + i, b.z0 + i], [b.x1 - i, b.z0 + i], [b.x1 - i, b.z1 - i], [b.x0 + i, b.z1 - i]];
-    // esquina más cercana en la dirección de marcha
-    const p = this.ped;
-    if (this.corner === undefined || this.cornerBlock !== b) {
-      let best = 0, bd = Infinity;
-      corners.forEach(([x, z], k) => { const d = Math.hypot(x - p.pos.x, z - p.pos.z); if (d < bd) { bd = d; best = k; } });
-      this.corner = best;
-      this.cornerBlock = b;
-      return { x: corners[best][0], z: corners[best][1] };
-    }
-    // ¿cruzar la calle?
-    if (chance(0.3)) {
-      const k = this.corner;
-      const opts = [];
-      const g = this.game;
-      const nb = (dc, dr) => g.city.gridIndex.get(`${b.grid},${b.c + dc},${b.r + dr}`);
-      // cada esquina tiene dos vecinos
-      const map = { 0: [[-1, 0], [0, -1]], 1: [[1, 0], [0, -1]], 2: [[1, 0], [0, 1]], 3: [[-1, 0], [0, 1]] };
-      for (const [dc, dr] of map[k]) {
-        const n = nb(dc, dr);
-        if (n && !n.special) opts.push({ n, dc, dr });
-      }
-      if (opts.length) {
-        const o = pick(opts);
-        const n = o.n;
-        const nc = [[n.x0 + i, n.z0 + i], [n.x1 - i, n.z0 + i], [n.x1 - i, n.z1 - i], [n.x0 + i, n.z1 - i]];
-        // esquina opuesta del vecino según la dirección de cruce
-        let target;
-        const [cx, cz] = corners[k];
-        let bd = Infinity;
-        nc.forEach(([x, z], kk) => { const d = Math.hypot(x - cx, z - cz); if (d < bd) { bd = d; target = kk; } });
-        this.corner = target;
-        this.cornerBlock = n;
-        return { x: nc[target][0], z: nc[target][1], cross: n };
-      }
-    }
-    this.corner = (this.corner + this.dir + 4) % 4;
-    return { x: corners[this.corner][0], z: corners[this.corner][1] };
-  }
-
   flee(dt) {
     const p = this.ped;
     const f = this.fleeFrom;
-    if (this.t <= 0 || !f) { this.setMode(this.base === 'flee' ? 'wander' : this.base); this.block = this.game.city.blockAt(p.pos.x, p.pos.z); return; }
+    if (this.t <= 0 || !f) { this.setMode(this.base === 'flee' ? 'wander' : this.base); this.sw = null; this.noSidewalk = false; return; }
     const fx = f.pos ? f.pos.x : f.x, fz = f.pos ? f.pos.z : f.z;
     let dx = p.pos.x - fx, dz = p.pos.z - fz;
     const d = Math.hypot(dx, dz) || 1;

@@ -1,109 +1,107 @@
 import * as THREE from 'three';
-import { WORLD, COAST, FLATS, DECKS, RAMPS } from './mapdata.js';
-import { clamp, lerp, smoothstep, fbm, noise2, catmullTable, pointSegDist } from '../util.js';
+import { META, MAP, FRAME as F, toAB, fromAB, DECKS, RAMPS } from './mapdata.js';
+import { clamp, lerp, smoothstep, fbm, noise2 } from '../util.js';
 import { srgbToLinear } from './geom.js';
 
-export const CELL = 10;
+// El relieve real de Comodoro (cañadones, el Chenque, las bardas) vive en una grilla rotada:
+// i avanza a lo largo de la costa (eje A) y j tierra adentro (eje B).
+export const CELL = 14;
+const MARGIN = 700; // la malla sigue más allá del borde jugable (la niebla la tapa)
 
-export function coastX(z) {
-  return catmullTable(COAST, z) + 5 * Math.sin(z * 0.021) + 3 * Math.sin(z * 0.057);
-}
-
-function rectMask(x, z, r) {
-  const e = r.edge;
-  const mx = smoothstep(r.x0 - e, r.x0, x) * (1 - smoothstep(r.x1, r.x1 + e, x));
-  const mz = smoothstep(r.z0 - e, r.z0, z) * (1 - smoothstep(r.z1, r.z1 + e, z));
-  return mx * mz;
-}
-
-// Meseta: plateau alto al Oeste con un escalón (barda)
-function escarpX(z) {
-  return -860 + 55 * Math.sin(z * 0.0042) + 28 * Math.sin(z * 0.0113 + 1.3);
-}
-
-// Altura "cruda" (analítica) del terreno
-export function rawHeight(x, z) {
-  const cx = coastX(z);
-  const d = cx - x; // distancia tierra adentro
-
-  let h = 3 + Math.max(0, d - 60) * 0.031;
-
-  // Barda de la meseta
-  const ex = escarpX(z);
-  h += 52 * smoothstep(ex + 55, ex - 55, x);
-
-  // Ondulaciones de la estepa
-  const rough = 1;
-  h += (fbm(x * 0.0035 + 11, z * 0.0035 - 7, 4) - 0.5) * 16 * rough;
-  h += (noise2(x * 0.02, z * 0.02) - 0.5) * 2.2;
-
-  // Cerro Chenque (meseta chica con laderas empinadas y cárcavas)
-  {
-    const rx = (x - 150) / 175, rz = (z + 360) / 235;
-    const r = Math.sqrt(rx * rx + rz * rz);
-    const plateau = 1 - smoothstep(0.52, 1.06, r);
-    const gully = (fbm(x * 0.03, z * 0.03, 3) - 0.5) * 18 * smoothstep(0.45, 0.75, r) * (1 - smoothstep(0.95, 1.2, r));
-    h += plateau * 84 + gully * plateau;
-  }
-  // Lomas al oeste de Km 3 / Km 5
-  h += 26 * Math.exp(-(((x + 330) ** 2) / (2 * 190 ** 2) + ((z + 1000) ** 2) / (2 * 230 ** 2)));
-  h += 20 * Math.exp(-(((x + 150) ** 2) / (2 * 120 ** 2) + ((z + 700) ** 2) / (2 * 110 ** 2)));
-  // Loma entre Comodoro y Rada Tilly
-  h += 30 * Math.exp(-(((x - 120) ** 2) / (2 * 330 ** 2) + ((z - 1000) ** 2) / (2 * 70 ** 2)));
-  // Punta del Marqués (meseta costera con acantilados)
-  {
-    const rx = (x - 500) / 170, rz = (z - 1605) / 105;
-    const r = Math.sqrt(rx * rx + rz * rz);
-    h += 38 * (1 - smoothstep(0.55, 1.0, r));
-  }
-
-  // Zonas urbanas aplanadas
-  for (const f of FLATS) {
-    const m = rectMask(x, z, f);
-    if (m > 0) h = lerp(h, f.h(x, z), m);
-  }
-
-  // Costa: playa y fondo marino
-  if (d < 90) {
-    const beach = d >= 0 ? d * 0.055 : Math.max(-16, d * 0.09);
-    const t = smoothstep(-5, 90, d);
-    h = lerp(beach, h, t);
-  }
-  return h;
+function catmull(p0, p1, p2, p3, t) {
+  const t2 = t * t, t3 = t2 * t;
+  return 0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3);
 }
 
 export class Terrain {
   constructor() {
-    this.nx = Math.round((WORLD.maxX - WORLD.minX) / CELL) + 1;
-    this.nz = Math.round((WORLD.maxZ - WORLD.minZ) / CELL) + 1;
-    this.h = new Float32Array(this.nx * this.nz);
-    for (let j = 0; j < this.nz; j++) {
-      const z = WORLD.minZ + j * CELL;
-      for (let i = 0; i < this.nx; i++) {
-        const x = WORLD.minX + i * CELL;
-        this.h[j * this.nx + i] = rawHeight(x, z);
+    const hm = META.heights;
+    const src = MAP.heights;
+    const sna = hm.na, snb = hm.nb, sc = hm.scale;
+    const S = (i, j) => src[clamp(j, 0, snb - 1) * sna + clamp(i, 0, sna - 1)] * sc;
+    this.a0 = F.a0 - MARGIN; this.b0 = F.b0 - MARGIN;
+    this.na = Math.ceil((F.a1 - F.a0 + 2 * MARGIN) / CELL) + 1;
+    this.nb = Math.ceil((F.b1 - F.b0 + 2 * MARGIN) / CELL) + 1;
+    this.h = new Float32Array(this.na * this.nb);
+    for (let j = 0; j < this.nb; j++) {
+      const b = this.b0 + j * CELL;
+      const fj = (b - F.b0) / hm.cell;
+      const jj = Math.floor(fj), tj = fj - jj;
+      for (let i = 0; i < this.na; i++) {
+        const a = this.a0 + i * CELL;
+        const fi = (a - F.a0) / hm.cell;
+        const ii = Math.floor(fi), ti = fi - ii;
+        const col = [];
+        for (let m = -1; m <= 2; m++) col.push(catmull(S(ii - 1, jj + m), S(ii, jj + m), S(ii + 1, jj + m), S(ii + 2, jj + m), ti));
+        let h = catmull(col[0], col[1], col[2], col[3], tj);
+        // detalle chico de la estepa (el DEM es suave a esta escala)
+        if (h > 1.5) {
+          const [x, z] = fromAB(a, b);
+          h += ((fbm(x * 0.018 + 5, z * 0.018 - 3, 3) - 0.5) * 1.6 + (noise2(x * 0.09, z * 0.09) - 0.5) * 0.35) * smoothstep(1.5, 6, h);
+        }
+        this.h[j * this.na + i] = h;
       }
     }
+    this.computeSeaDistance();
     this.ramps = [];
   }
 
-  gridH(i, j) {
-    i = clamp(i, 0, this.nx - 1);
-    j = clamp(j, 0, this.nz - 1);
-    return this.h[j * this.nx + i];
+  // Distancia (m) al mar para cada celda de tierra; negativa en el mar (distancia a tierra)
+  computeSeaDistance() {
+    const { na, nb, h } = this;
+    const INF = 1e9;
+    const dLand = new Float32Array(na * nb), dSea = new Float32Array(na * nb);
+    for (let k = 0; k < h.length; k++) { const land = h[k] > 0; dSea[k] = land ? INF : 0; dLand[k] = land ? 0 : INF; }
+    const pass = (d) => {
+      const s2 = Math.SQRT2;
+      for (let j = 0; j < nb; j++) for (let i = 0; i < na; i++) {
+        const k = j * na + i;
+        let v = d[k];
+        if (i > 0) v = Math.min(v, d[k - 1] + 1);
+        if (j > 0) { v = Math.min(v, d[k - na] + 1); if (i > 0) v = Math.min(v, d[k - na - 1] + s2); if (i < na - 1) v = Math.min(v, d[k - na + 1] + s2); }
+        d[k] = v;
+      }
+      for (let j = nb - 1; j >= 0; j--) for (let i = na - 1; i >= 0; i--) {
+        const k = j * na + i;
+        let v = d[k];
+        if (i < na - 1) v = Math.min(v, d[k + 1] + 1);
+        if (j < nb - 1) { v = Math.min(v, d[k + na] + 1); if (i > 0) v = Math.min(v, d[k + na - 1] + s2); if (i < na - 1) v = Math.min(v, d[k + na + 1] + s2); }
+        d[k] = v;
+      }
+    };
+    pass(dLand); pass(dSea);
+    this.coast = new Float32Array(na * nb);
+    for (let k = 0; k < h.length; k++) this.coast[k] = h[k] > 0 ? dSea[k] * CELL : -dLand[k] * CELL;
   }
 
-  // Altura del terreno interpolada igual que la malla (dos triángulos por celda)
+  cellOf(x, z) {
+    const a = x * F.ux + z * F.uz, b = x * F.vx + z * F.vz;
+    return [(a - this.a0) / CELL, (b - this.b0) / CELL];
+  }
+
+  // Distancia al mar en metros (positiva en tierra)
+  seaDist(x, z) {
+    const [fi, fj] = this.cellOf(x, z);
+    const i = clamp(Math.round(fi), 0, this.na - 1), j = clamp(Math.round(fj), 0, this.nb - 1);
+    return this.coast[j * this.na + i];
+  }
+
+  gridH(i, j) {
+    i = clamp(i, 0, this.na - 1);
+    j = clamp(j, 0, this.nb - 1);
+    return this.h[j * this.na + i];
+  }
+
+  // Altura interpolada igual que la malla (dos triángulos por celda)
   heightAt(x, z) {
-    const fx = (x - WORLD.minX) / CELL, fz = (z - WORLD.minZ) / CELL;
-    let i = Math.floor(fx), j = Math.floor(fz);
-    if (i < 0 || j < 0 || i >= this.nx - 1 || j >= this.nz - 1) {
-      return rawHeight(clamp(x, WORLD.minX, WORLD.maxX), clamp(z, WORLD.minZ, WORLD.maxZ));
-    }
-    const u = fx - i, v = fz - j;
-    const h00 = this.h[j * this.nx + i], h10 = this.h[j * this.nx + i + 1];
-    const h01 = this.h[(j + 1) * this.nx + i], h11 = this.h[(j + 1) * this.nx + i + 1];
-    // Diagonal de (i+1,j) a (i,j+1)
+    const a = x * F.ux + z * F.uz, b = x * F.vx + z * F.vz;
+    let fi = (a - this.a0) / CELL, fj = (b - this.b0) / CELL;
+    fi = clamp(fi, 0, this.na - 1.001); fj = clamp(fj, 0, this.nb - 1.001);
+    const i = Math.floor(fi), j = Math.floor(fj);
+    const u = fi - i, v = fj - j;
+    const na = this.na, H = this.h;
+    const h00 = H[j * na + i], h10 = H[j * na + i + 1];
+    const h01 = H[(j + 1) * na + i], h11 = H[(j + 1) * na + i + 1];
     if (u + v <= 1) return h00 + (h10 - h00) * u + (h01 - h00) * v;
     return h11 + (h01 - h11) * (1 - u) + (h10 - h11) * (1 - v);
   }
@@ -113,15 +111,16 @@ export class Terrain {
     let g = this.heightAt(x, z);
     for (let k = 0; k < DECKS.length; k++) {
       const d = DECKS[k];
-      if (x >= d.x0 && x <= d.x1 && z >= d.z0 && z <= d.z1 && d.h > g) g = d.h;
+      const dx = x - d.cx, dz = z - d.cz;
+      const u = dx * d.ax + dz * d.az, v = -dx * d.az + dz * d.ax;
+      if (Math.abs(u) <= d.hw && Math.abs(v) <= d.hd && d.h > g) g = d.h;
     }
     for (let k = 0; k < this.ramps.length; k++) {
       const r = this.ramps[k];
       const dx = x - r.x, dz = z - r.z;
       if (dx * dx + dz * dz > r.rad2) continue;
-      // coordenadas locales de la rampa
-      const lz = dx * r.fx + dz * r.fz; // a lo largo
-      const lx = dx * r.fz - dz * r.fx; // a lo ancho
+      const lz = dx * r.fx + dz * r.fz;
+      const lx = dx * r.fz - dz * r.fx;
       if (Math.abs(lx) <= r.w / 2 && lz >= -r.len / 2 && lz <= r.len / 2) {
         const t = (lz + r.len / 2) / r.len;
         const hh = r.base + r.h * t;
@@ -145,37 +144,35 @@ export class Terrain {
     this.ramps = [];
     for (const r of RAMPS) {
       const base = this.heightAt(r.x, r.z);
-      this.ramps.push({
-        ...r, base, fx: Math.sin(r.rot), fz: Math.cos(r.rot),
-        rad2: (r.len * 0.5 + r.w) ** 2,
-      });
+      this.ramps.push({ ...r, base, fx: Math.sin(r.rot), fz: Math.cos(r.rot), rad2: (r.len * 0.5 + r.w) ** 2 });
     }
   }
 
   // Aplana el terreno a lo largo de las calles para que queden prolijas
   flattenRoads(segments) {
-    const nx = this.nx;
+    const na = this.na;
     const target = new Float32Array(this.h.length);
     const weight = new Float32Array(this.h.length);
     for (const s of segments) {
-      const pad = s.width / 2 + 7;
-      const minX = Math.min(s.ax, s.bx) - pad, maxX = Math.max(s.ax, s.bx) + pad;
-      const minZ = Math.min(s.az, s.bz) - pad, maxZ = Math.max(s.az, s.bz) + pad;
-      const i0 = Math.max(0, Math.floor((minX - WORLD.minX) / CELL));
-      const i1 = Math.min(nx - 1, Math.ceil((maxX - WORLD.minX) / CELL));
-      const j0 = Math.max(0, Math.floor((minZ - WORLD.minZ) / CELL));
-      const j1 = Math.min(this.nz - 1, Math.ceil((maxZ - WORLD.minZ) / CELL));
+      const [aa, ab] = toAB(s.ax, s.az), [ba, bb] = toAB(s.bx, s.bz);
+      const pad = s.width / 2 + 6;
+      const i0 = Math.max(0, Math.floor((Math.min(aa, ba) - pad - this.a0) / CELL));
+      const i1 = Math.min(na - 1, Math.ceil((Math.max(aa, ba) + pad - this.a0) / CELL));
+      const j0 = Math.max(0, Math.floor((Math.min(ab, bb) - pad - this.b0) / CELL));
+      const j1 = Math.min(this.nb - 1, Math.ceil((Math.max(ab, bb) + pad - this.b0) / CELL));
+      const dx = ba - aa, dy = bb - ab, L2 = dx * dx + dy * dy || 1e-9;
       for (let j = j0; j <= j1; j++) {
-        const z = WORLD.minZ + j * CELL;
+        const b = this.b0 + j * CELL;
         for (let i = i0; i <= i1; i++) {
-          const x = WORLD.minX + i * CELL;
-          const p = pointSegDist(x, z, s.ax, s.az, s.bx, s.bz);
-          if (p.d > pad) continue;
-          const w = 1 - smoothstep(s.width / 2 + 1, pad, p.d);
+          const a = this.a0 + i * CELL;
+          const t = clamp(((a - aa) * dx + (b - ab) * dy) / L2, 0, 1);
+          const d = Math.hypot(aa + dx * t - a, ab + dy * t - b);
+          if (d > pad) continue;
+          const w = 1 - smoothstep(s.width / 2 + 1, pad, d);
           if (w <= 0) continue;
-          const hh = lerp(s.ha, s.hb, p.t);
-          const k = j * nx + i;
-          target[k] += hh * w;
+          const k = j * na + i;
+          if (this.h[k] < 0.2) continue; // no rellenar el mar
+          target[k] += lerp(s.ha, s.hb, t) * w;
           weight[k] += w;
         }
       }
@@ -183,54 +180,73 @@ export class Terrain {
     for (let k = 0; k < this.h.length; k++) {
       if (weight[k] > 0) {
         const w = Math.min(1, weight[k]);
-        const t = target[k] / weight[k];
-        this.h[k] = lerp(this.h[k], t, w);
+        this.h[k] = lerp(this.h[k], target[k] / weight[k], w);
+      }
+    }
+  }
+
+  // Marca celdas urbanas (cerca de calles de barrio) para pintar el suelo de tierra apisonada
+  markUrban(roads) {
+    const na = this.na;
+    this.urban = new Uint8Array(this.h.length);
+    for (const e of roads.edges) {
+      if (e.kind === 'ruta' || (e.kind === 'tierra' && !e.urban)) continue;
+      const A = roads.nodes[e.a], B = roads.nodes[e.b];
+      const [aa, ab] = toAB(A.x, A.z), [ba, bb] = toAB(B.x, B.z);
+      const pad = 30;
+      const i0 = Math.max(0, Math.floor((Math.min(aa, ba) - pad - this.a0) / CELL));
+      const i1 = Math.min(na - 1, Math.ceil((Math.max(aa, ba) + pad - this.a0) / CELL));
+      const j0 = Math.max(0, Math.floor((Math.min(ab, bb) - pad - this.b0) / CELL));
+      const j1 = Math.min(this.nb - 1, Math.ceil((Math.max(ab, bb) + pad - this.b0) / CELL));
+      const dx = ba - aa, dy = bb - ab, L2 = dx * dx + dy * dy || 1e-9;
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+        const a = this.a0 + i * CELL, b = this.b0 + j * CELL;
+        const t = clamp(((a - aa) * dx + (b - ab) * dy) / L2, 0, 1);
+        if (Math.hypot(aa + dx * t - a, ab + dy * t - b) < pad) this.urban[j * na + i] = 1;
       }
     }
   }
 
   // Colores por vértice según altura, pendiente y zona
-  colorFor(x, z, h, ny, urban) {
+  colorFor(x, z, h, ny, urban, sd) {
     const n = fbm(x * 0.012, z * 0.012, 3);
     const n2 = noise2(x * 0.08, z * 0.08);
     let r, g, b;
-    const cx = coastX(z);
-    const d = cx - x;
     if (h < 0.3) { // fondo marino / orilla mojada
       r = 0.52; g = 0.47; b = 0.36;
-    } else if (d < 70 && h < 5) { // playa (canto rodado y arena gris)
+    } else if (sd < 55 && h < 6) { // playa de canto rodado y arena gris
       const t = n2 * 0.15;
       r = 0.72 + t; g = 0.66 + t; b = 0.52 + t;
-    } else if (ny < 0.8) { // barranco / acantilado arcilloso con estratos
+    } else if (ny < 0.8) { // barranco arcilloso con estratos (las bardas)
       const t = n * 0.14;
       const band = Math.sin(h * 0.9 + n * 3) * 0.5 + 0.5;
-      r = lerp(0.62, 0.78, band) + t; g = lerp(0.54, 0.70, band) + t; b = lerp(0.44, 0.58, band) + t;
+      r = lerp(0.62, 0.8, band) + t; g = lerp(0.54, 0.7, band) + t; b = lerp(0.44, 0.56, band) + t;
     } else if (urban) {
       const t = n2 * 0.08;
-      r = 0.52 + t; g = 0.49 + t; b = 0.43 + t;
+      r = 0.54 + t; g = 0.5 + t; b = 0.43 + t;
     } else { // estepa patagónica
       const m = smoothstep(0.35, 0.65, n);
       r = lerp(0.68, 0.58, m); g = lerp(0.59, 0.55, m); b = lerp(0.41, 0.39, m);
       const t = (n2 - 0.5) * 0.08;
       r += t; g += t; b += t * 0.5;
       if (ny < 0.9) { r += 0.06; g += 0.03; }
+      // meseta alta un poco más gris
+      const hi = smoothstep(90, 200, h);
+      r = lerp(r, 0.66, hi * 0.4); g = lerp(g, 0.62, hi * 0.4); b = lerp(b, 0.52, hi * 0.4);
     }
     return srgbToLinear(clamp(r, 0, 1), clamp(g, 0, 1), clamp(b, 0, 1));
   }
 
-  buildMesh(urbanTest) {
+  buildMesh() {
     const group = new THREE.Group();
-    const tiles = 6;
-    const tilesZ = 8;
-    const stepI = Math.ceil((this.nx - 1) / tiles);
-    const stepJ = Math.ceil((this.nz - 1) / tilesZ);
+    const T = 56;
     const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
     const nrm = new THREE.Vector3();
-    for (let tj = 0; tj < tilesZ; tj++) {
-      for (let ti = 0; ti < tiles; ti++) {
-        const i0 = ti * stepI, i1 = Math.min(this.nx - 1, i0 + stepI);
-        const j0 = tj * stepJ, j1 = Math.min(this.nz - 1, j0 + stepJ);
-        if (i1 <= i0 || j1 <= j0) continue;
+    const { na, nb } = this;
+    for (let tj = 0; tj * T < nb - 1; tj++) {
+      for (let ti = 0; ti * T < na - 1; ti++) {
+        const i0 = ti * T, i1 = Math.min(na - 1, i0 + T);
+        const j0 = tj * T, j1 = Math.min(nb - 1, j0 + T);
         const w = i1 - i0 + 1, hgt = j1 - j0 + 1;
         const pos = new Float32Array(w * hgt * 3);
         const col = new Float32Array(w * hgt * 3);
@@ -238,29 +254,33 @@ export class Terrain {
         let allUnder = true;
         for (let j = j0; j <= j1; j++) {
           for (let i = i0; i <= i1; i++) {
-            const x = WORLD.minX + i * CELL, z = WORLD.minZ + j * CELL;
-            const h = this.h[j * this.nx + i];
-            if (h > -6) allUnder = false;
+            const a = this.a0 + i * CELL, b = this.b0 + j * CELL;
+            const [x, z] = fromAB(a, b);
+            const k = j * na + i;
+            const h = this.h[k];
+            if (h > -7) allUnder = false;
             pos[p] = x; pos[p + 1] = h; pos[p + 2] = z;
             this.normalAt(x, z, nrm);
-            const c = this.colorFor(x, z, h, nrm.y, urbanTest(x, z));
+            const c = this.colorFor(x, z, h, nrm.y, this.urban ? this.urban[k] : 0, this.coast[k]);
             col[p] = c[0]; col[p + 1] = c[1]; col[p + 2] = c[2];
             p += 3;
           }
         }
         if (allUnder) continue;
-        const idx = [];
+        const idx = new Uint32Array((w - 1) * (hgt - 1) * 6);
+        let q = 0;
         for (let j = 0; j < hgt - 1; j++) {
           for (let i = 0; i < w - 1; i++) {
             const a = j * w + i, b = a + 1, c = a + w, d = c + 1;
-            // misma diagonal que heightAt: (i+1,j)-(i,j+1)
-            idx.push(a, c, b, b, c, d);
+            // el marco (A,B) invierte la orientación respecto de (X,Z)
+            idx[q++] = a; idx[q++] = b; idx[q++] = c;
+            idx[q++] = b; idx[q++] = d; idx[q++] = c;
           }
         }
         const geo = new THREE.BufferGeometry();
         geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
         geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-        geo.setIndex(idx);
+        geo.setIndex(new THREE.BufferAttribute(idx, 1));
         geo.computeVertexNormals();
         geo.computeBoundingSphere();
         const mesh = new THREE.Mesh(geo, mat);
@@ -325,45 +345,48 @@ export function buildWater(terrain) {
         #include <fog_fragment>
       }`,
   });
-  // Grilla cercana a la costa con profundidad por vértice
-  const step = 12;
-  const zs = [];
-  for (let z = WORLD.minZ - 200; z <= WORLD.maxZ + 200; z += step) zs.push(z);
-  const xMinFor = (z) => coastX(clamp(z, WORLD.minZ, WORLD.maxZ)) - 60;
-  const xMax = WORLD.maxX + 250;
-  const cols = Math.ceil((xMax - 200) / step) + 1;
-  const pos = [], depth = [], idx = [];
-  for (let j = 0; j < zs.length; j++) {
-    const z = zs[j];
-    const x0 = Math.min(xMinFor(z), 380);
-    for (let i = 0; i < cols; i++) {
-      const x = lerp(x0, xMax, i / (cols - 1));
-      pos.push(x, 0, z);
-      const g = terrain.heightAt(clamp(x, WORLD.minX, WORLD.maxX), clamp(z, WORLD.minZ, WORLD.maxZ));
-      depth.push(x > WORLD.maxX ? 16 : -g);
-    }
+  // Grilla (en el marco rotado) sobre las celdas de mar y la orilla
+  const step = 16;
+  const a0 = terrain.a0, a1 = terrain.a0 + (terrain.na - 1) * CELL;
+  const b0 = terrain.b0, b1 = terrain.b0 + (terrain.nb - 1) * CELL;
+  // hasta dónde llega el mar tierra adentro
+  let bMax = b0;
+  for (let j = 0; j < terrain.nb; j++) for (let i = 0; i < terrain.na; i += 4) if (terrain.h[j * terrain.na + i] < 0.5) bMax = Math.max(bMax, terrain.b0 + j * CELL);
+  const na = Math.ceil((a1 - a0) / step) + 1, nb = Math.ceil((Math.min(b1, bMax + 60) - b0) / step) + 1;
+  const pos = new Float32Array(na * nb * 3), depth = new Float32Array(na * nb);
+  const wet = new Uint8Array(na * nb);
+  for (let j = 0; j < nb; j++) for (let i = 0; i < na; i++) {
+    const a = a0 + i * step, b = b0 + j * step;
+    const [x, z] = fromAB(a, b);
+    const k = j * na + i;
+    pos[k * 3] = x; pos[k * 3 + 1] = 0; pos[k * 3 + 2] = z;
+    const g = terrain.heightAt(x, z);
+    depth[k] = -g;
+    wet[k] = g < 0.6 ? 1 : 0;
   }
-  for (let j = 0; j < zs.length - 1; j++) {
-    for (let i = 0; i < cols - 1; i++) {
-      const a = j * cols + i, b = a + 1, c = a + cols, d = c + 1;
-      idx.push(a, c, b, b, c, d);
-    }
+  const idx = [];
+  for (let j = 0; j < nb - 1; j++) for (let i = 0; i < na - 1; i++) {
+    const a = j * na + i, b = a + 1, c = a + na, d = c + 1;
+    if (!(wet[a] || wet[b] || wet[c] || wet[d])) continue;
+    idx.push(a, b, c, b, d, c);
   }
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  geo.setAttribute('depth', new THREE.Float32BufferAttribute(depth, 1));
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('depth', new THREE.BufferAttribute(depth, 1));
   geo.setIndex(idx);
   geo.computeBoundingSphere();
-  const near = new THREE.Mesh(geo, mat);
-  group.add(near);
+  group.add(new THREE.Mesh(geo, mat));
 
-  // Mar abierto hasta el horizonte
-  const farGeo = new THREE.PlaneGeometry(8000, 12000, 1, 1);
+  // Mar abierto hasta el horizonte (del lado del Golfo)
+  const farGeo = new THREE.PlaneGeometry(16000, 9000, 1, 1);
   farGeo.rotateX(-Math.PI / 2);
   const farDepth = new Float32Array(farGeo.attributes.position.count).fill(20);
   farGeo.setAttribute('depth', new THREE.BufferAttribute(farDepth, 1));
   const far = new THREE.Mesh(farGeo, mat);
-  far.position.set(xMax + 4000 - 2, -0.05, 0);
+  // alinear el plano con el marco y ponerlo mar adentro
+  const [cx, cz] = fromAB((a0 + a1) / 2, b0 - 4500 + 30);
+  far.position.set(cx, -0.25, cz);
+  far.rotation.y = -Math.atan2(F.uz, F.ux);
   group.add(far);
   group.userData.material = mat;
   return group;

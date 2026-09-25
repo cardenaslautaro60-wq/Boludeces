@@ -1,8 +1,7 @@
 import * as THREE from 'three';
 import { GeoBuilder, hexColor } from './geom.js';
-import { PUMP_AREAS, TURBINES, RAMPS, BAGS, FLATS, POI, DECKS } from './mapdata.js';
+import { MAP, LANDMARKS, BAGS, POI, FRAME, fromAB } from './mapdata.js';
 import { RNG, clamp } from '../util.js';
-import { coastX } from './terrain.js';
 import { foliageAtlas, treeGeometry, tuftAssets } from './foliage.js';
 
 const vcMat = () => new THREE.MeshLambertMaterial({ vertexColors: true });
@@ -46,7 +45,6 @@ export class Props {
     this.buildTrafficLight(terrain, colliders);
     this.buildBenches(city, terrain, colliders);
     this.buildOilTanks(terrain, colliders);
-    this.buildDecks(colliders);
     for (const o of this.group.children) if (o.isMesh && !o.userData.noShadow) o.castShadow = true;
     game.scene.add(this.group);
   }
@@ -54,19 +52,11 @@ export class Props {
   // ---- Cigüeñas (bombas de petróleo) ----
   buildPumpjacks(terrain, roads, city, colliders, rng) {
     const spots = [];
-    for (const a of PUMP_AREAS) {
-      let tries = 0, n = 0;
-      while (n < a.n && tries++ < a.n * 40) {
-        const x = rng.range(a.x0, a.x1), z = rng.range(a.z0, a.z1);
-        if (terrain.heightAt(x, z) < 2) continue;
-        if (x > coastX(z) - 40) continue;
-        if (city.blockAt(x, z)) continue;
-        const near = roads.nearestEdge(x, z, 30);
-        if (near && near.d < near.edge.width / 2 + 5) continue;
-        if (spots.some((s) => Math.hypot(s[0] - x, s[1] - z) < 24)) continue;
-        spots.push([x, z, rng.range(0, Math.PI * 2)]);
-        n++;
-      }
+    for (const [x, z] of this.points(0)) {
+      if (terrain.heightAt(x, z) < 2 || terrain.seaDist(x, z) < 40) continue;
+      if (roads.clearance(x, z, 12) < 5) continue;
+      if (!city.isFree({ cx: x, cz: z, ax: 1, az: 0, hw: 5, hd: 5 })) continue;
+      spots.push([x, z, rng.range(0, Math.PI * 2)]);
     }
     // piezas
     const base = new GeoBuilder();
@@ -117,11 +107,13 @@ export class Props {
     this.pumpSpots = spots;
   }
 
-  updatePumps(t) {
+  updatePumps(t, cam) {
     const q2 = new THREE.Quaternion();
     const off = new THREE.Vector3();
     for (let i = 0; i < this.pumps.length; i++) {
       const p = this.pumps[i];
+      if (cam && Math.abs(p.x - cam.x) + Math.abs(p.z - cam.z) > 700 && p.init) continue;
+      p.init = true;
       const a = t * p.speed + p.phase;
       const tilt = Math.sin(a) * 0.32;
       tmpE.set(0, p.rot, 0);
@@ -173,6 +165,7 @@ export class Props {
       }
     }
     const mat = vcMat();
+    const TURBINES = this.points(1);
     this.turbTower = instanced(tower.toGeometry(), mat, TURBINES.length);
     this.turbRotor = instanced(rotor.toGeometry(), mat, TURBINES.length);
     TURBINES.forEach(([x, z], i) => {
@@ -207,7 +200,19 @@ export class Props {
   buildAntennas(terrain, colliders) {
     const gb = new GeoBuilder();
     const red = hexColor(0xc83020), white = hexColor(0xeeeeee);
-    const spots = [[185, -385, 60], [205, -345, 48], [150, -420, 42], [120, -350, 36]];
+    const ch = LANDMARKS.chenque || { x: -190, z: -406 };
+    const spots = this.points(2).map(([x, z], i) => {
+      const nearCh = Math.hypot(x - ch.x, z - ch.z) < 450;
+      return [x, z, nearCh ? 36 + ((i * 17) % 28) : 18 + ((i * 7) % 12)];
+    }).filter(([x, z]) => terrain.heightAt(x, z) > 1 && this.game.roads.clearance(x, z, 8) > 2);
+    // las antenas de radio y TV en la cima del Chenque
+    if (POI.antenas) {
+      const A = POI.antenas;
+      [[0, 0, 62], [22, 14, 48], [-18, 20, 42], [10, -24, 38]].forEach(([dx, dz, H]) => {
+        if (this.game.roads.clearance(A.x + dx, A.z + dz, 10) > 3) spots.push([A.x + dx, A.z + dz, H]);
+      });
+    }
+    this.antennaSpots = spots;
     for (const [x, z, H] of spots) {
       const y = terrain.heightAt(x, z);
       const s = 0.9;
@@ -235,19 +240,18 @@ export class Props {
   // ---- Luminarias ----
   buildLamps(terrain, roads, city, colliders, T) {
     const spots = [...city.lampSpots];
+    // rutas fuera de la ciudad: faroles cada tanto
     for (const e of roads.edges) {
-      if (e.kind !== 'ruta' && e.kind !== 'avenida' && e.kind !== 'muelle') continue;
-      if (city.blocks.length && e.kind === 'avenida' && e.name === 'Centro') continue;
+      if (e.kind !== 'ruta' || e.sw || e.len < 30) continue;
       const A = roads.nodes[e.a];
-      const n = Math.floor(e.len / 45);
+      const n = Math.floor(e.len / 60);
       for (let k = 1; k <= n; k++) {
         const t = k / (n + 1);
-        const x = A.x + e.dx * e.len * t, z = A.z + e.dz * e.len * t;
         const side = k % 2 ? 1 : -1;
         const off = e.width / 2 + 1;
-        const px = x - e.dz * off * side, pz = z + e.dx * off * side;
-        if (terrain.groundAt(px, pz) < 0.5 && e.kind !== 'muelle') continue;
-        spots.push([px, pz, e.dx, e.dz, side]);
+        const px = A.x + e.dx * e.len * t - e.dz * off * side, pz = A.z + e.dz * e.len * t + e.dx * off * side;
+        if (terrain.groundAt(px, pz) < 0.5) continue;
+        spots.push([px, pz, Math.atan2(e.dz * side, -e.dx * side)]);
       }
     }
     const pole = new GeoBuilder();
@@ -261,10 +265,8 @@ export class Props {
     spots.forEach((s, i) => {
       const [x, z] = s;
       const y = terrain.groundAt(x, z) + (city.curbAt(x, z) || 0);
-      let rot = 0;
-      if (s.length > 2) rot = Math.atan2(s[4] * s[3], -s[4] * s[2]);
-      else {
-        // apuntar hacia la calle más cercana
+      let rot = s[2] || 0;
+      if (s.length < 3) {
         const near = roads.nearestEdge(x, z, 20);
         if (near) rot = Math.atan2(near.x - x, near.z - z);
       }
@@ -292,39 +294,32 @@ export class Props {
   // ---- Árboles (álamos y pinos) ----
   buildTrees(terrain, roads, city, colliders, rng) {
     const spots = city.treeSpots.map((s) => [...s]);
-    // cortinas de álamos (rompevientos)
-    const rows = [
-      [-770, 180, -770, 490, 'alamo'], [-780, -80, -780, 170, 'alamo'], [60, -900, 60, -620, 'alamo'],
-      [-460, 520, -80, 520, 'alamo'], [0, 1085, 280, 1085, 'pino'], [0, 1090, 0, 1440, 'pino'],
-      [-300, 1000, -60, 1080, 'pino'], [-20, -140, -20, -40, 'alamo'],
-    ];
-    for (const [x0, z0, x1, z1, kind] of rows) {
-      const L = Math.hypot(x1 - x0, z1 - z0);
-      const n = Math.floor(L / 6);
-      for (let k = 0; k <= n; k++) {
-        const t = k / n;
-        const x = x0 + (x1 - x0) * t + rng.range(-1, 1), z = z0 + (z1 - z0) * t + rng.range(-1, 1);
-        const near = roads.nearestEdge(x, z, 12);
-        if (near && near.d < near.edge.width / 2 + 1.5) continue;
-        if (city.blockAt(x, z)) continue;
-        spots.push([x, z, kind]);
+    // Cordón Forestal del Chenque: pinos en las laderas
+    const ch = LANDMARKS.chenque || LANDMARKS.miradorChenque;
+    if (ch) {
+      for (let i = 0; i < 260; i++) {
+        const a = rng.range(0, Math.PI * 2), r = rng.range(60, 380);
+        const x = ch.x + Math.cos(a) * r, z = ch.z + Math.sin(a) * r;
+        const h = terrain.heightAt(x, z);
+        if (h < 8) continue;
+        if (roads.clearance(x, z, 10) < 3) continue;
+        if (!city.isFree({ cx: x, cz: z, ax: 1, az: 0, hw: 1, hd: 1 })) continue;
+        spots.push([x, z, 'pino']);
       }
     }
-    // pinos en el Cordón Forestal del Chenque
-    for (let i = 0; i < 90; i++) {
-      const x = rng.range(-60, 60), z = rng.range(-560, -160);
-      const near = roads.nearestEdge(x, z, 12);
-      if (near && near.d < near.edge.width / 2 + 2) continue;
-      if (city.blockAt(x, z)) continue;
-      spots.push([x, z, 'pino']);
-    }
-    // árboles en veredas de Rada Tilly y barrios
-    for (const b of city.blocks) {
-      if (b.type !== 'rada' && !(b.type === 'barrio' && rng.chance(0.25))) continue;
-      for (let k = 0; k < 4; k++) {
-        const side = rng.int(0, 3);
-        const [x, z] = city.sidewalkPoint(b, rng.range(0.1, 0.9), side);
-        spots.push([x, z, b.type === 'rada' ? 'pino' : 'alamo']);
+    // cortinas de álamos (rompevientos) junto a chacras y canchas de las afueras
+    for (const ar of this.game.zones.areas) {
+      if (ar.kind !== 'cancha' && ar.kind !== 'escuela') continue;
+      const P = ar.pts;
+      for (let i = 0; i < P.length; i += 2) {
+        const j = (i + 2) % P.length;
+        const L = Math.hypot(P[j] - P[i], P[j + 1] - P[i + 1]);
+        if (L < 25 || !rng.chance(0.5)) continue;
+        for (let d = 3; d < L - 3; d += 6) {
+          const x = P[i] + ((P[j] - P[i]) * d) / L, z = P[i + 1] + ((P[j + 1] - P[i + 1]) * d) / L;
+          if (roads.clearance(x, z, 8) < 2.5) continue;
+          spots.push([x, z, 'alamo']);
+        }
       }
     }
     const trunk = new GeoBuilder();
@@ -368,14 +363,13 @@ export class Props {
     const colors = [0x6b6a3a, 0x7a7440, 0x8a8150, 0x5e6438, 0x9a8c5a, 0x707a4a];
     const c = new THREE.Color();
     let i = 0, tries = 0;
-    const urban = (x, z) => FLATS.some((f) => x > f.x0 && x < f.x1 && z > f.z0 && z < f.z1);
+    const urban = (x, z) => { const [fi, fj] = terrain.cellOf(x, z); const k = Math.round(fj) * terrain.na + Math.round(fi); return terrain.urban && terrain.urban[k]; };
     while (i < N && tries++ < N * 6) {
-      const x = rng.range(-1480, 700), z = rng.range(-1780, 1730);
+      const [x, z] = fromAB(rng.range(FRAME.a0, FRAME.a1), rng.range(FRAME.b0, FRAME.b1));
       const h = terrain.heightAt(x, z);
       if (h < 2.5) continue;
-      if (x > coastX(z) - 30) continue;
-      if (urban(x, z) && rng.chance(0.85)) continue;
-      if (city.blockAt(x, z)) continue;
+      if (terrain.seaDist(x, z) < 30) continue;
+      if (urban(x, z) && rng.chance(0.9)) continue;
       const near = roads.nearestEdge(x, z, 10);
       if (near && near.d < near.edge.width / 2 + 1.5) continue;
       const s = rng.range(0.4, 1.05);
@@ -424,23 +418,27 @@ export class Props {
         colliders.addBox(x - hx, x + hx, z - hz, z + hz, y0, y1 + 3, 'barco');
       }
     };
-    // pesqueros amarillos y rojos (la flota de Caleta y el puerto)
-    boat(640, 500, 22, 6, 0xd8a824, 0xf2f2f2);
-    boat(670, 461, 20, 6, 0xb02820, 0xf2f2f2);
-    boat(620, 461, 18, 5.5, 0x2d6fa8, 0xf2f2f2);
-    boat(560, -1690, 14, 4.5, 0xd8a824, 0xf2f2f2);
-    boat(540, -1660, 12, 4, 0xb02820, 0xf2f2f2);
-    // buque tanquero en el muelle de ultramar
-    {
-      const x = 650, z = 368, L = 110, W = 16;
-      gb.box(x - L / 2, x + L / 2, -3, 5, z - W / 2, z + W / 2, hexColor(0x2a2a2e));
-      gb.box(x - L / 2, x + L / 2, 5, 5.3, z - W / 2, z + W / 2, hexColor(0x8a2a20));
-      gb.box(x - L / 2 + 4, x - L / 2 + 20, 5.3, 16, z - W / 2 + 1, z + W / 2 - 1, hexColor(0xf2f2f2));
-      gb.box(x - L / 2 + 10, x - L / 2 + 13, 16, 22, z - 1.5, z + 1.5, hexColor(0xd83020));
-      for (let k = 0; k < 5; k++) gb.box(x - 20 + k * 14, x - 14 + k * 14, 5.3, 6.5, z - 3, z + 3, hexColor(0x6a7a6a));
-      colliders.addBox(x - L / 2, x + L / 2, z - W / 2, z + W / 2, -3, 22, 'buque');
-      this.addSignTo(gb);
-    }
+    // pesqueros amarillos y rojos amarrados a los muelles reales
+    const hulls = [[0xd8a824, 0xf2f2f2], [0xb02820, 0xf2f2f2], [0x2d6fa8, 0xf2f2f2]];
+    const DK = this.game.decks || [];
+    DK.forEach((d, k) => {
+      if (d.hw < 20) return;
+      for (const side of [-1, 1]) {
+        const off = d.hd + 3.5;
+        const cx = d.cx - d.az * off * side, cz = d.cz + d.ax * off * side;
+        if (terrain.heightAt(cx, cz) > -1.5) continue;
+        const [hull, cab] = hulls[(k + side + 3) % 3];
+        gb.setFrame(cx, cz, d.ax, d.az);
+        const L = Math.min(22, d.hw * 1.2), W = 6;
+        gb.box(-L / 2, L / 2 - 2, -1.4, 1.4, -W / 2, W / 2, hexColor(hull));
+        gb.box(L / 2 - 2, L / 2, -0.6, 1.4, -W * 0.3, W * 0.3, hexColor(hull));
+        gb.box(-L / 2, L / 2, 1.2, 1.4, -W / 2, W / 2, hexColor(0x8a6a4a));
+        gb.box(-L * 0.15, L * 0.1, 1.4, 3.8, -W * 0.35, W * 0.35, hexColor(cab));
+        gb.box(-L * 0.05, 0, 3.8, 6.4, -0.1, 0.1, hexColor(0x333333));
+        gb.clearFrame();
+        colliders.addOBB(cx, cz, d.ax, d.az, L / 2, W / 2, -1.4, 4.4, 'barco');
+      }
+    });
     const m = new THREE.Mesh(gb.toGeometry(), vcMat());
     m.matrixAutoUpdate = false;
     this.group.add(m);
@@ -513,8 +511,9 @@ export class Props {
     this.loboData = [];
     const rng = new RNG(99);
     let i = 0, tries = 0;
-    while (i < n && tries++ < 500) {
-      const x = rng.range(560, 660), z = rng.range(1560, 1690);
+    const L0 = POI.loberia || { x: 0, z: 0 };
+    while (i < n && tries++ < 800) {
+      const x = L0.x + rng.range(-70, 70), z = L0.z + rng.range(-70, 70);
       const h = terrain.heightAt(x, z);
       if (h < 0.2 || h > 2.5) continue;
       this.loboData.push({ x, z, y: h + 0.3, rot: rng.range(0, 6.28), ph: rng.range(0, 6) });
@@ -537,9 +536,12 @@ export class Props {
 
   // Semáforo de San Martín y Rivadavia (el del malabarista)
   buildTrafficLight(terrain, colliders) {
+    if (!POI.semaforo) return;
     const { x, z } = POI.semaforo;
     const gb = new GeoBuilder();
-    const corners = [[x - 7.3, z - 7.3], [x + 7.3, z + 7.3]];
+    const off = (POI.semaforo.w || 10) / 2 + 1.4;
+    const d = POI.semaforo.dir || [1, 0];
+    const corners = [[x + (d[0] - d[1]) * off, z + (d[1] + d[0]) * off], [x - (d[0] - d[1]) * off, z - (d[1] + d[0]) * off]];
     this.trafficLights = [];
     for (const [px, pz] of corners) {
       const y = terrain.heightAt(px, pz) + 0.22;
@@ -591,11 +593,10 @@ export class Props {
   // Tanques de YPZ en Km 3 y en el yacimiento
   buildOilTanks(terrain, colliders) {
     const gb = new GeoBuilder();
-    const tanks = [
-      [-60, -850, 11, 12], [-30, -850, 11, 12], [-60, -820, 9, 10], [-30, -822, 9, 10], [-95, -840, 8, 9],
-      [-1120, -880, 6, 7], [-1105, -880, 6, 7], [-1230, 640, 6, 7], [-1260, 1060, 5, 6], [5, -700, 4, 8],
-    ];
+    const tanks = this.points(3).map(([x, z], i) => [x, z, 5 + (i % 4) * 1.5, 7 + (i % 3) * 2]);
     for (const [x, z, r, h] of tanks) {
+      if (terrain.heightAt(x, z) < 1 || !this.game.city.isFree({ cx: x, cz: z, ax: 1, az: 0, hw: r, hd: r })) continue;
+      this.game.city.reserve({ cx: x, cz: z, ax: 1, az: 0, hw: r, hd: r });
       const y = terrain.heightAt(x, z) - 0.3;
       gb.cylinder(x, z, r, y, y + h, hexColor(0xe8e6e0), 16, true);
       gb.cylinder(x, z, r + 0.05, y + h * 0.45, y + h * 0.55, hexColor(0x1b4fa0), 16, false);
@@ -606,32 +607,15 @@ export class Props {
     this.group.add(m);
   }
 
-  // Muelles: tablero de hormigón con pilotes
-  buildDecks(colliders) {
-    const gb = new GeoBuilder();
-    for (const d of DECKS) {
-      gb.box(d.x0, d.x1, d.h - 0.7, d.h - 0.02, d.z0, d.z1, hexColor(0x9a968c), 4, 3);
-      for (let x = d.x0 + 3; x < d.x1; x += 9) {
-        for (const z of [d.z0 + 1, d.z1 - 1]) {
-          gb.box(x - 0.35, x + 0.35, -8, d.h - 0.7, z - 0.35, z + 0.35, hexColor(0x6a665e));
-          colliders.addCircle(x, z, 0.4, -8, d.h - 0.75, 'pilote');
-        }
-      }
-      // bolardos y baranda
-      for (let x = d.x0 + 4; x < d.x1; x += 12) {
-        gb.box(x - 0.25, x + 0.25, d.h, d.h + 0.5, d.z0 + 0.3, d.z0 + 0.8, hexColor(0x333333));
-        gb.box(x - 0.25, x + 0.25, d.h, d.h + 0.5, d.z1 - 0.8, d.z1 - 0.3, hexColor(0x333333));
-        colliders.addCircle(x, d.z0 + 0.55, 0.3, d.h - 0.1, d.h + 0.5, 'bolardo');
-        colliders.addCircle(x, d.z1 - 0.55, 0.3, d.h - 0.1, d.h + 0.5, 'bolardo');
-      }
-    }
-    const m = new THREE.Mesh(gb.toGeometry(), vcMat());
-    m.matrixAutoUpdate = false;
-    this.group.add(m);
+  // Puntos reales del mapa: 0 pozos, 1 molinos, 2 antenas, 3 tanques
+  points(kind) {
+    const P = MAP.points, out = [];
+    for (let i = 0; i < P.length; i += 3) if (P[i] === kind) out.push([P[i + 1] / 2, P[i + 2] / 2]);
+    return out;
   }
 
-  update(t, dt, env) {
-    this.updatePumps(t);
+  update(t, dt, env, cam) {
+    this.updatePumps(t, cam);
     this.updateTurbines(t, env.windSpeed);
     this.updateLobos(t);
     if (this.lampGlow) this.lampGlow.material.opacity = clamp(env.night * 1.2, 0, 0.9);

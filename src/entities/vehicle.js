@@ -278,12 +278,7 @@ export class Vehicle {
     }
     // límites del mundo
     const W = g.worldBounds;
-    if (W) {
-      if (this.pos.x < W.minX + 5) { this.pos.x = W.minX + 5; this.vx = Math.abs(this.vx) * 0.3; }
-      if (this.pos.x > W.maxX - 5) { this.pos.x = W.maxX - 5; this.vx = -Math.abs(this.vx) * 0.3; }
-      if (this.pos.z < W.minZ + 5) { this.pos.z = W.minZ + 5; this.vz = Math.abs(this.vz) * 0.3; }
-      if (this.pos.z > W.maxZ - 5) { this.pos.z = W.maxZ - 5; this.vz = -Math.abs(this.vz) * 0.3; }
-    }
+    if (W && W.clamp(this.pos, 5)) { this.vx *= -0.3; this.vz *= -0.3; }
 
     // fuego y explosión
     if (this.fireT > 0 && !this.dead) {

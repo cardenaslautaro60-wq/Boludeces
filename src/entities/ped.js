@@ -308,10 +308,7 @@ export class Ped {
     // colisiones
     g.colliders.resolveCircle(this.pos, 0.33, this.pos.y);
     const B = g.worldBounds;
-    if (B) {
-      this.pos.x = clamp(this.pos.x, B.minX + 3, B.maxX - 3);
-      this.pos.z = clamp(this.pos.z, B.minZ + 3, B.maxZ - 3);
-    }
+    if (B) B.clamp(this.pos, 3);
   }
 
   remove() {

@@ -3,19 +3,53 @@ import * as THREE from 'three';
 // Acumulador de geometría: agrega cajas, prismas, etc. con color por vértice y UV en metros.
 export class GeoBuilder {
   constructor() {
-    this.pos = [];
-    this.nrm = [];
-    this.uv = [];
-    this.col = [];
+    this.cap = 1024;
+    this.n = 0;
+    this.pos = new Float32Array(this.cap * 3);
+    this.nrm = new Float32Array(this.cap * 3);
+    this.uv = new Float32Array(this.cap * 2);
+    this.col = new Float32Array(this.cap * 3);
+    this.xf = null;
   }
 
-  get count() { return this.pos.length / 3; }
+  get count() { return this.n; }
+
+  grow(need) {
+    if (this.n + need <= this.cap) return;
+    let cap = this.cap;
+    while (cap < this.n + need) cap *= 2;
+    const g = (a, k) => { const b = new Float32Array(cap * k); b.set(a); return b; };
+    this.pos = g(this.pos, 3); this.nrm = g(this.nrm, 3); this.uv = g(this.uv, 2); this.col = g(this.col, 3);
+    this.cap = cap;
+  }
+
+  // Marco local rotado: x local = eje (ax, az), z local = (-az, ax), origen (cx, cz)
+  setFrame(cx, cz, ax, az, cy = 0) { this.xf = { cx, cz, ax, az, cy }; return this; }
+  clearFrame() { this.xf = null; return this; }
+
+  vert(p, n, uv, color) {
+    const i = this.n++;
+    const f = this.xf;
+    if (f) {
+      this.pos[i * 3] = f.cx + p[0] * f.ax - p[2] * f.az;
+      this.pos[i * 3 + 1] = p[1] + f.cy;
+      this.pos[i * 3 + 2] = f.cz + p[0] * f.az + p[2] * f.ax;
+      this.nrm[i * 3] = n[0] * f.ax - n[2] * f.az;
+      this.nrm[i * 3 + 1] = n[1];
+      this.nrm[i * 3 + 2] = n[0] * f.az + n[2] * f.ax;
+    } else {
+      this.pos[i * 3] = p[0]; this.pos[i * 3 + 1] = p[1]; this.pos[i * 3 + 2] = p[2];
+      this.nrm[i * 3] = n[0]; this.nrm[i * 3 + 1] = n[1]; this.nrm[i * 3 + 2] = n[2];
+    }
+    this.uv[i * 2] = uv[0]; this.uv[i * 2 + 1] = uv[1];
+    this.col[i * 3] = color[0]; this.col[i * 3 + 1] = color[1]; this.col[i * 3 + 2] = color[2];
+  }
 
   tri(a, b, c, n, ua, ub, uc, color) {
-    this.pos.push(...a, ...b, ...c);
-    this.nrm.push(...n, ...n, ...n);
-    this.uv.push(...ua, ...ub, ...uc);
-    this.col.push(...color, ...color, ...color);
+    this.grow(3);
+    this.vert(a, n, ua, color);
+    this.vert(b, n, ub, color);
+    this.vert(c, n, uc, color);
   }
 
   // Cuadrilátero con normal calculada. p0..p3 en orden antihorario visto de frente.
@@ -93,10 +127,11 @@ export class GeoBuilder {
 
   toGeometry() {
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
-    g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nrm, 3));
-    g.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv, 2));
-    g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
+    const n = this.n;
+    g.setAttribute('position', new THREE.BufferAttribute(this.pos.slice(0, n * 3), 3));
+    g.setAttribute('normal', new THREE.BufferAttribute(this.nrm.slice(0, n * 3), 3));
+    g.setAttribute('uv', new THREE.BufferAttribute(this.uv.slice(0, n * 2), 2));
+    g.setAttribute('color', new THREE.BufferAttribute(this.col.slice(0, n * 3), 3));
     g.computeBoundingSphere();
     return g;
   }
@@ -121,6 +156,75 @@ export class ChunkedGeo {
       m.matrixAutoUpdate = false;
       m.castShadow = true;
       m.receiveShadow = true;
+      parent.add(m);
+    }
+  }
+}
+
+// Geometría liviana para el piso (calles, veredas): posición, UV y normal en 8 bits
+export class LeanBuilder {
+  constructor() {
+    this.cap = 1024; this.n = 0;
+    this.pos = new Float32Array(this.cap * 3);
+    this.uv = new Float32Array(this.cap * 2);
+    this.nrm = new Int8Array(this.cap * 3);
+  }
+  get count() { return this.n; }
+  grow(need) {
+    if (this.n + need <= this.cap) return;
+    let cap = this.cap;
+    while (cap < this.n + need) cap *= 2;
+    const p = new Float32Array(cap * 3); p.set(this.pos); this.pos = p;
+    const u = new Float32Array(cap * 2); u.set(this.uv); this.uv = u;
+    const q = new Int8Array(cap * 3); q.set(this.nrm); this.nrm = q;
+    this.cap = cap;
+  }
+  // triángulo con normal calculada (a, b, c en orden antihorario visto desde arriba/afuera)
+  tri(ax, ay, az, au, av, bx, by, bz, bu, bv, cx, cy, cz, cu, cv) {
+    this.grow(3);
+    const ux = bx - ax, uy = by - ay, uz = bz - az, vx = cx - ax, vy = cy - ay, vz = cz - az;
+    let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const L = Math.hypot(nx, ny, nz) || 1;
+    nx = Math.round((nx / L) * 127); ny = Math.round((ny / L) * 127); nz = Math.round((nz / L) * 127);
+    let i = this.n;
+    const P = this.pos, U = this.uv, N = this.nrm;
+    P[i * 3] = ax; P[i * 3 + 1] = ay; P[i * 3 + 2] = az; U[i * 2] = au; U[i * 2 + 1] = av; N[i * 3] = nx; N[i * 3 + 1] = ny; N[i * 3 + 2] = nz; i++;
+    P[i * 3] = bx; P[i * 3 + 1] = by; P[i * 3 + 2] = bz; U[i * 2] = bu; U[i * 2 + 1] = bv; N[i * 3] = nx; N[i * 3 + 1] = ny; N[i * 3 + 2] = nz; i++;
+    P[i * 3] = cx; P[i * 3 + 1] = cy; P[i * 3 + 2] = cz; U[i * 2] = cu; U[i * 2 + 1] = cv; N[i * 3] = nx; N[i * 3 + 1] = ny; N[i * 3 + 2] = nz; i++;
+    this.n = i;
+  }
+  // quad p0..p3 (cada uno [x,y,z,u,v]) en orden antihorario visto desde arriba
+  quad(p0, p1, p2, p3) {
+    this.tri(...p0, ...p1, ...p2);
+    this.tri(...p0, ...p2, ...p3);
+  }
+  toGeometry() {
+    const g = new THREE.BufferGeometry();
+    const n = this.n;
+    g.setAttribute('position', new THREE.BufferAttribute(this.pos.slice(0, n * 3), 3));
+    g.setAttribute('uv', new THREE.BufferAttribute(this.uv.slice(0, n * 2), 2));
+    g.setAttribute('normal', new THREE.BufferAttribute(this.nrm.slice(0, n * 3), 3, true));
+    g.computeBoundingSphere();
+    return g;
+  }
+}
+
+// Agrupa geometría liviana por sector y material
+export class LeanChunks {
+  constructor(size = 400) { this.size = size; this.map = new Map(); }
+  get(x, z, mat) {
+    const k = `${Math.floor(x / this.size)},${Math.floor(z / this.size)},${mat}`;
+    let b = this.map.get(k);
+    if (!b) { b = { mat, lb: new LeanBuilder() }; this.map.set(k, b); }
+    return b.lb;
+  }
+  build(materials, parent, opts = {}) {
+    for (const { mat, lb } of this.map.values()) {
+      if (!lb.count) continue;
+      const m = new THREE.Mesh(lb.toGeometry(), materials[mat]);
+      m.matrixAutoUpdate = false;
+      m.receiveShadow = true;
+      if (opts.order && opts.order[mat] !== undefined) m.renderOrder = opts.order[mat];
       parent.add(m);
     }
   }

@@ -75,25 +75,13 @@ export class Activities {
     add('pizza', M.pizzeria, 0xffa020, () => this.foodMenu('Pizzería La Tuerca'));
     add('armeria', M.armeria, 0xff4040, () => this.gunShop());
     add('gym', M.gimnasio, 0xc060ff, () => this.gym());
-    add('malabares', { x: POI.semaforo.x - 8.2, z: POI.semaforo.z - 8.2 }, 0xffe040, () => this.juggling(), { r: 1.1 });
+    if (POI.semaforo) add('malabares', POI.semaforo.corner || POI.semaforo, 0xffe040, () => this.juggling(), { r: 1.1 });
     // chapa y pintura: marcador sin flecha adentro del galpón
     if (M.chapa) {
-      this.chapaRect = M.chapa.rect;
-      const m = add('chapa', { x: M.chapa.x, z: M.chapa.z - 2 }, 0x3080ff, () => {}, { r: 3.2, h: 0.4, arrow: false, onFoot: false });
+      this.chapaBox = M.chapa.obb;
+      const m = add('chapa', { x: M.chapa.x, z: M.chapa.z }, 0x3080ff, () => {}, { r: 3.2, h: 0.4, arrow: false, onFoot: false });
       m.passive = true;
     }
-    // kiosco del chori (decorado)
-    const gb = new THREE.Group();
-    const y = g.world.footGround(POI.chori.x + 4, POI.chori.z);
-    const box = new THREE.Mesh(new THREE.BoxGeometry(3, 2.4, 4), new THREE.MeshLambertMaterial({ color: 0xd8c8a0 }));
-    box.position.set(POI.chori.x + 4.5, y + 1.2, POI.chori.z);
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.2, 4.6), new THREE.MeshLambertMaterial({ color: 0xc02020 }));
-    roof.position.set(POI.chori.x + 4.5, y + 2.5, POI.chori.z);
-    gb.add(box, roof);
-    g.scene.add(gb);
-    g.colliders.addBox(POI.chori.x + 3, POI.chori.x + 6, POI.chori.z - 2, POI.chori.z + 2, y - 1, y + 2.6, 'kiosco');
-    g.city.addSign(['EL CHORI DEL VIENTO'], POI.chori.x + 2.95, y + 2.1, POI.chori.z, 3.8, 0.55, -Math.PI / 2, { bg: '#c02020', fg: '#fff3c0' });
-    g.scene.add(g.city.signs[g.city.signs.length - 1]);
   }
 
   setupBlips() {
@@ -106,7 +94,7 @@ export class Activities {
     if (M.armeria) B(M.armeria.x, M.armeria.z, 'A', '#b02020', 'Armería');
     if (M.gimnasio) B(M.gimnasio.x, M.gimnasio.z, 'G', '#7a3ab0', 'Gimnasio');
     if (M.chapa) B(M.chapa.x, M.chapa.z, 'CP', '#2a5ab0', 'Chapa y Pintura');
-    B(POI.semaforo.x, POI.semaforo.z, 'M', '#c8a010', 'Malabares en el semáforo');
+    if (POI.semaforo) B(POI.semaforo.x, POI.semaforo.z, 'M', '#c8a010', 'Malabares en el semáforo');
     if (M.hospital) B(M.hospital.x, M.hospital.z, 'H', '#e8e8e8', 'Hospital');
     if (M.comisaria) B(M.comisaria.x, M.comisaria.z, '★', '#1d3f8f', 'Comisaría');
     if (M.remiseria) B(M.remiseria.x, M.remiseria.z, 'R', '#1a6b2a', 'Remisería (subite a un remís y activá el trabajo)');
@@ -233,10 +221,11 @@ export class Activities {
   checkChapa(dt) {
     const g = this.game;
     const p = g.player;
-    const r = this.chapaRect;
-    if (!r || !p.vehicle || p.vehicle.driver !== p || this.spraying) return;
+    const o = this.chapaBox;
+    if (!o || !p.vehicle || p.vehicle.driver !== p || this.spraying) return;
     const v = p.vehicle;
-    const inside = v.pos.x > r[0] && v.pos.x < r[1] && v.pos.z > r[2] && v.pos.z < r[3];
+    const dx = v.pos.x - o.cx, dz = v.pos.z - o.cz;
+    const inside = Math.abs(dx * o.ax + dz * o.az) < o.hw && Math.abs(-dx * o.az + dz * o.ax) < o.hd;
     if (!inside) { this.chapaDone = false; return; }
     if (this.chapaDone || v.speed > 2) return;
     this.chapaDone = true;
@@ -324,10 +313,9 @@ export class Activities {
     const g = this.game;
     const r = this.remis;
     const pp = g.player.vehicle.pos;
-    const near = g.city.blocks.filter((b) => { const d = dist((b.x0 + b.x1) / 2, (b.z0 + b.z1) / 2, pp.x, pp.z); return d > 60 && d < 260 && !b.special; });
-    if (!near.length) { this.stopRemis('No hay pasajeros por acá.'); return; }
-    const b = pick(near);
-    const [x, z] = g.city.sidewalkPoint(b, rand(0.2, 0.8), Math.floor(rand(0, 4)));
+    const sw = g.city.randomSidewalk(pp.x, pp.z, 60, 260);
+    if (!sw) { this.stopRemis('No hay pasajeros por acá.'); return; }
+    const { x, z } = sw;
     const pax = g.spawnPed('civil', x, z, { look: randomLook('civil') });
     pax.persistent = true;
     pax.brain = new Brain(g, pax, 'idle');
@@ -357,9 +345,9 @@ export class Activities {
         r.pax.enterVehicle(v, seat);
         r.pax.blip = null;
         // destino
-        const blocks = g.city.blocks.filter((b) => { const dd = dist((b.x0 + b.x1) / 2, (b.z0 + b.z1) / 2, v.pos.x, v.pos.z); return dd > 200 && dd < 700; });
-        const b = pick(blocks.length ? blocks : g.city.blocks);
-        const [x, z] = g.city.sidewalkPoint(b, 0.5, Math.floor(rand(0, 4)));
+        const sw = g.city.randomSidewalk(v.pos.x, v.pos.z, 200, 700) || g.city.randomSidewalk(v.pos.x, v.pos.z, 80, 300);
+        if (!sw) { this.stopRemis('El pasajero se bajó: no sabe a dónde va.'); return; }
+        const { x, z } = sw;
         r.dest = { x, z, zone: g.world.zoneAt(x, z) };
         r.marker = new (Marker)(g, x, z, 0xffd21a, { r: 3, h: 1.2 });
         r.destBlip = { x, z, color: '#ffd21a', size: 8, edge: true };

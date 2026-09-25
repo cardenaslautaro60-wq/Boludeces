@@ -1,7 +1,7 @@
 import { rand, pick, chance, dist } from '../util.js';
 import { Brain } from './ai.js';
 import { randomLook } from '../entities/humanoid.js';
-import { POI } from '../world/mapdata.js';
+import { POI, META } from '../world/mapdata.js';
 
 // Peatones y pandillas alrededor del jugador
 export class Population {
@@ -12,12 +12,16 @@ export class Population {
     this.enabled = true;
     this.density = 1;
     // territorios de pandillas
+    const place = (name) => META.places.find((q) => q.name === name);
+    const caleta = place('Caleta Córdova') || POI.depositoCrudo || { x: 0, z: 0 };
+    const at = (o, fb) => (o ? { x: o.x, z: o.z } : fb);
+    const mans = at(POI.mansionChetos, { x: 0, z: 0 });
     this.turfs = [
-      { kind: 'cheto', x: POI.mansionChetos.x, z: POI.mansionChetos.z - 20, r: 140, n: 6, weapon: ['bate', 'pistola'], hostile: true },
-      { kind: 'caleta', x: 210, z: -1310, r: 150, n: 6, weapon: ['bate', 'pistola'], hostile: true },
-      { kind: 'lobo', x: -200, z: 150, r: 170, n: 5, weapon: ['bate'], hostile: false },
-      { kind: 'petrolero', x: 200, z: -760, r: 200, n: 4, weapon: [], hostile: false },
-      { kind: 'petrolero', x: -1150, z: -880, r: 160, n: 5, weapon: [], hostile: false },
+      { kind: 'cheto', x: mans.x, z: mans.z, r: 140, n: 6, weapon: ['bate', 'pistola'], hostile: true },
+      { kind: 'caleta', ...at(caleta, mans), r: 170, n: 6, weapon: ['bate', 'pistola'], hostile: true },
+      { kind: 'lobo', ...at(POI.madriguera, mans), r: 170, n: 5, weapon: ['bate'], hostile: false },
+      { kind: 'petrolero', ...at(POI.museo, mans), r: 200, n: 4, weapon: [], hostile: false },
+      { kind: 'petrolero', ...at(POI.yacimiento, mans), r: 160, n: 5, weapon: [], hostile: false },
     ];
   }
 
@@ -48,30 +52,22 @@ export class Population {
 
   spawnCivilian(pp) {
     const g = this.game;
-    const blocks = g.city.blocks;
-    // manzanas cercanas
-    const near = [];
-    for (const b of blocks) {
-      const cx = (b.x0 + b.x1) / 2, cz = (b.z0 + b.z1) / 2;
-      const d = dist(cx, cz, pp.x, pp.z);
-      if (d > 30 && d < 110) near.push(b);
-    }
-    if (!near.length) return;
-    const b = pick(near);
-    const side = Math.floor(rand(0, 4));
-    const [x, z] = g.city.sidewalkPoint(b, rand(0.1, 0.9), side);
+    const sw = g.city.randomSidewalk(pp.x, pp.z, 30, 110);
+    if (!sw) return;
+    const { x, z } = sw;
     // evitar aparecer a la vista y muy cerca
     const cam = g.camera.position;
     const cx = x - cam.x, cz = z - cam.z, cd = Math.hypot(cx, cz);
     const f = g.cameraRig.forward();
     if (cd < 45 && (cx * f.x + cz * f.z) / cd > 0.5) return;
-    const zone = g.world.zoneAt(x, z);
+    const zt = g.world.zoneTypeAt(x, z);
     let kind = 'civil';
-    if ((zone.startsWith('Km') || zone === 'Pampa del Castillo') && chance(0.4)) kind = 'petrolero';
-    if (zone === 'Rada Tilly' && chance(0.3)) kind = 'cheto';
+    if ((zt === 'km' || zt === 'industrial' || zt === 'meseta') && chance(0.4)) kind = 'petrolero';
+    if (zt === 'rada' && chance(0.3)) kind = 'cheto';
     const p = g.spawnPed(kind, x, z, { look: randomLook(kind), rot: rand(0, 6.28) });
     p.spawned = true;
-    p.brain = new Brain(g, p, 'wander', { block: b });
+    p.brain = new Brain(g, p, 'wander');
+    p.brain.sw = { e: sw.edge, side: sw.side, toB: chance(0.5) };
     if (kind === 'cheto') p.brain.hostile = false;
     if (chance(0.06)) { p.give('pistola', 20); }
     if (chance(0.05)) { p.give('bate'); p.setWeapon('bate'); }
@@ -99,7 +95,7 @@ export class Population {
         p.turf = t;
         const w = t.weapon.length ? pick(t.weapon) : null;
         if (w) { p.give(w, 30); p.setWeapon(w); }
-        if (t.kind === 'petrolero') p.brain = new Brain(g, p, 'wander', { block: g.city.blockAt(x, z) });
+        if (t.kind === 'petrolero') p.brain = new Brain(g, p, 'wander');
         else {
           p.brain = new Brain(g, p, 'guard', { hostile: t.hostile, home: { x, z }, leash: 40 });
           p.brain.base = 'guard';

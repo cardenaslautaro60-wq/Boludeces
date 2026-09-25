@@ -273,12 +273,11 @@ export class Traffic {
 
   zoneKind(x, z, e) {
     if (e && e.kind === 'tierra') return 'tierra';
-    const b = this.game.city.blockAt(x, z);
-    const zone = this.game.world.zoneAt(x, z);
-    if (zone === 'Centro' || zone === 'Puerto') return 'centro';
-    if (zone.startsWith('Km') || zone === 'Caleta Córdova' || zone === 'Parque Eólico' || zone === 'Pampa del Castillo') return 'km';
-    if (zone === 'Rada Tilly') return 'rada';
-    if (b) return 'barrio';
+    const zt = this.game.world.zoneTypeAt(x, z);
+    if (zt === 'centro') return 'centro';
+    if (zt === 'km' || zt === 'industrial' || zt === 'meseta') return 'km';
+    if (zt === 'rada') return 'rada';
+    if (zt === 'barrio' || zt === 'viviendas') return 'barrio';
     return e && e.kind === 'ruta' ? 'ruta' : 'barrio';
   }
 
@@ -332,7 +331,7 @@ export class Traffic {
       const a = rand(0, Math.PI * 2), r = rand(rMin, rMax);
       const x = pp.x + Math.cos(a) * r, z = pp.z + Math.sin(a) * r;
       const n = R.nearestEdge(x, z, 40);
-      if (!n || n.edge.kind === 'muelle') continue;
+      if (!n || n.edge.kind === 'muelle' || n.edge.kind === 'peatonal') continue;
       // fuera de la vista de la cámara si está cerca
       const cam = this.game.camera;
       const cx = n.x - cam.position.x, cz = n.z - cam.position.z;
@@ -378,7 +377,7 @@ export class Traffic {
     const n = this.randomRoadPoint(pp, 40, 150);
     if (!n) return;
     const e = n.edge;
-    if (e.kind === 'ruta' || e.kind === 'tierra' || e.kind === 'muelle') return;
+    if (e.kind === 'ruta' || e.kind === 'tierra' || e.kind === 'muelle' || e.kind === 'peatonal') return;
     const R = g.roads;
     const A = R.nodes[e.a], B = R.nodes[e.b];
     // no estacionar en las esquinas

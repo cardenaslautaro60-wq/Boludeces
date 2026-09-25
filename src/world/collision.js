@@ -17,6 +17,18 @@ export class StaticColliders {
     return c;
   }
 
+  // Caja orientada: centro (cx,cz), eje "ancho" (ax,az) unitario, medio ancho hw, medio fondo hd
+  addOBB(cx, cz, ax, az, hw, hd, y0, y1, tag = null) {
+    if (Math.abs(ax) > 0.9999 || Math.abs(az) > 0.9999) {
+      const ex = Math.abs(ax) > 0.5 ? hw : hd, ez = Math.abs(ax) > 0.5 ? hd : hw;
+      return this.addBox(cx - ex, cx + ex, cz - ez, cz + ez, y0, y1, tag);
+    }
+    const c = { type: 'obb', cx, cz, ax, az, hw, hd, y0, y1, tag, s: 0 };
+    const ex = Math.abs(ax) * hw + Math.abs(az) * hd, ez = Math.abs(az) * hw + Math.abs(ax) * hd;
+    this.insert(c, cx - ex, cx + ex, cz - ez, cz + ez);
+    return c;
+  }
+
   addCircle(x, z, r, y0, y1, tag = null) {
     const c = { type: 'circle', x, z, r, y0, y1, tag, s: 0 };
     this.insert(c, x - r, x + r, z - r, z + r);
@@ -76,6 +88,27 @@ export class StaticColliders {
           }
           hit = true;
         }
+      } else if (c.type === 'obb') {
+        // pasar a coordenadas locales de la caja (u = ancho, v = fondo)
+        const dx = p.x - c.cx, dz = p.z - c.cz;
+        const u = dx * c.ax + dz * c.az, v = -dx * c.az + dz * c.ax;
+        const cu = Math.max(-c.hw, Math.min(u, c.hw)), cv = Math.max(-c.hd, Math.min(v, c.hd));
+        let eu = u - cu, ev = v - cv;
+        const d2 = eu * eu + ev * ev;
+        if (d2 < r * r) {
+          let nu, nv;
+          if (d2 > 1e-8) {
+            const d = Math.sqrt(d2);
+            nu = cu + (eu / d) * r; nv = cv + (ev / d) * r;
+          } else {
+            const m = Math.min(c.hw - u, u + c.hw, c.hd - v, v + c.hd);
+            nu = u; nv = v;
+            if (m === c.hw - u) nu = c.hw + r; else if (m === u + c.hw) nu = -c.hw - r; else if (m === c.hd - v) nv = c.hd + r; else nv = -c.hd - r;
+          }
+          p.x = c.cx + nu * c.ax - nv * c.az;
+          p.z = c.cz + nu * c.az + nv * c.ax;
+          hit = true;
+        }
       } else {
         const dx = p.x - c.x, dz = p.z - c.z;
         const d2 = dx * dx + dz * dz, rr = r + c.r;
@@ -115,6 +148,21 @@ export class StaticColliders {
           const pen = pa + pb - Math.abs(d);
           if (pen <= 0) { sep = true; break; }
           if (pen < minPen) { minPen = pen; const s = d < 0 ? -1 : 1; nx = ax * s; nz = az * s; }
+        }
+        if (!sep) best = { nx, nz, depth: minPen, c };
+      } else if (c.type === 'obb') {
+        const dx = o.x - c.cx, dz = o.z - c.cz;
+        const bx = -c.az, bz = c.ax; // eje de fondo
+        const axes = [[c.ax, c.az], [bx, bz], [o.fx, o.fz], [rx, rz]];
+        let minPen = Infinity, nx = 0, nz = 0;
+        let sep = false;
+        for (const [ax, az] of axes) {
+          const pa = Math.abs(o.fx * ax + o.fz * az) * o.hl + Math.abs(rx * ax + rz * az) * o.hw;
+          const pb = Math.abs(c.ax * ax + c.az * az) * c.hw + Math.abs(bx * ax + bz * az) * c.hd;
+          const d = dx * ax + dz * az;
+          const pen = pa + pb - Math.abs(d);
+          if (pen <= 0) { sep = true; break; }
+          if (pen < minPen) { minPen = pen; const sg = d < 0 ? -1 : 1; nx = ax * sg; nz = az * sg; }
         }
         if (!sep) best = { nx, nz, depth: minPen, c };
       } else {
@@ -174,6 +222,28 @@ export class StaticColliders {
         t = tmin;
         if (t <= 0) continue;
         if (!best || t < best.t) best = { t, c, nx: nAxis === 0 ? nSign : 0, ny: nAxis === 1 ? nSign : 0, nz: nAxis === 2 ? nSign : 0 };
+      } else if (c.type === 'obb') {
+        const rxo = ox - c.cx, rzo = oz - c.cz;
+        const lu = rxo * c.ax + rzo * c.az, lv = -rxo * c.az + rzo * c.ax;
+        const du = dx * c.ax + dz * c.az, dv = -dx * c.az + dz * c.ax;
+        let tmin = 0, tmax = maxT, nAxis = -1, nSign = 0;
+        const slab = (o, d, lo, hi, axis) => {
+          if (Math.abs(d) < 1e-9) return o >= lo && o <= hi;
+          let t1 = (lo - o) / d, t2 = (hi - o) / d;
+          let sg = -1;
+          if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; sg = 1; }
+          if (t1 > tmin) { tmin = t1; nAxis = axis; nSign = sg; }
+          if (t2 < tmax) tmax = t2;
+          return tmin <= tmax;
+        };
+        if (!slab(lu, du, -c.hw, c.hw, 0)) continue;
+        if (!slab(oy, dy, c.y0, c.y1, 1)) continue;
+        if (!slab(lv, dv, -c.hd, c.hd, 2)) continue;
+        t = tmin;
+        if (t <= 0) continue;
+        let nx = 0, ny = 0, nz = 0;
+        if (nAxis === 0) { nx = c.ax * nSign; nz = c.az * nSign; } else if (nAxis === 2) { nx = -c.az * nSign; nz = c.ax * nSign; } else ny = nSign;
+        if (!best || t < best.t) best = { t, c, nx, ny, nz };
       } else {
         const fx = ox - c.x, fz = oz - c.z;
         const a = dx * dx + dz * dz;

@@ -1,5 +1,4 @@
-import { WORLD, POI } from '../world/mapdata.js';
-import { coastX } from '../world/terrain.js';
+import { WORLD, POI, FRAME, fromAB } from '../world/mapdata.js';
 import { formatMoney, clamp } from '../util.js';
 import { WEAPONS } from '../game/weapons.js';
 
@@ -94,54 +93,76 @@ export class HUD {
     this.buildMapImage();
   }
 
-  // Imagen del mapa completo (para radar y mapa grande)
+  // Imagen del mapa completo en el marco rotado (A a lo largo de la costa, B tierra adentro)
   buildMapImage() {
     const g = this.game;
-    const S = 2.5;
-    const W = Math.ceil((WORLD.maxX - WORLD.minX) / S), H = Math.ceil((WORLD.maxZ - WORLD.minZ) / S);
+    const S = 4;
+    const F = FRAME;
+    const W = Math.ceil((F.a1 - F.a0) / S), H = Math.ceil((F.b1 - F.b0) / S);
     const c = document.createElement('canvas');
     c.width = W; c.height = H;
     const ctx = c.getContext('2d');
     const img = ctx.createImageData(W, H);
     const t = g.terrain;
     for (let j = 0; j < H; j++) {
-      const z = WORLD.minZ + j * S;
+      const b = F.b0 + j * S;
       for (let i = 0; i < W; i++) {
-        const x = WORLD.minX + i * S;
+        const a = F.a0 + i * S;
+        const [x, z] = fromAB(a, b);
         const h = t.heightAt(x, z);
-        let r, gg, b;
-        if (h < -0.3) { const d = clamp(-h / 12, 0, 1); r = 70 - d * 25; gg = 104 - d * 30; b = 140 - d * 25; }
-        else if (h < 2.5 && x > coastX(z) - 70) { r = 196; gg = 186; b = 150; }
+        let r, gg, bl;
+        if (h < -0.3) { const d = clamp(-h / 12, 0, 1); r = 70 - d * 25; gg = 104 - d * 30; bl = 140 - d * 25; }
+        else if (h < 4 && t.seaDist(x, z) < 50) { r = 196; gg = 186; bl = 150; }
         else {
-          const k = clamp(h / 100, 0, 1);
-          r = 150 - k * 20; gg = 146 - k * 16; b = 118 - k * 20;
+          const k = clamp(h / 160, 0, 1);
+          r = 158 - k * 30; gg = 150 - k * 24; bl = 118 - k * 26;
         }
         const o = (j * W + i) * 4;
-        img.data[o] = r; img.data[o + 1] = gg; img.data[o + 2] = b; img.data[o + 3] = 255;
+        img.data[o] = r; img.data[o + 1] = gg; img.data[o + 2] = bl; img.data[o + 3] = 255;
       }
     }
     ctx.putImageData(img, 0, 0);
-    const tx = (x) => (x - WORLD.minX) / S, tz = (z) => (z - WORLD.minZ) / S;
-    // manzanas
-    ctx.fillStyle = 'rgba(95,92,84,0.55)';
-    for (const b of g.city.blocks) ctx.fillRect(tx(b.x0), tz(b.z0), (b.x1 - b.x0) / S, (b.z1 - b.z0) / S);
-    for (const b of g.city.plazas) { ctx.fillStyle = 'rgba(80,120,60,0.9)'; ctx.fillRect(tx(b.x0), tz(b.z0), (b.x1 - b.x0) / S, (b.z1 - b.z0) / S); }
+    // de mundo a imagen
+    const tp = (x, z) => [((x * F.ux + z * F.uz) - F.a0) / S, ((x * F.vx + z * F.vz) - F.b0) / S];
+    const poly = (pts, fill) => {
+      ctx.fillStyle = fill;
+      ctx.beginPath();
+      for (let i = 0; i < pts.length; i += 2) { const [u, v] = tp(pts[i], pts[i + 1]); if (i) ctx.lineTo(u, v); else ctx.moveTo(u, v); }
+      ctx.closePath(); ctx.fill();
+    };
+    for (const ar of g.zones.areas) {
+      if (ar.kind === 'plaza' || ar.kind === 'cancha') poly(ar.pts, 'rgba(80,120,60,0.9)');
+      else if (ar.kind === 'industrial') poly(ar.pts, 'rgba(120,112,120,0.45)');
+    }
+    // casas y edificios
+    ctx.fillStyle = 'rgba(95,92,84,0.7)';
+    for (const it of g.city.houses.items) {
+      const [u, v] = tp(it.cx, it.cz);
+      const s = Math.max(1.2, (it.hw + it.hd) / S);
+      ctx.fillRect(u - s / 2, v - s / 2, s, s);
+    }
     // calles
     ctx.lineCap = 'round';
     for (const pass of [0, 1]) {
       for (const e of g.roads.edges) {
         const A = g.roads.nodes[e.a], B = g.roads.nodes[e.b];
         const dirt = e.kind === 'tierra';
-        ctx.strokeStyle = pass === 0 ? 'rgba(40,40,40,0.7)' : dirt ? '#b8a07a' : e.kind === 'ruta' ? '#f0e6c0' : '#dcd8cc';
+        ctx.strokeStyle = pass === 0 ? 'rgba(40,40,40,0.7)' : dirt ? '#b8a07a' : e.kind === 'ruta' ? '#f0e6c0' : e.kind === 'avenida' ? '#ece6d2' : '#dcd8cc';
         ctx.lineWidth = (e.width / S) * (pass === 0 ? 1.5 : 1) + (pass === 0 ? 1 : 0);
-        ctx.beginPath(); ctx.moveTo(tx(A.x), tz(A.z)); ctx.lineTo(tx(B.x), tz(B.z)); ctx.stroke();
+        const [u0, v0] = tp(A.x, A.z), [u1, v1] = tp(B.x, B.z);
+        ctx.beginPath(); ctx.moveTo(u0, v0); ctx.lineTo(u1, v1); ctx.stroke();
       }
     }
     this.mapImg = c;
     this.mapScale = S;
   }
 
-  w2m(x, z) { return [(x - WORLD.minX) / this.mapScale, (z - WORLD.minZ) / this.mapScale]; }
+  // Transformación de la imagen del mapa a coordenadas del mundo relativas a (cx, cz)
+  mapTransform(ctx, cx, cz) {
+    const F = FRAME, S = this.mapScale;
+    const [x0, z0] = fromAB(F.a0, F.b0);
+    ctx.transform(S * F.ux, S * F.uz, S * F.vx, S * F.vz, x0 - cx, z0 - cz);
+  }
 
   showZone(name) {
     if (name === this.zoneName) return;
@@ -259,10 +280,9 @@ export class HUD {
     ctx.translate(S / 2, S / 2);
     // Rotar para que "adelante" de la cámara quede arriba
     ctx.rotate(Math.PI + yaw);
-    const [mx, mz] = this.w2m(px, pz);
-    const k = scale * this.mapScale;
-    ctx.scale(k, k);
-    ctx.drawImage(this.mapImg, -mx, -mz);
+    ctx.scale(scale, scale);
+    this.mapTransform(ctx, px, pz);
+    ctx.drawImage(this.mapImg, 0, 0);
     ctx.restore();
     // blips
     const toRadar = (x, z) => {

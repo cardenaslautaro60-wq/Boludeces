@@ -502,6 +502,24 @@ export class Menus {
     legend.innerHTML = html;
   }
 
+  // Nombres para el mapa: barrios reales (nivel 9) y lugares grandes
+  mapLabels() {
+    if (this._labels) return this._labels;
+    const g = this.game;
+    const L = [];
+    const add = (n, x, z, big = false) => { if (Number.isFinite(x) && Number.isFinite(z)) L.push([n, x, z, big]); };
+    const Z = g.zones;
+    for (const zz of Z.zones) if (zz.level <= 9 && zz.area > 60000) add(zz.name, zz.centroid[0], zz.centroid[1], ['Centro', 'Rada Tilly', 'Caleta Córdova', 'Restinga Alí'].includes(zz.name));
+    const P = (name) => Z.places.find((p) => p.name === name);
+    const big = [['Km 3', P('General Enrique Mosconi')], ['Km 5', P('Presidente Roberto M. Ortiz')], ['Km 8', P('Don Bosco')], ['Caleta Córdova', P('Caleta Córdova')], ['Rada Tilly', P('Rada Tilly')]];
+    for (const [n, p] of big) if (p) add(n, p.x, p.z - 60, true);
+    const poi = POI;
+    if (poi.antenas) add('Cerro Chenque', poi.antenas.x, poi.antenas.z, true);
+    if (poi.loberia) add('Punta del Marqués', poi.loberia.x, poi.loberia.z, true);
+    this._labels = L;
+    return L;
+  }
+
   drawMap() {
     const g = this.game;
     const c = this.mapCanvas;
@@ -511,17 +529,24 @@ export class Menus {
     const v = this.mapView;
     ctx.fillStyle = '#3a5a80';
     ctx.fillRect(0, 0, W, H);
-    const S = g.hud.mapScale;
     const toS = (x, z) => [W / 2 + (x - v.cx) * v.zoom, H / 2 + (z - v.cz) * v.zoom];
-    const [ox, oy] = toS(WORLD.minX, WORLD.minZ);
     ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(g.hud.mapImg, ox, oy, g.hud.mapImg.width * S * v.zoom, g.hud.mapImg.height * S * v.zoom);
+    ctx.save();
+    ctx.translate(W / 2, H / 2);
+    ctx.scale(v.zoom, v.zoom);
+    g.hud.mapTransform(ctx, v.cx, v.cz);
+    ctx.drawImage(g.hud.mapImg, 0, 0);
+    ctx.restore();
     // nombres de zonas
     ctx.font = `${Math.round(clamp(v.zoom * 40, 10, 22))}px 'Pirata One', Georgia, serif`;
     ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.lineWidth = 3;
-    const labels = [['Centro', 200, 90], ['Cerro Chenque', 150, -360], ['Km 3', 220, -760], ['Km 5', 230, -1045], ['Km 8', 230, -1310], ['Caleta Córdova', 320, -1690], ['Puerto', 420, 460], ['Pietrobelli', -240, 60], ['Juan XXIII', -600, 60], ['9 de Julio', -240, 360], ['30 de Octubre', -600, 360], ['Industrial', 110, 680], ['Pueyrredón', -240, 690], ['Rada Tilly', 140, 1270], ['Punta del Marqués', 520, 1620], ['Pampa del Castillo', -1180, -300], ['Aeropuerto', -650, -1400], ['Golfo San Jorge', 800, 0]];
-    for (const [n, x, z] of labels) { const [sx, sy] = toS(x, z); ctx.strokeText(n, sx, sy); ctx.fillText(n, sx, sy); }
+    for (const [n, x, z, big] of this.mapLabels()) {
+      if (!big && v.zoom < 0.32) continue;
+      const [sx, sy] = toS(x, z);
+      if (sx < -80 || sy < -20 || sx > W + 80 || sy > H + 20) continue;
+      ctx.strokeText(n, sx, sy); ctx.fillText(n, sx, sy);
+    }
     // blips
     for (const b of g.blips) {
       if (b.hidden) continue;

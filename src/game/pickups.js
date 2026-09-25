@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { BAGS } from '../world/mapdata.js';
+import { BAGS, POI } from '../world/mapdata.js';
 import { WEAPONS, weaponMesh } from './weapons.js';
 import { dist, rand } from '../util.js';
 
@@ -67,13 +67,19 @@ export class Pickups {
     if (M.casaAbuela) add('heart', M.casaAbuela.x - 1, M.casaAbuela.z + 10);
     if (M.madriguera) add('heart', M.madriguera.x + 12, M.madriguera.z + 30);
     if (M.comisaria) add('armor', M.comisaria.x + 22, M.comisaria.z - 4);
-    add('armor', 30, -690);
-    add('weapon', 186, -392, { weapon: 'pistola', value: 34 });
-    add('weapon', 520, 512, { weapon: 'escopeta', value: 16 });
-    add('weapon', -360, -1318, { weapon: 'uzi', value: 90 });
-    add('weapon', -236, 60, { weapon: 'bate', value: 1 });
-    add('weapon', 560, 1612, { weapon: 'pistola', value: 34 });
-    add('heart', -1150, -880);
+    // cerca de lugares conocidos, en un lugar libre
+    const near = (o, dx, dz, kind, opts) => {
+      if (!o) return;
+      const sp = g.safeSpot(o.x + dx, o.z + dz, 0.6);
+      add(kind, sp.x, sp.z, opts);
+    };
+    near(POI.depositoCrudo, 6, -8, 'armor');
+    near(POI.antenas, 5, 5, 'weapon', { weapon: 'pistola', value: 34 });
+    near(POI.puerto, -8, 6, 'weapon', { weapon: 'escopeta', value: 16 });
+    near(POI.yacimiento, 12, -6, 'weapon', { weapon: 'uzi', value: 90 });
+    near(POI.garagePetroca, -3, -6, 'weapon', { weapon: 'bate', value: 1 });
+    near(POI.loberia, 6, -6, 'weapon', { weapon: 'pistola', value: 34 });
+    near(POI.yacimiento, -8, 8, 'heart');
     // bolsitas coleccionables
     BAGS.forEach(([x, z], i) => {
       if (g.saves && g.saves.bagCollected(i)) return;

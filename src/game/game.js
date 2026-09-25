@@ -169,6 +169,23 @@ export class Game {
     this.cameraRig.snapBehind(c.rot);
   }
 
+  // Lugar libre cerca de (x,z): si cae adentro de algo o en el agua, a la calle más cercana
+  safeSpot(x, z, r = 0.6, vehicle = false) {
+    const p = { x, z };
+    const y = this.terrain.heightAt(x, z);
+    const hit = this.colliders.resolveCircle(p, r, y);
+    const wet = this.terrain.groundAt(p.x, p.z) < 0.3;
+    if (!hit && !wet) return { x, z };
+    const n = this.roads.nearestEdge(x, z, 150, (e) => e.kind !== 'peatonal' && e.kind !== 'muelle');
+    if (!n) return p;
+    const e = n.edge;
+    const A = this.roads.nodes[e.a];
+    const cross = e.dx * (z - A.z) - e.dz * (x - A.x);
+    const side = cross >= 0 ? 1 : -1;
+    const off = vehicle ? e.width * 0.25 : e.width / 2 + 1.3;
+    return { x: n.x - e.dz * off * side, z: n.z + e.dx * off * side };
+  }
+
   playerName() { return this.player ? this.player.name : ''; }
 
   // Nombre del control según se juegue con teclado o con pantalla táctil
@@ -189,6 +206,7 @@ export class Game {
       done(n) { g.missions.done = g.missions.list.slice(0, n).map((m) => m.id); if (n >= 1 && !g.companionActive) g.setCompanionActive(true, g.player.pos.x + 2, g.player.pos.z + 2); g.missions.refresh(); },
       mission(id) { const d = g.missions.list.find((m) => m.id === id); if (d) g.missions.start(d); },
       car(key) { return g.cheats.spawnNear(key); },
+      poi: POI,
       state() { const p = g.player; return { pos: [p.pos.x, p.pos.y, p.pos.z].map((v) => +v.toFixed(1)), veh: p.vehicle && p.vehicle.key, hp: p.health, money: g.money, wanted: g.police.level, mission: g.missions.active && g.missions.active.def.id, fps: +g.fps.toFixed(1) }; },
     };
   }
@@ -390,11 +408,12 @@ export class Game {
     // cámara del menú principal: vuelo lento sobre la ciudad
     this.time += dt;
     const t = this.time * 0.04;
-    const cx = 250 + Math.cos(t) * 260, cz = 40 + Math.sin(t) * 260;
-    this.camera.position.set(cx, 95, cz);
-    this.camera.lookAt(200, 20, 60);
+    const c0 = POI.catedral || { x: 0, z: 0 };
+    const cx = c0.x + Math.cos(t) * 300, cz = c0.z + Math.sin(t) * 300;
+    this.camera.position.set(cx, 110, cz);
+    this.camera.lookAt(c0.x, 20, c0.z);
     this.env.update(dt * 0.5, this.camera.position, this.time);
-    this.props.update(this.time, dt, this.env);
+    this.props.update(this.time, dt, this.env, this.camera.position);
     this.effects.update(dt, this.camera.position);
     this.world.water.userData.material.uniforms.uTime.value = this.time;
   }
@@ -429,7 +448,7 @@ export class Game {
     this.activities.update(dt);
     this.missions.update(dt);
     this.effects.update(dt, this.camera.position);
-    this.props.update(this.time, dt, this.env);
+    this.props.update(this.time, dt, this.env, this.camera.position);
     this.world.water.userData.material.uniforms.uTime.value = this.time;
     this.updateLighting();
     // jugador muerto / ahogado
