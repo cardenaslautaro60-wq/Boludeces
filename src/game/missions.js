@@ -159,7 +159,36 @@ class Ctx {
     this.game.missions.skipPressed = false;
   }
 
-  cam(from, to, look, dur = 5, opts = {}) { this.game.cameraRig.startCinematic(from, to, look, dur, opts); }
+  cam(from, to, look, dur = 5, opts = {}) {
+    // que nada tape la toma: si el final queda adentro de algo o detrás de un edificio, girar alrededor
+    to = this.clearView(to, look, true);
+    from = this.clearView(from, opts.lookFrom || look, false);
+    this.game.cameraRig.startCinematic(from, to, look, dur, opts);
+  }
+
+  clearView(p, look, needSight) {
+    const g = this.game;
+    const ok = (q) => {
+      if (g.terrain.heightAt(q.x, q.z) > q.y - 0.4) return false;
+      const t = { x: q.x, z: q.z };
+      if (g.colliders.resolveCircle(t, 0.5, q.y - 1.2, 1.6)) return false;
+      if (!needSight) return true;
+      const dx = look.x - q.x, dy = look.y - q.y, dz = look.z - q.z, L = Math.hypot(dx, dy, dz);
+      if (L < 0.8 || L > 45) return true;
+      return !g.colliders.raycast(q.x, q.y, q.z, dx / L, dy / L, dz / L, L - 0.9);
+    };
+    if (ok(p)) return p;
+    const dx = p.x - look.x, dz = p.z - look.z;
+    const r = Math.max(2.5, Math.hypot(dx, dz)), a0 = Math.atan2(dz, dx), h = p.y - look.y;
+    for (const hh of [h, h + 3, h + 8]) {
+      for (let k = 1; k <= 12; k++) {
+        const a = a0 + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * (Math.PI / 6);
+        const q = p.clone().set(look.x + Math.cos(a) * r, look.y + hh, look.z + Math.sin(a) * r);
+        if (ok(q)) return q;
+      }
+    }
+    return p.clone().set(look.x + dx * 0.25, look.y + Math.max(h, 1) + 14, look.z + dz * 0.25);
+  }
 
   async fade(black, d = 0.6) { await this.game.hud.fadeTo(black, d); }
 
@@ -301,48 +330,73 @@ export class Missions {
           const G = g.gordopin;
           g.env.time = 18 * 60 + 20;
           g.env.setWeather('despejado', true);
-          const sx = POI.semaforo.x - 8.2, sz = POI.semaforo.z - 8.2;
-          c.place(G, sx, sz, Math.PI / 4);
+          // esquina real del semáforo: d = a lo largo de San Martín, n = hacia la vereda
+          const S = POI.semaforo;
+          const [dx, dz] = S.dir || [1, 0];
+          const nx = -dz, nz = dx;
+          const corner = S.corner || { x: S.x + (dx + nx) * 8, z: S.z + (dz + nz) * 8 };
+          // punto relativo a la esquina: a = sobre San Martín (hacia la calle cruzada si es negativo), b = hacia la calle
+          const rel = (a, b) => ({ x: corner.x + dx * a + nx * b, z: corner.z + dz * a + nz * b });
+          const sx = corner.x, sz = corner.z;
+          c.place(G, sx, sz, Math.atan2(-dx - nx, -dz - nz));
           g.money = 250;
-          const car = c.spawnVehicle('patrullero', POI.semaforo.x - 2.5, POI.semaforo.z - 30, 0, { persistent: true });
+          const carAt = { x: S.x - dx * 30 - nx * (S.w || 10) * 0.25, z: S.z - dz * 30 - nz * (S.w || 10) * 0.25 };
+          const car = c.spawnVehicle('patrullero', carAt.x, carAt.z, Math.atan2(dx, dz), { persistent: true, exact: true });
           car.siren = true;
-          const ten = c.spawnPed('tenpesos', sx + 3, sz - 3, { look: randomLook('tenpesos'), name: 'Tenpesos' });
-          const pul = c.spawnPed('cana', sx + 4, sz - 1.5, { look: randomLook('cana'), name: 'Pulenta' });
+          const tp = rel(3.2, 0.3), pp = rel(4.6, -0.5);
+          const ten = c.spawnPed('tenpesos', tp.x, tp.z, { look: randomLook('tenpesos'), name: 'Tenpesos', exact: true });
+          const pul = c.spawnPed('cana', pp.x, pp.z, { look: randomLook('cana'), name: 'Pulenta', exact: true });
           c.script(ten, () => {}); c.script(pul, () => {});
           c.face(ten, G); c.face(pul, G);
           ten.group.visible = false; pul.group.visible = false;
+          // cámara relativa a la esquina (siempre sobre la calle, del lado abierto)
+          const at = (a, b, h) => { const q = rel(a, b); return V3(q.x, G.pos.y + h, q.z); };
           await c.cutscene(async () => {
             const P = G.pos;
-            c.cam(V3(P.x + 60, P.y + 45, P.z + 40), V3(P.x + 18, P.y + 10, P.z + 16), V3(P.x, P.y + 2, P.z), 7, { lookFrom: V3(P.x, P.y + 5, P.z - 60) });
+            // bajando por el medio de San Martín hasta la esquina
+            const bC = -((S.w || 10) / 2 + 1.3);
+            c.cam(at(-95, bC, 34), at(-16, bC, 5), V3(P.x, P.y + 2, P.z), 7, { lookFrom: at(-40, bC, 2) });
             G.jugg = true;
             await c.say('', 'Comodoro Rivadavia, 2004. El barril sube, el Km 3 se llena de chatas nuevas... y el viento, como siempre, sopla.', 6);
-            c.cam(V3(P.x + 4, P.y + 1.8, P.z + 4.5), V3(P.x + 3, P.y + 1.7, P.z + 3.5), V3(P.x, P.y + 1.7, P.z), 5);
-            await c.say('', 'En el semáforo de San Martín y Rivadavia, el Gordopin hace lo que mejor le sale.', 4);
+            c.cam(at(-3.4, -3.2, 1.8), at(-2.8, -2.6, 1.7), V3(P.x, P.y + 1.7, P.z), 5);
+            await c.say('', `En el ${(S.name || 'semáforo de San Martín').replace(/^Semáforo/, 'semáforo')}, el Gordopin hace lo que mejor le sale.`, 4);
             ten.group.visible = true; pul.group.visible = true;
             G.jugg = false;
             c.face(G, ten);
-            c.cam(V3(P.x - 3, P.y + 1.9, P.z + 3), V3(P.x - 2.5, P.y + 1.8, P.z + 2.5), V3(ten.pos.x, P.y + 1.6, ten.pos.z), 6);
+            c.cam(at(0.8, -4.2, 1.9), at(1.2, -3.6, 1.8), V3((ten.pos.x + P.x) / 2, P.y + 1.6, (ten.pos.z + P.z) / 2), 6);
             await c.say('Tenpesos', 'Mirá quién está acá. El malabarista del semáforo.');
             await c.say('Gordopin', 'Buenas, comisario. Estoy laburando, no jodo a nadie.');
             await c.say('Tenpesos', 'Don Crudo quiere el Centro limpio. Nada de malabaristas, nada de trapitos. Esto ahora es una ciudad petrolera seria.');
-            c.cam(V3(P.x + 2.5, P.y + 1.7, P.z - 1), V3(P.x + 2, P.y + 1.7, P.z - 0.5), V3(P.x, P.y + 1.6, P.z), 6);
+            c.cam(at(5.5, -3.0, 1.75), at(5.0, -2.6, 1.7), V3(P.x, P.y + 1.6, P.z), 6);
             await c.say('Gordopin', 'Yo no soy trapito, soy malabarista. Y trabajo en el semáforo que a mí se me da la gana.');
             await c.say('Pulenta', 'Uh, se nos puso picante el gordo.');
             await c.say('Tenpesos', 'La recaudación del día es mía. Llamalo peaje. Y ahora te vas a dar una vuelta con nosotros.');
             await c.fade(true, 0.8);
             g.money = 0;
-            // arriba del Chenque
-            const ax = 175, az = -352;
-            c.place(G, ax, az, Math.PI);
-            const bike = c.spawnVehicle('bmx', ax + 2.5, az + 1.5, Math.PI * 0.9, { keep: true });
+            // arriba del Cerro Chenque: en el camino más cercano a la cima
+            const top = POI.antenas || POI.catedral;
+            const near = g.roads.nearestEdge(top.x, top.z, 400, (e) => e.kind !== 'peatonal') || g.roads.nearestEdge(top.x, top.z, 1500);
+            const e = near.edge;
+            const ex = e.dx, ez = e.dz, ox = -ez, oz = ex;
+            const side = (top.x - near.x) * ox + (top.z - near.z) * oz >= 0 ? 1 : -1;
+            const ax = near.x + ox * side * (e.width / 2 + 1.2), az = near.z + oz * side * (e.width / 2 + 1.2);
+            c.place(G, ax, az, Math.atan2(-ox * side, -oz * side));
+            const bike = c.spawnVehicle('bmx', ax + ex * 2.2, az + ez * 2.2, Math.atan2(ex, ez), { keep: true, exact: true });
             bike.missionOwned = false;
-            c.place(ten, ax + 30, az + 10, 0); ten.group.visible = false; pul.group.visible = false;
-            car.pos.set(ax + 8, g.terrain.groundAt(ax + 8, az + 6), az + 6);
-            car.heading = Math.PI * 0.8;
+            c.place(ten, ax - ex * 30, az - ez * 30, 0); ten.group.visible = false; pul.group.visible = false;
+            const cx = near.x - ex * 9, cz = near.z - ez * 9;
+            car.pos.set(cx, g.terrain.groundAt(cx, cz), cz);
+            car.heading = Math.atan2(ex, ez);
             car.siren = false;
-            c.cam(V3(ax - 18, G.pos.y + 14, az - 10), V3(ax - 7, G.pos.y + 4, az - 5), V3(ax, G.pos.y + 1.2, az), 8, { lookFrom: V3(ax + 50, G.pos.y - 30, az + 200) });
+            const Y = G.pos.y;
+            // cámaras sobre el mismo camino (espacio abierto)
+            const onRoad = (k, h) => { const qx = near.x - ex * k, qz = near.z - ez * k; return V3(qx, Math.max(Y, g.terrain.heightAt(qx, qz)) + h, qz); };
+            // 1) la cima con las antenas
+            c.cam(onRoad(-6, 10), onRoad(-3, 14), V3(top.x, g.terrain.heightAt(top.x, top.z) + 25, top.z), 4);
             await c.fade(false, 0.8);
             await c.say('', 'Un rato después, arriba del Cerro Chenque...', 3);
+            // 2) de frente al Gordopin, con el patrullero atrás
+            c.cam(onRoad(-12, 3.2), onRoad(-8.5, 2.2), V3(ax, Y + 1.3, az), 5);
             await c.say('Tenpesos', '¡A mí nadie me dice que no, gordo! ¡Bajate caminando, a ver si adelgazás!', 3.5);
             g.removeVehicle(car);
             await c.say('Gordopin', 'Aaah, la concha de la lora... otra vez lo mismo.', 3.5);

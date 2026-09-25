@@ -200,6 +200,8 @@ export class Vehicle {
       // pendiente
       terrain.normalAt(this.pos.x, this.pos.z, tmpN);
       vF += 9.8 * (tmpN.x * sin + tmpN.z * cos) * dt;
+      // sin nadie al volante: freno de mano puesto (en las lomas de Comodoro no se va solo)
+      if (!this.driver && !this.aiDriving && !this.dead && Math.abs(vF) < 4) { vF = approach(vF, 0, 14 * dt); vL *= Math.exp(-6 * dt); }
       // agarre lateral
       let grip = T.grip * (offroad && !T.offroad ? 0.7 : 1);
       if (c.handbrake) { grip *= 0.22; vF = approach(vF, 0, 5 * dt); }

@@ -239,7 +239,8 @@ export class Props {
 
   // ---- Luminarias ----
   buildLamps(terrain, roads, city, colliders, T) {
-    const spots = [...city.lampSpots];
+    const jc = POI.semaforo && POI.semaforo.corner;
+    const spots = city.lampSpots.filter(([x, z]) => !jc || Math.hypot(x - jc.x, z - jc.z) > 9);
     // rutas fuera de la ciudad: faroles cada tanto
     for (const e of roads.edges) {
       if (e.kind !== 'ruta' || e.sw || e.len < 30) continue;
@@ -541,7 +542,8 @@ export class Props {
     const gb = new GeoBuilder();
     const off = (POI.semaforo.w || 10) / 2 + 1.4;
     const d = POI.semaforo.dir || [1, 0];
-    const corners = [[x + (d[0] - d[1]) * off, z + (d[1] + d[0]) * off], [x - (d[0] - d[1]) * off, z - (d[1] + d[0]) * off]];
+    // en las esquinas (d - n) y (-d + n): la esquina (d + n) es la del malabarista
+    const corners = [[x + (d[0] + d[1]) * off, z + (d[1] - d[0]) * off], [x - (d[0] + d[1]) * off, z - (d[1] - d[0]) * off]];
     this.trafficLights = [];
     for (const [px, pz] of corners) {
       const y = terrain.heightAt(px, pz) + 0.22;
