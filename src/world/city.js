@@ -912,7 +912,18 @@ export class City {
     }
     // playa de contenedores sobre tierra firme cerca del puerto
     const cols = [0xb03020, 0x2050a0, 0x208050, 0xd09020, 0x707070, 0xe06020, 0x9a2a6a];
-    const site = this.findSite(pt.x + 60, pt.z + 60, 80, 20, { setback: 3 });
+    // probar varios lotes alrededor hasta dar con uno en tierra firme
+    const dry = (x, z) => t.heightAt(x, z) >= 1.5 && t.seaDist(x, z) >= 12;
+    let site = null;
+    for (const [ox, oz] of [[60, 60], [-60, 60], [60, -60], [-60, -60], [120, 0], [0, 120], [-120, 0], [0, -120], [150, 90], [-150, 90]]) {
+      const s = this.findSite(pt.x + ox, pt.z + oz, 80, 20, { setback: 3 });
+      if (!s) continue;
+      this.setFrame(s.cx, s.cz, s.ax, s.az);
+      let ok = 0;
+      for (let i = 0; i < 12; i++) if (dry(...this.W(-33 + (i % 6) * 13, 4 + Math.floor(i / 6) * 6))) ok++;
+      this.clearFrame();
+      if (ok >= 10) { site = s; break; }
+    }
     if (site) {
       this.setFrame(site.cx, site.cz, site.ax, site.az);
       const rot = this.frameAngle();
@@ -920,7 +931,7 @@ export class City {
         const lx = -33 + (i % 6) * 13, lz = 4 + Math.floor(i / 6) * 6;
         const [x, z] = this.W(lx, lz);
         // solo sobre tierra firme y seca (no en la bajada a la playa)
-        if (t.heightAt(x, z) < 1.5 || t.seaDist(x, z) < 12) continue;
+        if (!dry(x, z)) continue;
         const stack = rng.int(1, 3);
         for (let s = 0; s < stack; s++) this.containers.push({ x, z, y: t.heightAt(x, z) + s * 2.6, color: rng.pick(cols), rot });
         this.addCollider(lx - 6.1, lx + 6.1, lz - 1.25, lz + 1.25, -2, t.heightAt(x, z) + stack * 2.6, 'container');

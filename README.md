@@ -70,7 +70,8 @@ El mapa entero tiene unas 18.000 casas, miles de postes, árboles y bombas de pe
 
 - casas, postes, árboles y props agrupados por sector (el navegador descarta los que quedan fuera de cámara) y apagados más allá de la niebla;
 - terreno en mosaicos con dos niveles de detalle;
-- agua detallada solo en la orilla.
+- agua detallada solo en la orilla;
+- resolución dinámica: si la máquina no llega a ~30 cuadros por segundo, baja la resolución de a poco y la vuelve a subir cuando sobra.
 
 En una vista típica se dibujan entre 250.000 y 450.000 triángulos. Si anda lento, bajá **Calidad de imagen** en Opciones o apagá las sombras.
 
