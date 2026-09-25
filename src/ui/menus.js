@@ -1,5 +1,6 @@
 import { WORLD, POI } from '../world/mapdata.js';
 import { clamp, formatMoney } from '../util.js';
+import { mediaErrorText } from '../media/media.js';
 
 const h = (tag, cls, parent, html) => {
   const e = document.createElement(tag);
@@ -43,6 +44,7 @@ export class Menus {
         <button data-a="continue">Continuar</button>
         <button data-a="new">Nueva partida</button>
         <button data-a="options">Opciones</button>
+        <button data-a="media">Intro y música</button>
         <button data-a="controls">Controles</button>
         <button data-a="credits">Créditos</button>
       </div>
@@ -50,6 +52,55 @@ export class Menus {
     s.style.background = 'linear-gradient(180deg, rgba(0,0,0,0.55), rgba(0,0,0,0.15) 40%, rgba(0,0,0,0.7))';
     s.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => this.mainAction(b.dataset.a)));
     this.main = s;
+  }
+
+  // Pantalla "apretá cualquier tecla" (también desbloquea el sonido del navegador)
+  showStart() {
+    const g = this.game;
+    this.attract = true;
+    const s = h('div', 'screen menu startscreen', document.body);
+    s.style.background = 'linear-gradient(180deg, rgba(0,0,0,0.6), rgba(0,0,0,0.1) 45%, rgba(0,0,0,0.75))';
+    const touch = g.touch && g.touch.enabled;
+    s.innerHTML = `<div class="logo"><span class="gta">GTA</span><span class="sj">San Jorge</span><span class="tag">Comodoro Rivadavia · 2004</span></div>
+      <div class="press">${touch ? 'TOCÁ LA PANTALLA' : 'APRETÁ CUALQUIER TECLA'}</div>`;
+    const go = (e) => {
+      if (e) e.preventDefault();
+      window.removeEventListener('keydown', go, true);
+      s.removeEventListener('pointerdown', go);
+      s.remove();
+      g.audio.init();
+      const intro = g.media.intro();
+      if (intro) this.playIntro(intro.url, () => this.showMain());
+      else this.showMain();
+    };
+    window.addEventListener('keydown', go, true);
+    s.addEventListener('pointerdown', go);
+  }
+
+  // Video de intro con audio, se puede saltear
+  playIntro(url, done) {
+    const g = this.game;
+    const w = h('div', 'intro-video', document.body);
+    w.innerHTML = '<video playsinline preload="auto"></video><button class="skip">Saltar ▸</button>';
+    const v = w.querySelector('video');
+    let finished = false;
+    const end = () => {
+      if (finished) return;
+      finished = true;
+      window.removeEventListener('keydown', key, true);
+      try { v.pause(); } catch (e) { /* nada */ }
+      w.remove();
+      done();
+    };
+    const key = (e) => { if (['Escape', 'Enter', 'Space'].includes(e.code)) { e.preventDefault(); end(); } };
+    window.addEventListener('keydown', key, true);
+    w.querySelector('.skip').addEventListener('click', end);
+    v.addEventListener('ended', end);
+    v.addEventListener('error', end);
+    v.volume = clamp(g.settings.sfx + 0.2, 0.2, 1);
+    v.src = url;
+    const p = v.play();
+    if (p && p.catch) p.catch(() => { v.muted = true; v.play().catch(end); });
   }
 
   showMain() {
@@ -87,6 +138,7 @@ export class Menus {
       return;
     }
     if (a === 'options') this.openPane('options', this.main);
+    if (a === 'media') this.openPane('media', this.main);
     if (a === 'controls') this.openPane('controls', this.main);
     if (a === 'credits') this.openPane('credits', this.main);
   }
@@ -101,6 +153,7 @@ export class Menus {
       <button data-a="stats">Estadísticas</button>
       <button data-a="brief">Última misión</button>
       <button data-a="options">Opciones</button>
+      <button data-a="media">Intro y música</button>
       <button data-a="controls">Controles</button>
       <button data-a="quit">Salir al menú</button></div>
       <div class="hint">Para guardar, andá a la Casa de la Abuela (marcador verde).</div>`;
@@ -137,6 +190,7 @@ export class Menus {
     if (a === 'stats') this.openPane('stats', this.pause);
     if (a === 'brief') this.openPane('brief', this.pause);
     if (a === 'options') this.openPane('options', this.pause);
+    if (a === 'media') this.openPane('media', this.pause);
     if (a === 'controls') this.openPane('controls', this.pause);
     if (a === 'quit') {
       const r = await this.choice('¿Salir al menú principal?', ['Sí', 'No'], 'Lo que no guardaste en la Casa de la Abuela se pierde.');
@@ -172,6 +226,7 @@ export class Menus {
   openPane(kind, back) {
     const g = this.game;
     this.closePane();
+    if (back) { back.hidden = true; }
     const s = h('div', 'screen menu', document.body);
     let html = '';
     if (kind === 'controls') {
@@ -232,13 +287,28 @@ export class Menus {
     } else if (kind === 'brief') {
       const m = g.missions;
       html = `<h2>Última misión</h2><div class="pane">${m.lastBrief || 'Todavía no arrancaste ninguna misión.'}<br><br><b>Próxima:</b> ${m.nextHint()}</div>`;
+    } else if (kind === 'media') {
+      html = `<h2>Intro y música</h2><div class="pane mediapane">
+        <h4>Video de intro</h4>
+        <p class="note">Se reproduce con audio cada vez que se abre el juego. Subí el video (MP4 o WebM, hasta 20 MB): por ejemplo, el de "GTA Comodoro Rivadavia".</p>
+        <div class="mrow"><span class="mname" id="m-intro">—</span>
+          <button class="mbtn" id="m-intro-play">Ver</button><button class="mbtn" id="m-intro-del">Quitar</button>
+          <label class="mbtn up" id="m-intro-up">Subir video<input type="file" id="m-intro-file" accept="video/mp4,video/webm,video/*" hidden></label></div>
+        <h4>Novishok — música de persecución</h4>
+        <p class="note">Suenan cuando la cana te persigue con 4 estrellas o más. Subí los temas (M4A, MP4 o WebM; los MP3 también suelen andar). Mientras no haya temas, suena un thrash generado por el juego.</p>
+        <ol class="msongs" id="m-songs"></ol>
+        <div class="mrow"><label class="mbtn up" id="m-song-up">Agregar temas<input type="file" id="m-song-file" accept="audio/*,video/mp4,video/webm" multiple hidden></label></div>
+        <p class="mstatus" id="m-status" role="status"></p>
+      </div>`;
     } else if (kind === 'credits') {
       html = `<h2>Créditos</h2><div class="pane">
         <p><b>GTA: San Jorge</b> es un juego de fans, gratuito, inspirado en <i>Grand Theft Auto: San Andreas</i> (Rockstar Games, 2004). No está afiliado ni respaldado por Rockstar.</p>
         <p>El mapa es una versión libre y comprimida de <b>Comodoro Rivadavia</b>: el Cerro Chenque, el Centro, la Costanera, el Puerto, el Km 3, los barrios, Rada Tilly, Punta del Marqués y la meseta con sus cigüeñas.</p>
         <p><b>El Gordopin</b>: malabarista de semáforo e hincha del Lobo (Club Atlético Jorge Newbery). "A mí no me van a sacar nunca de la calle".</p>
         <p><b>El Petroca</b>: petrolero con guita, anteojos negros, camisa de jean y botas. "¡Buena petroca!"</p>
-        <p>Personajes, empresas y situaciones son ficticios o paródicos. Todo el sonido y la música se generan en tiempo real.</p>
+        <p><b>La radio</b>: homenaje a <b>La Ciudad Perdida</b> (1992–2016), el programa creado y conducido por <b>Santiago Sánchez</b> en la radio de Comodoro. Los textos que dice en el juego son ficción escrita en homenaje, en el espíritu del programa: humor para mirar la realidad desde otro lado. "Yo sé de qué me río".</p>
+        <p><b>Persecuciones</b>: con 4 estrellas suena <b>Novishok</b>, thrash groove comodorense (Jony Freyre, Blade Asencio, Julián Caiado y Mauro Vargas), con los temas que se suban en "Intro y música".</p>
+        <p>Personajes, empresas y situaciones son ficticios o paródicos. El resto del sonido y la música se generan en tiempo real.</p>
         <p>Hecho con Three.js. Aguante Comodoro.</p></div>`;
     }
     s.innerHTML = html + '<div class="row-btns"><button data-a="back">Volver</button></div>';
@@ -261,13 +331,79 @@ export class Menus {
       };
       s.querySelectorAll('input,select').forEach((e) => e.addEventListener('change', upd));
     }
+    if (kind === 'media') this.bindMedia(s);
     this.paneEl = s;
     this.paneBack = back;
     setTimeout(() => s.querySelector('[data-a=back]').focus(), 30);
   }
 
+  bindMedia(s) {
+    const g = this.game;
+    const M = g.media;
+    const $ = (id) => s.querySelector('#' + id);
+    const status = (t, bad) => { const e = $('m-status'); e.textContent = t; e.classList.toggle('bad', !!bad); };
+    const render = () => {
+      if (!s.isConnected) return;
+      const intro = M.intro();
+      $('m-intro').textContent = intro ? intro.name : 'Sin video (se entra directo al menú)';
+      $('m-intro-play').hidden = !intro;
+      $('m-intro-del').hidden = !(M.config.intro && M.canUpload());
+      const can = M.canUpload();
+      $('m-intro-up').hidden = !can;
+      $('m-song-up').hidden = !can;
+      const ol = $('m-songs');
+      ol.innerHTML = '';
+      const own = M.config.songs;
+      const list = own.length ? own.map((x, i) => ({ title: x.title, i })) : M.songs().map((x) => ({ title: x.title, i: -1 }));
+      if (!list.length) ol.innerHTML = '<li class="empty">Todavía no hay temas.</li>';
+      for (const it of list) {
+        const li = h('li', '', ol);
+        h('span', 'mname', li).textContent = it.title;
+        if (it.i >= 0 && can) {
+          const del = h('button', 'mbtn', li, 'Quitar');
+          del.addEventListener('click', async () => {
+            status('Quitando...');
+            try { await M.removeSong(it.i); status('Listo.'); } catch (e) { status(mediaErrorText(e), true); }
+            render();
+          });
+        }
+      }
+      if (!can) status(M.mode === 'artifact' ? 'Solo quien edita el juego puede cambiar la intro y la música.' : 'Este navegador no permite guardar archivos.');
+    };
+    render();
+    M.onChange(render);
+    $('m-intro-play').addEventListener('click', () => { const i = M.intro(); if (i) this.playIntro(i.url, () => {}); });
+    $('m-intro-del').addEventListener('click', async () => {
+      status('Quitando el video...');
+      try { await M.removeIntro(); status('Listo: ya no hay video de intro.'); } catch (e) { status(mediaErrorText(e), true); }
+      render();
+    });
+    $('m-intro-file').addEventListener('change', async (e) => {
+      const f = e.target.files && e.target.files[0];
+      e.target.value = '';
+      if (!f) return;
+      if (f.size > 20 * 1024 * 1024 && M.mode === 'artifact') { status(mediaErrorText({ code: 'too_large' }), true); return; }
+      status(`Subiendo "${f.name}"...`);
+      try { await M.setIntro(f); status('¡Listo! La próxima vez que abras el juego arranca con este video.'); } catch (err) { status(mediaErrorText(err), true); }
+      render();
+    });
+    $('m-song-file').addEventListener('change', async (e) => {
+      const files = [...(e.target.files || [])];
+      e.target.value = '';
+      let ok = 0;
+      for (const f of files) {
+        if (f.size > 20 * 1024 * 1024 && M.mode === 'artifact') { status(`"${f.name}": ${mediaErrorText({ code: 'too_large' })}`, true); continue; }
+        status(`Subiendo "${f.name}"...`);
+        try { await M.addSong(f); ok++; } catch (err) { status(`"${f.name}": ${mediaErrorText(err)}`, true); }
+      }
+      if (ok) status(`Se agregaron ${ok} tema${ok > 1 ? 's' : ''}. Van a sonar con 4 estrellas.`);
+      render();
+    });
+  }
+
   closePane() {
     if (this.paneEl) { this.paneEl.remove(); this.paneEl = null; }
+    if (this.paneBack) { this.paneBack.hidden = false; this.paneBack = null; }
   }
 
   // ---------- Diálogo de opciones ----------

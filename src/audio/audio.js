@@ -7,20 +7,47 @@ const STATIONS = [
   { name: 'Boliche FM 101.1', style: 'electro', color: '#3ae8ff' },
   { name: 'Radio Chacarera Patagónica', style: 'folk', color: '#e8d23a' },
   { name: 'Tango del Viento AM 1210', style: 'tango', color: '#e84a4a' },
-  { name: 'Radio Chenque AM 740 (charla)', style: 'talk', color: '#8aff6a' },
+  { name: 'La Ciudad Perdida — con Santiago Sánchez', style: 'talk', color: '#8aff6a' },
   { name: 'Radio apagada', style: 'off', color: '#aaaaaa' },
 ];
 
+// "La Ciudad Perdida" (1992-2016): el programa de Santiago Sánchez, humor para mirar la realidad
+// desde otro lado y criticar al poder. Estos textos son ficción escrita en homenaje.
+export const SANTIAGO = 'Santiago Sánchez';
 const TALK = [
-  'Buenas tardes Comodoro, son las noticias de Radio Chenque. Se esperan ráfagas de ciento veinte kilómetros por hora. Aten las bolsas.',
-  'El barril de petróleo sigue subiendo y en el Km 3 ya no quedan departamentos para alquilar.',
-  'Otra vez cortaron la Ruta 3 por un derrumbe en el Chenque. Se recomienda paciencia y mate.',
-  'Aviso: se perdió un perro en Rada Tilly. Responde al nombre de Viento. Obvio.',
-  'Se viene el clásico. Newbery y Huracán paralizan la ciudad este domingo.',
-  'Un oyente pregunta si el viento de hoy es normal. Sí, querido, es Comodoro.',
-  'La empresa Crudo S.A. anunció nuevas perforaciones. Los vecinos del barrio 9 de Julio están preocupados.',
-  'Estás escuchando Radio Chenque, la única radio que se escucha aunque sople el viento.',
+  'Buenas noches, Comodoro. Esto es La Ciudad Perdida. Una ciudad que se pierde todos los días un poco, sobre todo cuando sopla del Oeste.',
+  'Dicen que Comodoro es la Capital Nacional del Petróleo. Del petróleo, sí. De la capital, ni noticias.',
+  'Sección filosofía cotidiana: si una bolsa de La Anómala vuela del Km 3 a Rada Tilly, ¿cambia de barrio o cambia de clase social?',
+  'Don Crudo anunció que va a perforar donde haya petróleo. O sea, en cualquier lado donde viva alguien que no pueda pagar un abogado.',
+  'El comisario Tenpesos dice que va a limpiar el Centro. Empezó por los bolsillos de los malabaristas. Yo sé de qué me río.',
+  'Informe del tránsito: la Ruta 3 por el Chenque, cortada. Si llegás tarde al laburo, decí que fue el cerro. Es la única excusa que nadie discute.',
+  'El viento de hoy viene con ráfagas de ciento veinte. Técnicamente no es viento: es la Patagonia pidiéndote amablemente que te vayas.',
+  'Llamó un oyente del barrio 9 de Julio: pregunta si es cierto que quieren perforar La Madriguera. Tranquilo: primero tienen que encontrar el arco.',
+  'En Comodoro hay dos estaciones del año: la del viento y la de esperar que pare el viento.',
+  'El boom petrolero trajo chatas nuevas, alquileres imposibles y una pregunta filosófica: ¿se puede ser feliz con sueldo de boca de pozo? Consulten al Petroca.',
+  'Sección "el poder explicado para chicos": el poder es cuando uno decide dónde se perfora y otro tiene que decidir dónde vive. Casi nunca es la misma persona.',
+  'Nos escribe una señora de Rada Tilly: "mi hijo anda con una patota". Señora, eso no es una patota: es un club náutico con remeras violetas.',
+  'Un minuto de silencio por los paraguas de Comodoro, que murieron dignamente en cumplimiento del deber.',
+  'Estás escuchando La Ciudad Perdida: radio para leer, para pensar y para reírse de lo que haya que reírse. Y de lo otro también.',
+  'El humor no es contar chistes. El humor es mirar la realidad desde otro lado. Por ejemplo, desde arriba del Chenque, que es donde te deja la cana.',
+  'Dato científico: el comodorense camina inclinado treinta grados hacia el Oeste. No es mala postura. Es experiencia.',
+  'La Municipalidad informa que las bolsas enganchadas en los alambrados ya son patrimonio cultural. Se ruega no tocarlas.',
+  '¿Por qué los malabaristas trabajan en el semáforo? Porque es el único lugar de la ciudad donde todos, por un minuto, se quedan quietos y miran.',
+  'Pregunta del día: si el Petroca cobra el bono y lo gasta en un fin de semana en Buenos Aires, ¿el bono vuelve alguna vez al Chubut?',
+  'Hoy en el Centro, el comisario Tenpesos declaró que la seguridad está garantizada. La suya, se entiende.',
+  'A los que dicen que en Comodoro no pasa nada: acá pasa todo. Lo que pasa es que pasa volando.',
+  'Parte meteorológico: nublado en el Centro, despejado en Rada Tilly, y en el Km 8 no sabemos porque se voló el anemómetro.',
+  'Se viene el clásico Newbery–Huracán. Recomendación: no discutan en la Costanera, que el viento se lleva los argumentos.',
+  'Llegamos al final del bloque. Gracias por perderse con nosotros. Ya volvemos a perdernos. Yo sé de qué me río.',
 ];
+const BUMPERS = {
+  cumbia: ['Acá Santiago Sánchez. Les dejo cumbia, que es lo único que tapa el ruido del viento.', 'Cumbia en Comodoro: ni el temporal la para.'],
+  rock: ['Rock del Golfo. Si el rock nacional es la banda sonora de la bronca, en Comodoro tenemos para rato.', 'Subile el volumen, que afuera sopla fuerte.'],
+  electro: ['Boliche FM: para los que salen a las tres de la mañana y vuelven cuando para el viento. O sea, el martes.'],
+  folk: ['Chacarera. El único ritmo que las cigüeñas de la meseta bailan sin parar.'],
+  tango: ['Tango, porque en Comodoro también hay nostalgia. Y casi toda viene de otra provincia.'],
+  any: ['Te habla Santiago Sánchez. Seguí escuchando la radio, que afuera está peor.', 'La Ciudad Perdida, todas las noches. Perderse también es una forma de llegar.'],
+};
 
 export class Audio {
   constructor() {
@@ -275,6 +302,89 @@ export class Audio {
     } else this.siren.g.gain.setTargetAtTime(0, t, 0.1);
     // radio
     this.scheduleRadio();
+    // cortinas de Santiago Sánchez en las radios de música
+    if (this.bus && this.radioIdx >= 0 && !game.paused) {
+      const st = STATIONS[this.radioIdx];
+      if (st && st.style !== 'talk' && st.style !== 'off') {
+        this.bumperT -= dt;
+        if (this.bumperT <= 0) {
+          this.bumperT = 90 + Math.random() * 90;
+          const pool = [...(BUMPERS[st.style] || []), ...BUMPERS.any];
+          this.onTalk && this.onTalk(SANTIAGO, pool[Math.floor(Math.random() * pool.length)]);
+        }
+      }
+    }
+    if (this.chaseAudio) this.chaseGain.gain.setTargetAtTime(game.paused ? 0 : 1, t, 0.1);
+  }
+
+  // ---------- Música de persecución (4 estrellas o más): Novishok ----------
+  setChaseSongs(list) { this.chaseSongs = list || []; }
+
+  startChase() {
+    if (!this.enabled || this.chase) return;
+    this.chase = true;
+    const wanted = this.radioWanted;
+    this.stopRadio(true);
+    this.radioWanted = wanted;
+    const songs = this.chaseSongs || [];
+    if (songs.length) this.playChaseSong();
+    else {
+      // sin temas cargados: thrash generado en el momento
+      this.bus = this.ctx.createGain();
+      this.bus.gain.value = 1;
+      this.bus.connect(this.musicBus);
+      this.radioIdx = -2;
+      this.newSong({ style: 'thrash' });
+      this.nextNote = this.ctx.currentTime + 0.1;
+      this.step = 0;
+      this.onChase && this.onChase(null);
+    }
+  }
+
+  playChaseSong() {
+    const songs = this.chaseSongs || [];
+    if (!songs.length || !this.chase) return;
+    this.chaseIdx = this.chaseIdx === undefined ? Math.floor(Math.random() * songs.length) : (this.chaseIdx + 1) % songs.length;
+    const s = songs[this.chaseIdx];
+    const el = new window.Audio();
+    el.src = s.url;
+    el.preload = 'auto';
+    const src = this.ctx.createMediaElementSource(el);
+    const g = this.ctx.createGain();
+    g.gain.value = 0.0001;
+    g.gain.setTargetAtTime(1, this.ctx.currentTime, 0.4);
+    src.connect(g).connect(this.musicBus);
+    this.chaseAudio = el; this.chaseGain = g;
+    el.onended = () => { this.releaseChaseAudio(); if (this.chase) this.playChaseSong(); };
+    el.onerror = () => { this.releaseChaseAudio(); if (this.chase && songs.length > 1 && !this.chaseFailed) { this.chaseFailed = true; this.playChaseSong(); } };
+    const p = el.play();
+    if (p && p.catch) p.catch(() => {});
+    this.onChase && this.onChase(s.title);
+  }
+
+  releaseChaseAudio() {
+    if (!this.chaseAudio) return;
+    const el = this.chaseAudio, g = this.chaseGain;
+    this.chaseAudio = null; this.chaseGain = null;
+    try { g.gain.setTargetAtTime(0, this.ctx.currentTime, 0.5); } catch (e) { /* nada */ }
+    setTimeout(() => { try { el.pause(); el.removeAttribute('src'); el.load(); g.disconnect(); } catch (e) { /* nada */ } }, 1800);
+  }
+
+  // Pausa del juego: la música de persecución también se detiene
+  setPaused(p) {
+    if (this.pausedFlag === p) return;
+    this.pausedFlag = p;
+    if (this.chaseAudio) { if (p) this.chaseAudio.pause(); else { const q = this.chaseAudio.play(); if (q && q.catch) q.catch(() => {}); } }
+    if (this.chase && this.bus && this.radioIdx === -2) this.bus.gain.setTargetAtTime(p ? 0 : 1, this.ctx.currentTime, 0.05);
+  }
+
+  stopChase() {
+    if (!this.chase) return;
+    this.chase = false;
+    this.chaseFailed = false;
+    this.releaseChaseAudio();
+    if (this.radioIdx === -2) this.stopRadio(true);
+    if (this.radioWanted >= 0) this.startRadio(this.radioWanted);
   }
 
   // ---------- Radios procedurales ----------
@@ -283,8 +393,11 @@ export class Audio {
 
   startRadio(i) {
     if (!this.enabled) return;
-    this.stopRadio();
+    this.radioWanted = i;
+    if (this.chase) return; // durante la persecución suena Novishok
+    this.stopRadio(true);
     this.radioIdx = i;
+    this.bumperT = 60 + Math.random() * 60;
     const st = STATIONS[i];
     if (!st || st.style === 'off') return;
     // estática al sintonizar
@@ -298,7 +411,8 @@ export class Audio {
     if (st.style === 'talk') this.talk();
   }
 
-  stopRadio() {
+  stopRadio(keepWanted = false) {
+    if (!keepWanted) this.radioWanted = -1;
     if (this.bus) {
       const b = this.bus;
       b.gain.setTargetAtTime(0, this.ctx.currentTime, 0.05);
@@ -322,6 +436,7 @@ export class Audio {
     if (st.style === 'folk') { s.bpm = r.range(58, 68); s.root = 45 + r.int(0, 4); s.scale = minor; s.prog = [0, 3, 4, 0]; s.sub = 6; }
     if (st.style === 'tango') { s.bpm = r.range(112, 122); s.root = 43 + r.int(0, 5); s.scale = minor; s.prog = r.pick([[0, 4, 4, 0], [0, 3, 4, 0], [0, 5, 3, 4]]); s.sub = 4; }
     if (st.style === 'talk') { s.bpm = 90; s.root = 48; s.scale = major; s.prog = [0, 3, 4, 0]; s.sub = 4; }
+    if (st.style === 'thrash') { s.bpm = r.range(168, 186); s.root = 40; s.scale = [0, 1, 3, 5, 7, 8, 10]; s.prog = r.pick([[0, 0, 1, 0], [0, 5, 0, 6], [0, 0, 6, 5]]); s.sub = 4; s.bars = 64; }
     // motivo melódico de 2 compases
     s.motif = [];
     for (let i = 0; i < 16; i++) s.motif.push(r.chance(st.style === 'tango' ? 0.75 : 0.6) ? r.int(0, 9) : null);
@@ -439,7 +554,7 @@ export class Audio {
       const r = s.r;
       const intro = bar < 2;
       if (bar >= s.bars) {
-        this.newSong(STATIONS[this.radioIdx]);
+        this.newSong(this.radioIdx === -2 ? { style: 'thrash' } : STATIONS[this.radioIdx]);
         this.step = 0;
         this.nextNote += spb * 2;
         this.jingle(this.nextNote - spb * 1.8);
@@ -496,6 +611,28 @@ export class Audio {
         }
         if (st === 14 && bar % 2 === 1) this.inst('bass', t, root - 13, spb * 0.2, 0.7);
         if (!intro && mel !== null && st % 2 === 0) this.inst('bandoneon', t, this.deg(s, mel, 1), stepDur * (st % 4 === 0 ? 2.8 : 1.6), 1);
+      } else if (s.style === 'thrash') {
+        // thrash groove: doble bombo, chugs apagados con palma y galope
+        const section = Math.floor(bar / 4) % 4;
+        const riff = [0, 0, 1, 0, 0, 3, 0, 1, 0, 0, 6, 0, 0, 5, 3, 1];
+        if (section === 2) { // medio tiempo, groove
+          if (st === 0 || st === 6 || st === 10) this.drum('kick', t, 1);
+          if (st === 8) this.drum('snare', t, 1.1);
+          if (st % 4 === 0) this.drum('ohat', t, 0.6);
+          if (st === 0 || st === 3 || st === 6 || st === 10 || st === 12) this.inst('power', t, root - 12 + (st === 12 ? 1 : 0), stepDur * 2.5, 1);
+          if (st === 0 || st === 6 || st === 10) this.inst('bass', t, root - 24, stepDur * 2);
+        } else {
+          this.drum('kick', t, st % 2 ? 0.75 : 1);
+          if (st === 4 || st === 12) this.drum('snare', t, 1.1);
+          if (st % 2 === 0) this.drum('hat', t, 0.6);
+          if (st === 0 && bar % 4 === 0) this.drum('ohat', t, 1);
+          const gallop = section === 1 ? (st % 4 !== 1) : true;
+          if (gallop) {
+            const n = root - 12 + (section === 3 ? riff[st] : (st % 4 === 0 ? riff[(st + bar) % 16] : 0));
+            this.inst('power', t, n, stepDur * 0.7, st % 4 === 0 ? 1 : 0.65);
+          }
+          if (st % 2 === 0) this.inst('bass', t, root - 24 + (section === 3 ? riff[st] : 0), stepDur * 0.9);
+        }
       } else if (s.style === 'talk') {
         // música de fondo muy suave
         if (st === 0) this.inst('piano', t, root, spb * 3, 0.25);
@@ -513,8 +650,9 @@ export class Audio {
 
   talk() {
     if (this.radioIdx < 0 || STATIONS[this.radioIdx].style !== 'talk') return;
-    const line = TALK[Math.floor(Math.random() * TALK.length)];
-    this.onTalk && this.onTalk(line);
+    this.talkIdx = ((this.talkIdx === undefined ? Math.floor(Math.random() * TALK.length) : this.talkIdx) + 1) % TALK.length;
+    const line = TALK[this.talkIdx];
+    this.onTalk && this.onTalk(SANTIAGO, line);
     if (this.useTTS && window.speechSynthesis) {
       try {
         const u = new SpeechSynthesisUtterance(line);
@@ -522,7 +660,7 @@ export class Audio {
         window.speechSynthesis.speak(u);
       } catch (e) { /* sin voz */ }
     }
-    this.talkTimer = setTimeout(() => this.talk(), 11000 + Math.random() * 6000);
+    this.talkTimer = setTimeout(() => this.talk(), 12000 + Math.random() * 6000);
   }
 
   speak(text, pitch = 1, rate = 1.05) {

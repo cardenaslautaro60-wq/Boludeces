@@ -86,6 +86,7 @@ export class HUD {
     this.toast = el('div', 'hud-toast', root);
     this.charTag = el('div', 'hud-char', root);
     this.prompt = el('div', 'hud-prompt', root);
+    this.radioCap = el('div', 'hud-radiocap', root);
     this.timers = {};
     this.helpQueue = [];
     this.lastWeapon = null;
@@ -165,6 +166,12 @@ export class HUD {
     this.bigT = dur;
   }
   missionTitle(text, dur = 4) { this.title.textContent = text; this.title.classList.add('show'); this.titleT = dur; }
+  // Lo que dice el locutor de la radio (abajo, chiquito, como un subtítulo)
+  radioCaption(who, text, dur = 7) {
+    this.radioCap.innerHTML = `<b>📻 ${who}:</b> ${text}`;
+    this.radioCap.classList.add('show');
+    this.radioCapT = dur;
+  }
   showToast(text, dur = 3) { this.toast.innerHTML = text; this.toast.classList.add('show'); this.toastT = dur; }
   letterbox(on) { this.bars.classList.toggle('on', !!on); this.root.classList.toggle('cinema', !!on); }
   fadeTo(black, dur = 0.6) {
@@ -228,6 +235,7 @@ export class HUD {
     this.cross.classList.toggle('show', !!p.aiming);
     // temporizadores de texto
     const tick = (k, elx) => { if (this[k] > 0) { this[k] -= dt; if (this[k] <= 0) elx.classList.remove('show'); } };
+    tick('radioCapT', this.radioCap);
     tick('helpT', this.help); tick('subT', this.sub); tick('bigT', this.big); tick('titleT', this.title); tick('toastT', this.toast);
     if (!(this.bigT > 0)) this.bigSub.classList.remove('show');
     this.charTag.textContent = g.playerName ? g.playerName() : '';

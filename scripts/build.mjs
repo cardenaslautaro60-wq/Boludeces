@@ -25,7 +25,7 @@ function single(full, outPath) {
   const css = readFileSync('src/style.css', 'utf8');
   const js = readFileSync('build/game.js', 'utf8').replace(/<\/script/gi, '<\\/script');
   const body = html.slice(html.indexOf('<body>') + 6, html.indexOf('</body>'))
-    .replace(/<script src="build\/game\.js"><\/script>/, '');
+    .replace(/<script src="build\/game\.js"><\/script>/, '').replace(/<script src="media\/medios\.js"><\/script>/, '');
   const fonts = (html.match(/<link[^>]+fonts\.googleapis[^>]+>/g) || []).join('\n');
   const title = (html.match(/<title>[^<]*<\/title>/) || [''])[0];
   const inner = `${fonts}\n<style>\n${css}\n</style>\n${body}\n<script>\n${js}\n</script>\n`;
@@ -45,7 +45,7 @@ async function artifact(outPath) {
   const cdn = `https://cdn.jsdelivr.net/npm/three@${pkg.version}`;
   const html = readFileSync('index.html', 'utf8');
   const css = readFileSync('src/style.css', 'utf8');
-  const body = html.slice(html.indexOf('<body>') + 6, html.indexOf('</body>')).replace(/<script src="build\/game\.js"><\/script>/, '');
+  const body = html.slice(html.indexOf('<body>') + 6, html.indexOf('</body>')).replace(/<script src="build\/game\.js"><\/script>/, '').replace(/<script src="media\/medios\.js"><\/script>/, '');
   const fonts = (html.match(/<link[^>]+fonts\.googleapis[^>]+>/g) || []).join('\n');
   const title = (html.match(/<title>[^<]*<\/title>/) || [''])[0];
   const importmap = JSON.stringify({ imports: { three: `${cdn}/build/three.module.min.js`, 'three/': `${cdn}/` } });

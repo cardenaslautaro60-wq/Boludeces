@@ -5,7 +5,8 @@ import { WORLD, POI, SPAWNS } from '../world/mapdata.js';
 import { Effects } from '../render/effects.js';
 import { Post } from '../render/post.js';
 import { Ped, sayLine, PED_LINES } from '../entities/ped.js';
-import { Vehicle, VTYPES } from '../entities/vehicle.js';
+import { Vehicle, VTYPES, carMaterials } from '../entities/vehicle.js';
+import { makeEnvMap } from '../entities/carmodels.js';
 import { LOOKS, randomLook } from '../entities/humanoid.js';
 import { CameraRig } from './camera.js';
 import { PlayerController } from './player.js';
@@ -23,6 +24,7 @@ import { Input } from '../ui/input.js';
 import { Menus } from '../ui/menus.js';
 import { Touch } from '../ui/touch.js';
 import { Audio } from '../audio/audio.js';
+import { MediaLibrary } from '../media/media.js';
 import { clamp, pick, rand, dist, safeStorageGet, safeStorageSet } from '../util.js';
 
 export class Game {
@@ -49,6 +51,8 @@ export class Game {
   saveSettings() { safeStorageSet('gtasj-settings', JSON.stringify(this.settings)); }
 
   async init(progress) {
+    this.media = new MediaLibrary();
+    this.mediaReady = this.media.init().catch(() => {});
     const canvas = document.createElement('canvas');
     canvas.className = 'game';
     document.body.prepend(canvas);
@@ -59,6 +63,7 @@ export class Game {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(62, 1, 0.3, 1400);
     this.env = new Environment(this.scene, renderer);
+    carMaterials().setEnv(makeEnvMap(renderer), 1.0);
     this.post = new Post(renderer);
     this.onResize();
     window.addEventListener('resize', () => this.onResize());
@@ -85,7 +90,14 @@ export class Game {
     this.touch = new Touch(this);
     this.input.onType = (s) => this.cheats.check(s);
     if (this.touch.enabled) { this.traffic.max = 10; this.traffic.maxParked = 8; this.population.max = 12; }
-    this.audio.onTalk = (line) => { if (this.player && this.player.vehicle) this.hud.showToast(`<small>📻 ${line}</small>`, 5); };
+    this.audio.onTalk = (who, line) => { if (this.player && this.player.vehicle && !this.paused) this.hud.radioCaption(who, line, 8); };
+    this.audio.onChase = (title) => {
+      this.hud.radio.style.color = '#ff4a2a';
+      this.hud.radio.textContent = title ? `🤘 Novishok — ${title}` : '🤘 Persecución';
+      this.hud.radio.classList.remove('show'); void this.hud.radio.offsetWidth; this.hud.radio.classList.add('show');
+    };
+    this.media.onChange(() => this.audio.setChaseSongs(this.media.songs()));
+    this.audio.setChaseSongs(this.media.songs());
     this.applySettings();
     progress(0.95, 'Casi listo...');
     this.createCharacters();
@@ -350,6 +362,7 @@ export class Game {
     this.input.pollPad();
     if (this.menus) this.menus.update(dt);
     if (this.touch) this.touch.update();
+    this.audio.setPaused(this.paused || !this.started);
     if (!this.paused && this.started) this.update(dt);
     else if (this.menus && this.menus.attract) this.attract(dt);
     this.render();
@@ -412,6 +425,9 @@ export class Game {
       const pp = p.vehicle ? p.vehicle.pos : p.pos;
       this.hud.showZone(this.world.zoneAt(pp.x, pp.z));
     }
+    // música de persecución: con 4 estrellas o más suena Novishok
+    if (this.police.level >= 4) { this.chaseOffT = 0; if (!this.audio.chase) this.audio.startChase(); }
+    else if (this.audio.chase) { this.chaseOffT = (this.chaseOffT || 0) + dt; if (this.chaseOffT > 3) this.audio.stopChase(); }
     this.cameraRig.update(dt, this.input);
     this.hud.update(dt);
     this.audio.update(dt, this);
@@ -424,6 +440,9 @@ export class Game {
     const e = clamp((n - 0.25) * 1.6, 0, 1);
     mats.office.emissiveIntensity = e * 0.9;
     mats.house.emissiveIntensity = e * 0.8;
+    const cm = carMaterials();
+    cm.setLights(e);
+    cm.setEnvIntensity(0.25 + this.env.dayLight * 0.8);
     // carteles un poco apagados de noche
   }
 

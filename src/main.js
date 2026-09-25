@@ -65,7 +65,10 @@ async function start(data = {}) {
     const wake = () => { game.audio.init(); window.removeEventListener('pointerdown', wake); window.removeEventListener('keydown', wake); };
     window.addEventListener('pointerdown', wake);
     window.addEventListener('keydown', wake);
-  } else game.menus.showMain();
+  } else {
+    await Promise.race([game.mediaReady, new Promise((r) => setTimeout(r, 5000))]);
+    game.menus.showStart();
+  }
   game.ready = true;
 }
 

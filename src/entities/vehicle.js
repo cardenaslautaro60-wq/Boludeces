@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GeoBuilder, hexColor } from '../world/geom.js';
+import { buildCarModel, CarMaterials } from './carmodels.js';
 import { clamp, lerp, approach, angleWrap, rand, pick } from '../util.js';
 
 // Tipos de vehículos (parodias de los autos de la Argentina de los 2000)
@@ -23,184 +23,12 @@ export const VTYPES = {
 
 // ---------- Construcción de modelos ----------
 const geoCache = new Map();
-
 function buildModel(key) {
-  if (geoCache.has(key)) return geoCache.get(key);
-  const T = VTYPES[key];
-  const paint = new GeoBuilder(), det = new GeoBuilder(), glassB = new GeoBuilder();
-  const P = [1, 1, 1];
-  const glass = hexColor(0x1e2a36), dark = hexColor(0x1c1c1e), chrome = hexColor(0xb8bcc0);
-  const head = hexColor(0xfff4c8), tail = hexColor(0xc81c10), plate = hexColor(0xf2f2f2), rubber = hexColor(0x222222);
-  const L = T.L, W = T.W, H = T.H;
-  const hl = L / 2, hw = W / 2;
-  let wheelR = 0.33, wheels = [], seats = [], lightsF = [], lightsR = [], camH = H;
-  // prisma de cabina (base z0..z1, techo t0..t1)
-  const cabin = (y0, y1, z0, z1, t0, t1, w0, w1, roofCol = P) => {
-    const a = [[-w0, y0, z0], [w0, y0, z0], [w0, y0, z1], [-w0, y0, z1]];
-    const b = [[-w1, y1, t0], [w1, y1, t0], [w1, y1, t1], [-w1, y1, t1]];
-    // frente (parabrisas), atrás y laterales: vidrio semitransparente
-    for (const G of [glassB]) {
-      G.quad(a[3], a[2], b[2], b[3], [0, 0], [1, 0], [1, 1], [0, 1], glass);
-      G.quad(a[1], a[0], b[0], b[1], [0, 0], [1, 0], [1, 1], [0, 1], glass);
-      G.quad(a[2], a[1], b[1], b[2], [0, 0], [1, 0], [1, 1], [0, 1], glass);
-      G.quad(a[0], a[3], b[3], b[0], [0, 0], [1, 0], [1, 1], [0, 1], glass);
-    }
-    // techo
-    paint.quad(b[3], b[2], b[1], b[0], [0, 0], [1, 0], [1, 1], [0, 1], roofCol);
-    // parantes
-    for (const s of [-1, 1]) {
-      paint.quad([s * w0 * 1.005, y0, z1], [s * w0 * 1.005, y0, z1 - 0.12], [s * w1 * 1.005, y1, t1 - 0.12], [s * w1 * 1.005, y1, t1], [0, 0], [1, 0], [1, 1], [0, 1], P);
-    }
-  };
-  const lamps = (yF, yR, zF, zR, wx) => {
-    for (const s of [-1, 1]) {
-      det.box(s * wx - 0.17, s * wx + 0.17, yF - 0.08, yF + 0.08, zF - 0.02, zF + 0.04, head);
-      det.box(s * wx - 0.15, s * wx + 0.15, yR - 0.07, yR + 0.07, zR - 0.04, zR + 0.02, tail);
-      lightsF.push([s * wx, yF, zF + 0.1]);
-      lightsR.push([s * wx, yR, zR - 0.1]);
-    }
-    det.box(-0.25, 0.25, yR - 0.25, yR - 0.1, zR - 0.05, zR, plate);
-  };
-  if (T.style === 'sedan' || T.style === 'hatch' || T.style === 'tiny') {
-    const y0 = 0.28, y1 = T.style === 'tiny' ? 0.85 : 0.88;
-    paint.box(-hw, hw, y0, y1, -hl, hl, P, 4, 3);
-    // trompa inclinada
-    det.box(-hw * 0.96, hw * 0.96, y0, y0 + 0.18, hl, hl + 0.08, T.style === 'tiny' ? chrome : dark);
-    det.box(-hw * 0.96, hw * 0.96, y0, y0 + 0.18, -hl - 0.08, -hl, T.style === 'tiny' ? chrome : dark);
-    det.box(-hw * 0.5, hw * 0.5, y0 + 0.25, y1 - 0.08, hl, hl + 0.02, dark);
-    if (T.style === 'sedan') cabin(y1, H, -hl * 0.55, hl * 0.25, -hl * 0.42, hl * 0.02, hw * 0.93, hw * 0.82);
-    if (T.style === 'hatch') cabin(y1, H, -hl * 0.92, hl * 0.28, -hl * 0.8, hl * 0.02, hw * 0.93, hw * 0.82);
-    if (T.style === 'tiny') cabin(y1, H, -hl * 0.6, hl * 0.35, -hl * 0.45, hl * 0.12, hw * 0.93, hw * 0.8);
-    lamps(0.68, 0.7, hl, -hl, hw * 0.68);
-    wheelR = T.style === 'tiny' ? 0.27 : 0.32;
-    wheels = [[hw - 0.1, wheelR, hl * 0.66], [-hw + 0.1, wheelR, hl * 0.66], [hw - 0.1, wheelR, -hl * 0.64], [-hw + 0.1, wheelR, -hl * 0.64]];
-    seats = [[0.38, 0.35, -0.05], [-0.38, 0.35, -0.05], [0.38, 0.35, -1.0], [-0.38, 0.35, -1.0]];
-    if (T.police) {
-      det.box(-0.6, 0.6, H, H + 0.14, -0.15, 0.15, dark);
-      // franja
-      for (const s of [-1, 1]) det.box(s * hw - 0.01, s * hw + 0.01, 0.5, 0.66, -hl * 0.9, hl * 0.9, hexColor(0x1d3f8f));
-    }
-    if (T.sign) {
-      det.box(-0.35, 0.35, H, H + 0.25, -0.2, 0.1, hexColor(0x1a6b2a));
-    }
-  } else if (T.style === 'pickup') {
-    const y0 = 0.45, y1 = 1.1;
-    paint.box(-hw, hw, y0, y1, -hl, hl, P, 4, 3);
-    const cabZ0 = -hl * 0.12, cabZ1 = hl * 0.45;
-    cabin(y1, H, cabZ0, cabZ1, cabZ0 + 0.05, cabZ1 - 0.45, hw * 0.94, hw * 0.86);
-    // caja
-    det.box(-hw * 0.95, hw * 0.95, y1 - 0.02, y1, -hl + 0.1, cabZ0 - 0.05, dark);
-    det.box(-0.8, 0.8, y0 + 0.2, y1 - 0.1, hl, hl + 0.06, dark);
-    det.box(-hw * 1.02, hw * 1.02, y0 - 0.05, y0 + 0.15, hl + 0.02, hl + 0.14, chrome);
-    det.box(-hw * 1.02, hw * 1.02, y0 - 0.05, y0 + 0.15, -hl - 0.14, -hl - 0.02, chrome);
-    // hueco de la caja (paredes)
-    paint.box(-hw, -hw + 0.08, y1, y1 + 0.35, -hl, cabZ0, P);
-    paint.box(hw - 0.08, hw, y1, y1 + 0.35, -hl, cabZ0, P);
-    paint.box(-hw, hw, y1, y1 + 0.35, -hl, -hl + 0.08, P);
-    if (T.key !== 'f100') det.box(-hw * 0.5, hw * 0.5, H, H + 0.06, cabZ0 + 0.2, cabZ1 - 0.6, dark); // barra antivuelco / baca
-    lamps(0.9, 0.95, hl + 0.02, -hl, hw * 0.7);
-    wheelR = 0.42;
-    wheels = [[hw - 0.12, wheelR, hl * 0.62], [-hw + 0.12, wheelR, hl * 0.62], [hw - 0.12, wheelR, -hl * 0.6], [-hw + 0.12, wheelR, -hl * 0.6]];
-    seats = [[0.4, 0.55, 0.45], [-0.4, 0.55, 0.45], [0.45, 1.15, -1.2], [-0.45, 1.15, -1.8]];
-    if (T.flag) {
-      // antena látigo con banderín naranja (típico de las chatas de las petroleras)
-      det.box(-hw + 0.05, -hw + 0.1, y1, y1 + 3.2, -hl + 0.3, -hl + 0.35, hexColor(0x333333));
-      det.box(-hw + 0.1, -hw + 0.1 + 0.02, y1 + 2.8, y1 + 3.2, -hl + 0.35, -hl + 0.85, hexColor(0xf26a1b));
-      for (const s of [-1, 1]) det.box(s * hw - 0.01, s * hw + 0.01, 0.75, 0.95, -0.2, 0.9, hexColor(0xf26a1b));
-    }
-  } else if (T.style === 'bus') {
-    paint.box(-hw, hw, 0.45, H, -hl, hl, P, 4, 3);
-    det.box(-hw - 0.01, hw + 0.01, 1.5, 2.5, -hl + 0.5, hl - 1.2, glass);
-    det.box(-hw * 0.95, hw * 0.95, 1.1, 2.7, hl, hl + 0.02, glass);
-    det.box(-hw, hw, 0.35, 0.6, -hl - 0.05, hl + 0.05, dark);
-    det.box(-hw * 0.9, hw * 0.9, 2.75, 3.0, hl, hl + 0.03, hexColor(0x111111));
-    lamps(0.8, 0.9, hl + 0.01, -hl, hw * 0.75);
-    wheelR = 0.5;
-    wheels = [[hw - 0.2, wheelR, hl * 0.62], [-hw + 0.2, wheelR, hl * 0.62], [hw - 0.2, wheelR, -hl * 0.55], [-hw + 0.2, wheelR, -hl * 0.55]];
-    seats = [[0.7, 0.9, hl - 1.3], [-0.6, 0.9, 1.0], [0.6, 0.9, -1], [-0.6, 0.9, -2.5]];
-    camH = 3.5;
-  } else if (T.style === 'tanker') {
-    const cabL = 2.4;
-    paint.box(-hw, hw, 0.6, 2.0, hl - cabL, hl, P);
-    cabin(2.0, 3.1, hl - cabL + 0.1, hl - 0.3, hl - cabL + 0.1, hl - 0.6, hw * 0.96, hw * 0.92, P);
-    det.box(-hw, hw, 0.5, 0.8, -hl, hl - cabL, dark);
-    // tanque
-    const tank = hexColor(0xd8d8d4);
-    for (let k = 0; k < 12; k++) {
-      const a0 = (k / 12) * Math.PI * 2, a1 = ((k + 1) / 12) * Math.PI * 2;
-      const r = 1.15, cy = 2.0, z0 = -hl + 0.1, z1 = hl - cabL - 0.2;
-      const p = (a, z) => [Math.cos(a) * r, cy + Math.sin(a) * r, z];
-      det.quad(p(a0, z0), p(a1, z0), p(a1, z1), p(a0, z1), [0, 0], [1, 0], [1, 1], [0, 1], tank);
-      det.tri([0, cy, z1], p(a0, z1), p(a1, z1), [0, 0, 1], [0, 0], [1, 0], [1, 1], tank);
-      det.tri([0, cy, z0], p(a1, z0), p(a0, z0), [0, 0, -1], [0, 0], [1, 0], [1, 1], tank);
-    }
-    for (const s of [-1, 1]) det.box(s * 1.16 - 0.01, s * 1.16 + 0.01, 1.8, 2.2, -hl + 0.5, hl - cabL - 0.6, hexColor(0xe8c020));
-    lamps(1.0, 1.0, hl + 0.01, -hl, hw * 0.75);
-    wheelR = 0.52;
-    wheels = [[hw - 0.2, wheelR, hl - 1.2], [-hw + 0.2, wheelR, hl - 1.2], [hw - 0.2, wheelR, -hl + 1.4], [-hw + 0.2, wheelR, -hl + 1.4], [hw - 0.2, wheelR, -hl + 2.6], [-hw + 0.2, wheelR, -hl + 2.6]];
-    seats = [[0.55, 1.3, hl - 1.2], [-0.55, 1.3, hl - 1.2]];
-    camH = 3.6;
-  } else if (T.style === 'bike') {
-    // cuadro de BMX
-    const tube = (x0, y0, z0, x1, y1, z1, col) => {
-      const steps = 4;
-      for (let k = 0; k < steps; k++) {
-        const t0 = k / steps, t1 = (k + 1) / steps;
-        const ya = y0 + (y1 - y0) * t0, yb = y0 + (y1 - y0) * t1, za = z0 + (z1 - z0) * t0, zb = z0 + (z1 - z0) * t1;
-        col.box(-0.035, 0.035, Math.min(ya, yb) - 0.035, Math.max(ya, yb) + 0.035, Math.min(za, zb) - 0.035, Math.max(za, zb) + 0.035, P);
-      }
-    };
-    tube(0, 0.33, -0.1, 0, 0.72, 0.5, paint);   // caño inferior
-    tube(0, 0.72, -0.25, 0, 0.74, 0.5, paint);  // caño superior
-    tube(0, 0.33, -0.1, 0, 0.72, -0.25, paint); // caño del asiento
-    tube(0, 0.33, -0.1, 0, 0.3, -0.6, paint);   // vainas
-    det.box(-0.03, 0.03, 0.3, 0.95, 0.52, 0.58, hexColor(0x333333)); // horquilla
-    det.box(-0.32, 0.32, 0.93, 0.98, 0.5, 0.56, hexColor(0x222222)); // manubrio
-    det.box(-0.09, 0.09, 0.76, 0.82, -0.36, -0.14, hexColor(0x111111)); // asiento
-    det.box(-0.12, 0.12, 0.3, 0.36, -0.14, -0.06, hexColor(0x777777)); // pedales
-    wheelR = 0.3;
-    wheels = [[0, wheelR, 0.6], [0, wheelR, -0.6]];
-    seats = [[0, 0.17, -0.25]];
-    camH = 1.6;
-  } else if (T.style === 'moto') {
-    paint.box(-0.18, 0.18, 0.55, 0.85, -0.3, 0.55, P);
-    paint.box(-0.12, 0.12, 0.75, 0.95, -0.75, -0.2, P);
-    det.box(-0.2, 0.2, 0.35, 0.6, -0.2, 0.35, dark);
-    det.box(-0.35, 0.35, 1.05, 1.09, 0.6, 0.64, chrome);
-    det.box(-0.03, 0.03, 0.45, 1.05, 0.62, 0.72, chrome);
-    det.box(-0.1, 0.1, 0.9, 1.0, 0.7, 0.78, head);
-    lightsF.push([0, 0.95, 0.8]); lightsR.push([0, 0.9, -0.8]);
-    wheelR = 0.36;
-    wheels = [[0, wheelR, 0.75], [0, wheelR, -0.72]];
-    seats = [[0, 0.25, -0.25], [0, 0.35, -0.7]];
-    camH = 1.7;
-  }
-  // rueda
-  const wgeo = new THREE.CylinderGeometry(wheelR, wheelR, T.bike ? 0.12 : 0.24, 10);
-  wgeo.rotateZ(Math.PI / 2);
-  const wcol = new Float32Array(wgeo.attributes.position.count * 3);
-  for (let i = 0; i < wgeo.attributes.position.count; i++) {
-    const x = Math.abs(wgeo.attributes.position.getX(i));
-    const r = Math.hypot(wgeo.attributes.position.getY(i), wgeo.attributes.position.getZ(i));
-    const c = x > 0.05 && r < wheelR * 0.6 ? chrome : rubber;
-    wcol.set(c, i * 3);
-  }
-  wgeo.setAttribute('color', new THREE.BufferAttribute(wcol, 3));
-  const res = { paint: paint.toGeometry(), det: det.toGeometry(), glass: glassB.count ? glassB.toGeometry() : null, wheel: wgeo, wheels, wheelR, seats, lightsF, lightsR, camH };
-  geoCache.set(key, res);
-  return res;
+  if (!geoCache.has(key)) geoCache.set(key, buildCarModel(key, VTYPES[key]));
+  return geoCache.get(key);
 }
-
-const vcMat = new THREE.MeshLambertMaterial({ vertexColors: true });
-const glassMat = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false });
-const paintCache = new Map();
-function paintMat(color) {
-  if (paintCache.has(color)) return paintCache.get(color);
-  const m = new THREE.MeshLambertMaterial({ vertexColors: true, color });
-  paintCache.set(color, m);
-  return m;
-}
-const burntMat = new THREE.MeshLambertMaterial({ vertexColors: true, color: 0x2a2624 });
+let MATS = null;
+export function carMaterials() { if (!MATS) MATS = new CarMaterials(); return MATS; }
 
 const tmpV = new THREE.Vector3();
 const tmpN = new THREE.Vector3();
@@ -215,19 +43,24 @@ export class Vehicle {
     this.type.key = key;
     this.color = opts.color !== undefined ? opts.color : pick(this.type.colors);
     this.model = buildModel(key);
+    const M = carMaterials();
+    this.mats = M;
     this.group = new THREE.Group();
     this.body = new THREE.Group();
     this.group.add(this.body);
-    this.paintMesh = new THREE.Mesh(this.model.paint, paintMat(this.color));
-    this.detMesh = new THREE.Mesh(this.model.det, vcMat);
+    this.paintMesh = new THREE.Mesh(this.model.paint, M.paint(this.color));
+    this.detMesh = new THREE.Mesh(this.model.detail, M.detail);
     this.body.add(this.paintMesh, this.detMesh);
+    if (this.model.chrome) { this.chromeMesh = new THREE.Mesh(this.model.chrome, M.chrome); this.body.add(this.chromeMesh); }
     if (this.model.glass) {
-      this.glassMesh = new THREE.Mesh(this.model.glass, glassMat);
+      this.glassMesh = new THREE.Mesh(this.model.glass, M.glass);
       this.glassMesh.renderOrder = 5;
       this.body.add(this.glassMesh);
     }
+    for (const m of [this.paintMesh, this.detMesh, this.chromeMesh]) if (m) m.castShadow = true;
     this.wheels = this.model.wheels.map(([x, y, z]) => {
-      const w = new THREE.Mesh(this.model.wheel, vcMat);
+      const w = new THREE.Mesh(this.model.wheel, M.wheel);
+      w.castShadow = true;
       w.position.set(x, y, z);
       w.rotation.order = 'YXZ';
       this.group.add(w);
@@ -243,8 +76,8 @@ export class Vehicle {
     if (this.type.police) {
       this.sirenR = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.16, 0.25), new THREE.MeshBasicMaterial({ color: 0x400000 }));
       this.sirenB = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.16, 0.25), new THREE.MeshBasicMaterial({ color: 0x000040 }));
-      this.sirenR.position.set(0.32, this.type.H + 0.15, 0);
-      this.sirenB.position.set(-0.32, this.type.H + 0.15, 0);
+      this.sirenR.position.set(0.3, this.type.H + 0.16, this.model.roofZ);
+      this.sirenB.position.set(-0.3, this.type.H + 0.16, this.model.roofZ);
       this.body.add(this.sirenR, this.sirenB);
     }
     this.pos = new THREE.Vector3(opts.x || 0, 0, opts.z || 0);
@@ -278,6 +111,11 @@ export class Vehicle {
     this.group.rotation.order = 'YXZ';
     game.scene.add(this.group);
     this.updateVisual(0);
+  }
+
+  setColor(c) {
+    this.color = c;
+    if (!this.dead) this.paintMesh.material = this.mats.paint(c);
   }
 
   get speed() { return Math.hypot(this.vx, this.vz); }
@@ -316,8 +154,9 @@ export class Vehicle {
     if (this.dead) return;
     this.dead = true;
     this.health = 0;
-    this.paintMesh.material = burntMat;
-    this.detMesh.material = burntMat;
+    this.paintMesh.material = this.mats.burnt;
+    this.detMesh.material = this.mats.burnt;
+    if (this.chromeMesh) this.chromeMesh.material = this.mats.burnt;
     if (this.glassMesh) this.glassMesh.visible = false;
     this.vy = 6;
     this.angVel += rand(-2, 2);

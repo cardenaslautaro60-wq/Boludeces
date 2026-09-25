@@ -188,14 +188,7 @@ export class Activities {
   updateBody() {
     const g = this.game;
     // el cuerpo del Gordopin cambia con la grasa y el músculo (como CJ)
-    const m = g.gordopin.model;
-    const f = g.stats.fat / 100, mu = g.stats.muscle / 100;
-    const w = 0.85 + f * 0.35 + mu * 0.15;
-    m.torso.scale.set(w, 1, 0.85 + f * 0.4);
-    m.armL.scale.set(0.9 + mu * 0.4 + f * 0.2, 1, 0.9 + mu * 0.4 + f * 0.2);
-    m.armR.scale.copy(m.armL.scale);
-    m.legL.scale.set(0.9 + f * 0.25, 1, 0.9 + f * 0.25);
-    m.legR.scale.copy(m.legL.scale);
+    g.gordopin.model.setBody(0.2 + (g.stats.fat / 100) * 1.0, g.stats.muscle / 100);
   }
 
   // ---------- Armería ----------
@@ -262,8 +255,7 @@ export class Activities {
     const cols = v.type.colors.length > 1 ? v.type.colors : [0xb03020, 0x2050a0, 0x208050, 0xe8e0d0, 0x202020, 0xd0a020];
     let c = pick(cols);
     if (c === v.color) c = pick(cols);
-    v.color = c;
-    v.paintMesh.material = new THREE.MeshLambertMaterial({ vertexColors: true, color: c });
+    v.setColor(c);
     g.police.clear();
     g.audio.cash();
     await new Promise((r) => setTimeout(r, 700));
@@ -525,7 +517,7 @@ export class Activities {
           spawnT = beat * pick([1, 1, 0.5, 2]);
           const lane = Math.floor(rand(0, 4));
           const el = document.createElement('i');
-          el.className = 'note';
+          el.className = 'jnote';
           el.textContent = ['◀', '▲', '▼', '▶'][lane];
           lanes[lane].appendChild(el);
           notes.push({ lane, t: t + 1.6, el, done: false });
