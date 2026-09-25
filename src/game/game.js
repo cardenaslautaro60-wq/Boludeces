@@ -413,6 +413,7 @@ export class Game {
     this.camera.position.set(cx, 110, cz);
     this.camera.lookAt(c0.x, 20, c0.z);
     this.env.update(dt * 0.5, this.camera.position, this.time);
+    this.world.updateVisibility(this.camera.position, dt);
     this.props.update(this.time, dt, this.env, this.camera.position);
     this.effects.update(dt, this.camera.position);
     this.world.water.userData.material.uniforms.uTime.value = this.time;
@@ -451,6 +452,7 @@ export class Game {
     this.props.update(this.time, dt, this.env, this.camera.position);
     this.world.water.userData.material.uniforms.uTime.value = this.time;
     this.updateLighting();
+    this.world.updateVisibility(this.camera.position, dt);
     // jugador muerto / ahogado
     if (p.dead && !this.respawning) this.wasted(false);
     if (p.vehicle && p.vehicle.sinking > 1.5) { p.exitVehicle(); this.effects.splash(p.pos.x, p.pos.z); }

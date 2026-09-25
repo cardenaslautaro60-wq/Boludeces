@@ -94,7 +94,7 @@ function cards(kind, width, y0, y1, nPlanes, pos, nor, uv, idx) {
   for (let p = 0; p < nPlanes; p++) {
     const a = (p / nPlanes) * Math.PI + 0.3;
     const dx = Math.cos(a) * width / 2, dz = Math.sin(a) * width / 2;
-    const rows = 4;
+    const rows = 2;
     for (const face of [1, -1]) {
       const base = pos.length / 3;
       for (let r = 0; r <= rows; r++) {
@@ -123,7 +123,7 @@ function cards(kind, width, y0, y1, nPlanes, pos, nor, uv, idx) {
 }
 
 function core(kind, rx, y0, y1, pos, nor, uv, idx, seed) {
-  const geo = new THREE.IcosahedronGeometry(1, 1);
+  const geo = new THREE.IcosahedronGeometry(1, 0);
   const rng = new RNG(seed);
   const p = geo.attributes.position;
   const [ux0, ux1] = A[kind];

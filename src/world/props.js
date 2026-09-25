@@ -3,6 +3,7 @@ import { GeoBuilder, hexColor } from './geom.js';
 import { MAP, LANDMARKS, BAGS, POI, FRAME, fromAB } from './mapdata.js';
 import { RNG, clamp } from '../util.js';
 import { foliageAtlas, treeGeometry, tuftAssets } from './foliage.js';
+import { InstChunks } from './culling.js';
 
 const vcMat = () => new THREE.MeshLambertMaterial({ vertexColors: true });
 
@@ -88,32 +89,34 @@ export class Props {
     crank.box(0.5, 0.8, 0.6, 1.5, -0.55, 0.55, hexColor(0xb02020));
     const mat = vcMat();
     const n = spots.length;
-    this.pumpBase = instanced(base.toGeometry(), mat, n);
-    this.pumpBeam = instanced(beam.toGeometry(), mat, n);
-    this.pumpCrank = instanced(crank.toGeometry(), mat, n);
+    const cBase = new InstChunks(base.toGeometry(), mat), cBeam = new InstChunks(beam.toGeometry(), mat), cCrank = new InstChunks(crank.toGeometry(), mat);
     spots.forEach(([x, z, rot], i) => {
       const y = terrain.heightAt(x, z) - 0.1;
       tmpE.set(0, rot, 0);
       tmpQ.setFromEuler(tmpE);
       tmpP.set(x, y, z);
       tmpM.compose(tmpP, tmpQ, tmpS);
-      this.pumpBase.setMatrixAt(i, tmpM);
-      this.pumps.push({ x, y, z, rot, phase: rng.range(0, 10), speed: rng.range(0.9, 1.4) });
+      cBase.add(x, z, tmpM);
+      this.pumps.push({ x, y, z, rot, phase: rng.range(0, 10), speed: rng.range(0.9, 1.4), beam: cBeam.add(x, z, tmpM), crank: cCrank.add(x, z, tmpM) });
       const fx = Math.sin(rot), fz = Math.cos(rot);
       for (const o of [-3, 0, 3.5]) colliders.addCircle(x + fx * o, z + fz * o, 1.3, y - 1, y + 5, 'cigüeña');
     });
-    this.pumpBase.instanceMatrix.needsUpdate = true;
-    this.group.add(this.pumpBase, this.pumpBeam, this.pumpCrank);
+    cBase.build(this.group, { castShadow: true, cullDist: 600 });
+    cBeam.build(this.group, { castShadow: true, pad: 6, cullDist: 600 });
+    cCrank.build(this.group, { castShadow: true, pad: 6, cullDist: 600 });
     this.pumpSpots = spots;
   }
 
   updatePumps(t, cam) {
-    const q2 = new THREE.Quaternion();
-    const off = new THREE.Vector3();
+    const q2 = this._q2 || (this._q2 = new THREE.Quaternion());
+    const off = this._off || (this._off = new THREE.Vector3());
+    const dirty = this._dirty || (this._dirty = new Set());
+    dirty.clear();
     for (let i = 0; i < this.pumps.length; i++) {
       const p = this.pumps[i];
-      if (cam && Math.abs(p.x - cam.x) + Math.abs(p.z - cam.z) > 700 && p.init) continue;
+      if (p.init && (!p.beam.mesh.visible || (cam && Math.abs(p.x - cam.x) + Math.abs(p.z - cam.z) > 450))) continue;
       p.init = true;
+      dirty.add(p.beam.mesh); dirty.add(p.crank.mesh);
       const a = t * p.speed + p.phase;
       const tilt = Math.sin(a) * 0.32;
       tmpE.set(0, p.rot, 0);
@@ -124,17 +127,16 @@ export class Props {
       tmpE.set(tilt, p.rot, 0, 'YXZ');
       q2.setFromEuler(tmpE);
       tmpM.compose(tmpP, q2, tmpS);
-      this.pumpBeam.setMatrixAt(i, tmpM);
+      p.beam.mesh.setMatrixAt(p.beam.index, tmpM);
       // manivela en (0,1.6,-2.5)
       off.set(0, 1.6, -2.5).applyQuaternion(tmpQ);
       tmpP.set(p.x + off.x, p.y + off.y, p.z + off.z);
       tmpE.set(-a, p.rot, 0, 'YXZ');
       q2.setFromEuler(tmpE);
       tmpM.compose(tmpP, q2, tmpS);
-      this.pumpCrank.setMatrixAt(i, tmpM);
+      p.crank.mesh.setMatrixAt(p.crank.index, tmpM);
     }
-    this.pumpBeam.instanceMatrix.needsUpdate = true;
-    this.pumpCrank.instanceMatrix.needsUpdate = true;
+    for (const m of dirty) m.instanceMatrix.needsUpdate = true;
   }
 
   // ---- Molinos del parque eólico ----
@@ -180,6 +182,7 @@ export class Props {
       colliders.addCircle(x, z, 1.8, y - 1, y + 44, 'molino');
       this.blinkers.push({ x, y: y + 44.5, z, phase: i * 0.3 });
     });
+    this.turbTower.userData.noCull = this.turbRotor.userData.noCull = true;
     this.group.add(this.turbTower, this.turbRotor);
   }
 
@@ -261,7 +264,7 @@ export class Props {
     pole.box(-0.06, 0.06, 7.3, 7.45, 0, 1.8, g);
     pole.box(-0.25, 0.25, 7.1, 7.35, 1.5, 2.2, hexColor(0x8a8f93));
     const n = spots.length;
-    this.lampMesh = instanced(pole.toGeometry(), vcMat(), n);
+    const lamps = new InstChunks(pole.toGeometry(), vcMat());
     const glowPos = new Float32Array(n * 3);
     spots.forEach((s, i) => {
       const [x, z] = s;
@@ -275,13 +278,13 @@ export class Props {
       tmpQ.setFromEuler(tmpE);
       tmpP.set(x, y, z);
       tmpM.compose(tmpP, tmpQ, tmpS);
-      this.lampMesh.setMatrixAt(i, tmpM);
+      lamps.add(x, z, tmpM);
       glowPos[i * 3] = x + Math.sin(rot) * 1.85;
       glowPos[i * 3 + 1] = y + 7.0;
       glowPos[i * 3 + 2] = z + Math.cos(rot) * 1.85;
       colliders.addCircle(x, z, 0.18, y - 1, y + 7.5, 'poste');
     });
-    this.group.add(this.lampMesh);
+    lamps.build(this.group, { castShadow: true, cullDist: 520 });
     const gg = new THREE.BufferGeometry();
     gg.setAttribute('position', new THREE.BufferAttribute(glowPos, 3));
     this.lampGlow = new THREE.Points(gg, new THREE.PointsMaterial({
@@ -328,9 +331,9 @@ export class Props {
     const mat = vcMat();
     const fol = foliageAtlas().material;
     const al = spots.filter((s) => s[2] === 'alamo'), pi = spots.filter((s) => s[2] !== 'alamo');
-    const trunks = instanced(trunk.toGeometry(), mat, spots.length);
-    const alMesh = instanced(treeGeometry('alamo'), fol, al.length);
-    const piMesh = instanced(treeGeometry('pino'), fol, pi.length);
+    const trunks = new InstChunks(trunk.toGeometry(), mat);
+    const alMesh = new InstChunks(treeGeometry('alamo'), fol);
+    const piMesh = new InstChunks(treeGeometry('pino'), fol);
     const tint = new THREE.Color();
     let ti = 0;
     const place = (arr, mesh) => arr.forEach(([x, z], i) => {
@@ -339,28 +342,24 @@ export class Props {
       tmpE.set(0, i, 0); tmpQ.setFromEuler(tmpE);
       tmpP.set(x, y, z);
       tmpM.compose(tmpP, tmpQ, new THREE.Vector3(s, s, s));
-      mesh.setMatrixAt(i, tmpM);
       const k = ((i * 2654435761) >>> 0) / 4294967296;
       tint.setRGB(0.85 + k * 0.3, 0.9 + ((k * 7) % 1) * 0.2, 0.8 + ((k * 13) % 1) * 0.25);
-      mesh.setColorAt(i, tint);
-      trunks.setMatrixAt(ti++, tmpM);
+      mesh.add(x, z, tmpM, tint);
+      trunks.add(x, z, tmpM);
+      ti++;
       colliders.addCircle(x, z, 0.3, y - 1, y + 10, 'arbol');
     });
     place(al, alMesh);
     place(pi, piMesh);
-    this.group.add(trunks, alMesh, piMesh);
-    for (const m of [trunks, alMesh, piMesh]) m.castShadow = true;
-    this.treeMeshes = [alMesh, piMesh];
+    trunks.build(this.group, { castShadow: true, cullDist: 520 });
+    this.treeMeshes = [...alMesh.build(this.group, { castShadow: true }), ...piMesh.build(this.group, { castShadow: true })];
   }
 
   // ---- Matas de la estepa (coirón, neneo) ----
   buildScrub(terrain, roads, city, rng) {
     const tf = tuftAssets();
     const N = 6500;
-    const meshA = new THREE.InstancedMesh(tf.coiron, tf.material, N);
-    const meshB = new THREE.InstancedMesh(tf.neneo, tf.material, N);
-    meshA.frustumCulled = meshB.frustumCulled = false;
-    let nA = 0, nB = 0;
+    const meshA = new InstChunks(tf.coiron, tf.material), meshB = new InstChunks(tf.neneo, tf.material);
     const colors = [0x6b6a3a, 0x7a7440, 0x8a8150, 0x5e6438, 0x9a8c5a, 0x707a4a];
     const c = new THREE.Color();
     let i = 0, tries = 0;
@@ -378,12 +377,11 @@ export class Props {
       tmpP.set(x, h - 0.08, z);
       tmpM.compose(tmpP, tmpQ, new THREE.Vector3(s * rng.range(0.8, 1.3), s * rng.range(0.8, 1.2), s * rng.range(0.8, 1.3)));
       c.setHex(rng.pick(colors)).lerp(tmpC.setRGB(1, 1, 1), 0.55);
-      if (rng.chance(0.62)) { meshA.setMatrixAt(nA, tmpM); meshA.setColorAt(nA++, c); } else { meshB.setMatrixAt(nB, tmpM); meshB.setColorAt(nB++, c); }
+      (rng.chance(0.62) ? meshA : meshB).add(x, z, tmpM, c);
       i++;
     }
-    meshA.count = nA; meshB.count = nB;
-    meshA.userData.noShadow = meshB.userData.noShadow = true;
-    this.group.add(meshA, meshB);
+    meshA.build(this.group, { noShadow: true, cullDist: 380 });
+    meshB.build(this.group, { noShadow: true, cullDist: 380 });
   }
 
   buildContainers(city) {

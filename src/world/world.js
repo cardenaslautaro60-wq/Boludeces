@@ -5,6 +5,7 @@ import { City } from './city.js';
 import { Props } from './props.js';
 import { Zones } from './zones.js';
 import { StaticColliders } from './collision.js';
+import { DistanceCuller } from './culling.js';
 import { makeTextures } from '../render/textures.js';
 import { META, MAP, FRAME, LANDMARKS, POI, SPAWNS, RAMPS, BAGS, DECKS, loadMapData } from './mapdata.js';
 import { RNG, pointSegDist } from '../util.js';
@@ -83,6 +84,11 @@ export class World {
     props.build(g);
     progress(0.82, 'Soplando el viento...');
     await nextFrame();
+    // lo que queda detrás de la niebla no se dibuja
+    this.culler = new DistanceCuller();
+    this.culler.addTree(city.group);
+    this.culler.addTree(this.roadMesh);
+    this.culler.addTree(props.group);
     this.zoneCache = { x: 1e9, z: 1e9, name: '' };
   }
 
@@ -261,6 +267,16 @@ export class World {
         break;
       }
     }
+  }
+
+  // Distancia de dibujo (la niebla tapa el resto); en celulares, más corta
+  updateVisibility(cam, dt) {
+    const g = this.game;
+    const fogFar = g.env && g.env.fog ? g.env.fog.far : 760;
+    const touch = g.touch && g.touch.enabled;
+    const maxDist = Math.min(fogFar + 60, touch ? 480 : 1300) * (g.settings && g.settings.quality < 0.7 ? 0.8 : 1);
+    this.culler.update(cam, maxDist, dt);
+    g.terrain.updateLOD(cam, maxDist, dt);
   }
 
   zoneAt(x, z) {

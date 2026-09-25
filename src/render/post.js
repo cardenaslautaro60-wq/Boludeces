@@ -23,9 +23,13 @@ export class Post {
       vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
       fragmentShader: `
         uniform sampler2D tScene, tPrev; uniform float uTrail, uSat, uVig, uFlash, uGrey; uniform vec3 uTint; varying vec2 vUv;
+        // un NaN o infinito en la escena quedaría pegado para siempre en la estela
+        bool bad(float x){ return !(x >= 0.0 && x < 60000.0); }
+        vec3 safe(vec3 v){ return (bad(v.r) || bad(v.g) || bad(v.b)) ? vec3(0.0) : min(v, vec3(64.0)); }
         void main(){
           vec3 c = texture2D(tScene, vUv).rgb;
-          vec3 p = texture2D(tPrev, vUv).rgb;
+          vec3 p = safe(texture2D(tPrev, vUv).rgb);
+          c = bad(c.r) || bad(c.g) || bad(c.b) ? p : min(c, vec3(64.0));
           c = mix(c, p, uTrail);
           float l = dot(c, vec3(0.299, 0.587, 0.114));
           c = mix(vec3(l), c, uSat) * uTint;

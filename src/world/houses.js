@@ -3,7 +3,7 @@ import * as THREE from 'three';
 // Casas de barrio instanciadas: 4 plantillas (1 o 2 plantas, techo a dos aguas o plano),
 // cada instancia con su escala, color de pared y color de techo. Agrupadas por sector.
 const WN = 10, DN = 9, FH = 2.8;
-const CHUNK = 480;
+const CHUNK = 260;
 
 let ATLAS = null;
 function atlas(T) {

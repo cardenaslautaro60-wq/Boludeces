@@ -237,59 +237,107 @@ export class Terrain {
     return srgbToLinear(clamp(r, 0, 1), clamp(g, 0, 1), clamp(b, 0, 1));
   }
 
+  // Malla por mosaicos con dos niveles de detalle (cerca: completo; lejos: 1 de cada 3) y faldones
   buildMesh() {
     const group = new THREE.Group();
-    const T = 56;
+    const T = 48;
     const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
     const nrm = new THREE.Vector3();
     const { na, nb } = this;
+    // colores y posiciones de todos los vértices (se comparten entre niveles)
+    const P = new Float32Array(na * nb * 3), C = new Float32Array(na * nb * 3);
+    for (let j = 0; j < nb; j++) for (let i = 0; i < na; i++) {
+      const [x, z] = fromAB(this.a0 + i * CELL, this.b0 + j * CELL);
+      const k = j * na + i;
+      const h = this.h[k];
+      P[k * 3] = x; P[k * 3 + 1] = h; P[k * 3 + 2] = z;
+      this.normalAt(x, z, nrm);
+      const c = this.colorFor(x, z, h, nrm.y, this.urban ? this.urban[k] : 0, this.coast[k]);
+      C[k * 3] = c[0]; C[k * 3 + 1] = c[1]; C[k * 3 + 2] = c[2];
+    }
+    const tile = (i0, i1, j0, j1, st) => {
+      const is = [], js = [];
+      for (let i = i0; i < i1; i += st) is.push(i); is.push(i1);
+      for (let j = j0; j < j1; j += st) js.push(j); js.push(j1);
+      const w = is.length, hgt = js.length;
+      const n = w * hgt + (w + hgt) * 2 * 2;
+      const pos = new Float32Array(n * 3), col = new Float32Array(n * 3);
+      let p = 0;
+      let allUnder = true;
+      const put = (k, dy = 0) => {
+        pos[p * 3] = P[k * 3]; pos[p * 3 + 1] = P[k * 3 + 1] + dy; pos[p * 3 + 2] = P[k * 3 + 2];
+        col[p * 3] = C[k * 3]; col[p * 3 + 1] = C[k * 3 + 1]; col[p * 3 + 2] = C[k * 3 + 2];
+        return p++;
+      };
+      for (const j of js) for (const i of is) { const k = j * na + i; put(k); if (this.h[k] > -7) allUnder = false; }
+      if (allUnder) return null;
+      const idx = [], pairs = [];
+      for (let y = 0; y < hgt - 1; y++) for (let x = 0; x < w - 1; x++) {
+        const a = y * w + x, b = a + 1, c = a + w, d = c + 1;
+        idx.push(a, b, c, b, d, c);
+      }
+      // faldones (tapan las rendijas entre mosaicos de distinto detalle)
+      if (st > 1) {
+        const skirt = (list) => {
+          for (let q = 0; q < list.length - 1; q++) {
+            const [ka, pa] = list[q], [kb, pb] = list[q + 1];
+            const la = put(ka, -4), lb = put(kb, -4);
+            pairs.push(la, pa, lb, pb);
+            idx.push(pa, lb, pb, pa, la, lb, pa, pb, lb, pa, lb, la);
+          }
+        };
+        const row = (y) => is.map((i, x) => [js[y] * na + i, y * w + x]);
+        const colm = (x) => js.map((j, y) => [j * na + is[x], y * w + x]);
+        skirt(row(0)); skirt(row(hgt - 1)); skirt(colm(0)); skirt(colm(w - 1));
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(pos.slice(0, p * 3), 3));
+      geo.setAttribute('color', new THREE.BufferAttribute(col.slice(0, p * 3), 3));
+      geo.setIndex(idx);
+      geo.computeVertexNormals();
+      // el faldón es de doble cara: su normal se anula (y normalize(0) da NaN en la GPU);
+      // copiar la del borde de arriba
+      const N = geo.attributes.normal.array;
+      for (let q = 0; q < pairs.length; q += 2) {
+        const lo = pairs[q] * 3, up = pairs[q + 1] * 3;
+        N[lo] = N[up]; N[lo + 1] = N[up + 1]; N[lo + 2] = N[up + 2];
+      }
+      geo.computeBoundingSphere();
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.matrixAutoUpdate = false;
+      mesh.receiveShadow = true;
+      mesh.userData.noCull = true;
+      return mesh;
+    };
+    this.tiles = [];
     for (let tj = 0; tj * T < nb - 1; tj++) {
       for (let ti = 0; ti * T < na - 1; ti++) {
         const i0 = ti * T, i1 = Math.min(na - 1, i0 + T);
         const j0 = tj * T, j1 = Math.min(nb - 1, j0 + T);
-        const w = i1 - i0 + 1, hgt = j1 - j0 + 1;
-        const pos = new Float32Array(w * hgt * 3);
-        const col = new Float32Array(w * hgt * 3);
-        let p = 0;
-        let allUnder = true;
-        for (let j = j0; j <= j1; j++) {
-          for (let i = i0; i <= i1; i++) {
-            const a = this.a0 + i * CELL, b = this.b0 + j * CELL;
-            const [x, z] = fromAB(a, b);
-            const k = j * na + i;
-            const h = this.h[k];
-            if (h > -7) allUnder = false;
-            pos[p] = x; pos[p + 1] = h; pos[p + 2] = z;
-            this.normalAt(x, z, nrm);
-            const c = this.colorFor(x, z, h, nrm.y, this.urban ? this.urban[k] : 0, this.coast[k]);
-            col[p] = c[0]; col[p + 1] = c[1]; col[p + 2] = c[2];
-            p += 3;
-          }
-        }
-        if (allUnder) continue;
-        const idx = new Uint32Array((w - 1) * (hgt - 1) * 6);
-        let q = 0;
-        for (let j = 0; j < hgt - 1; j++) {
-          for (let i = 0; i < w - 1; i++) {
-            const a = j * w + i, b = a + 1, c = a + w, d = c + 1;
-            // el marco (A,B) invierte la orientación respecto de (X,Z)
-            idx[q++] = a; idx[q++] = b; idx[q++] = c;
-            idx[q++] = b; idx[q++] = d; idx[q++] = c;
-          }
-        }
-        const geo = new THREE.BufferGeometry();
-        geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-        geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-        geo.setIndex(new THREE.BufferAttribute(idx, 1));
-        geo.computeVertexNormals();
-        geo.computeBoundingSphere();
-        const mesh = new THREE.Mesh(geo, mat);
-        mesh.matrixAutoUpdate = false;
-        mesh.receiveShadow = true;
-        group.add(mesh);
+        const hi = tile(i0, i1, j0, j1, 1);
+        if (!hi) continue;
+        const lo = tile(i0, i1, j0, j1, 4);
+        lo.visible = false;
+        group.add(hi, lo);
+        const s0 = hi.geometry.boundingSphere;
+        this.tiles.push({ hi, lo, x: s0.center.x, z: s0.center.z, r: s0.radius });
       }
     }
     return group;
+  }
+
+  // Detalle según distancia a la cámara
+  updateLOD(cam, maxDist, dt) {
+    this.lodT = (this.lodT || 0) - dt;
+    const jump = !this.lodLast || Math.abs(this.lodLast.x - cam.x) + Math.abs(this.lodLast.z - cam.z) > 50;
+    if (this.lodT > 0 && !jump) return;
+    this.lodLast = { x: cam.x, z: cam.z };
+    this.lodT = 0.3;
+    for (const t of this.tiles || []) {
+      const d = Math.hypot(t.x - cam.x, t.z - cam.z) - t.r;
+      t.hi.visible = d < 380;
+      t.lo.visible = !t.hi.visible && d < maxDist + 200;
+    }
   }
 }
 
@@ -345,29 +393,27 @@ export function buildWater(terrain) {
         #include <fog_fragment>
       }`,
   });
-  // Grilla (en el marco rotado) sobre las celdas de mar y la orilla
-  const step = 16;
+  // Malla fina solo cerca de la orilla (espuma y agua clara); el resto es un plano grande
+  const step = 18;
   const a0 = terrain.a0, a1 = terrain.a0 + (terrain.na - 1) * CELL;
   const b0 = terrain.b0, b1 = terrain.b0 + (terrain.nb - 1) * CELL;
-  // hasta dónde llega el mar tierra adentro
-  let bMax = b0;
-  for (let j = 0; j < terrain.nb; j++) for (let i = 0; i < terrain.na; i += 4) if (terrain.h[j * terrain.na + i] < 0.5) bMax = Math.max(bMax, terrain.b0 + j * CELL);
-  const na = Math.ceil((a1 - a0) / step) + 1, nb = Math.ceil((Math.min(b1, bMax + 60) - b0) / step) + 1;
+  const na = Math.ceil((a1 - a0) / step) + 1, nb = Math.ceil((b1 - b0) / step) + 1;
   const pos = new Float32Array(na * nb * 3), depth = new Float32Array(na * nb);
-  const wet = new Uint8Array(na * nb);
+  const g0 = new Float32Array(na * nb);
   for (let j = 0; j < nb; j++) for (let i = 0; i < na; i++) {
-    const a = a0 + i * step, b = b0 + j * step;
-    const [x, z] = fromAB(a, b);
+    const [x, z] = fromAB(a0 + i * step, b0 + j * step);
     const k = j * na + i;
     pos[k * 3] = x; pos[k * 3 + 1] = 0; pos[k * 3 + 2] = z;
     const g = terrain.heightAt(x, z);
+    g0[k] = g;
     depth[k] = -g;
-    wet[k] = g < 0.6 ? 1 : 0;
   }
   const idx = [];
   for (let j = 0; j < nb - 1; j++) for (let i = 0; i < na - 1; i++) {
     const a = j * na + i, b = a + 1, c = a + na, d = c + 1;
-    if (!(wet[a] || wet[b] || wet[c] || wet[d])) continue;
+    const lo = Math.min(g0[a], g0[b], g0[c], g0[d]), hi = Math.max(g0[a], g0[b], g0[c], g0[d]);
+    // solo celdas con agua y que no sean mar profundo (ahí alcanza el plano)
+    if (lo > 0.6 || hi < -9) continue;
     idx.push(a, b, c, b, d, c);
   }
   const geo = new THREE.BufferGeometry();
@@ -375,18 +421,20 @@ export function buildWater(terrain) {
   geo.setAttribute('depth', new THREE.BufferAttribute(depth, 1));
   geo.setIndex(idx);
   geo.computeBoundingSphere();
-  group.add(new THREE.Mesh(geo, mat));
+  const shore = new THREE.Mesh(geo, mat);
+  shore.userData.noCull = true;
+  group.add(shore);
 
-  // Mar abierto hasta el horizonte (del lado del Golfo)
-  const farGeo = new THREE.PlaneGeometry(16000, 9000, 1, 1);
+  // Mar abierto: un plano que cubre todo el mundo (queda debajo de la tierra)
+  const farGeo = new THREE.PlaneGeometry(22000, 16000, 1, 1);
   farGeo.rotateX(-Math.PI / 2);
   const farDepth = new Float32Array(farGeo.attributes.position.count).fill(20);
   farGeo.setAttribute('depth', new THREE.BufferAttribute(farDepth, 1));
   const far = new THREE.Mesh(farGeo, mat);
-  // alinear el plano con el marco y ponerlo mar adentro
-  const [cx, cz] = fromAB((a0 + a1) / 2, b0 - 4500 + 30);
-  far.position.set(cx, -0.25, cz);
+  const [cx, cz] = fromAB((a0 + a1) / 2, (b0 + b1) / 2 - 3000);
+  far.position.set(cx, -0.38, cz);
   far.rotation.y = -Math.atan2(F.uz, F.ux);
+  far.userData.noCull = true;
   group.add(far);
   group.userData.material = mat;
   return group;
