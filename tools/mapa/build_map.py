@@ -1207,6 +1207,109 @@ for pg in raw:
 print('  edificios en el juego', len(out_b), 'descartados', dict(dropped))
 
 # ---------------------------------------------------------------------------
+# Comercios e instituciones (OSM): el cartel que va en la fachada del edificio real.
+# Instituciones públicas con su nombre real (escuelas, comisarías, CAPS, iglesias, vecinales);
+# comercios con nombre genérico o parodia (como en San Andreas).
+# ---------------------------------------------------------------------------
+print('comercios...')
+BANKS = [('chubut', 'BANCO DE LA MESETA'), ('galicia', 'BANCO GALAXIA'), ('macro', 'BANCO MICRO'), ('santander', 'BANCO SANTANDREAS'),
+         ('bbva', 'BANCO BBBVA'), ('patagonia', 'BANCO PATAGÓNICO'), ('credicoop', 'BANCO CREDICOOPERATIVO'), ('nación', 'BANCO DE LA NACIÓN'),
+         ('nacion', 'BANCO DE LA NACIÓN'), ('citi', 'BANCO CITYBELL')]
+SUPERS = [('anónima', 'LA ANÓMALA'), ('anonima', 'LA ANÓMALA'), ('jumbo', 'JUMBITO'), ('chango', 'CHANGUITO MÁS'),
+          ('cooperativa', 'COOPERATIVA PETROLERA'), ('diarco', 'DIARIUCO'), ('carrefour', 'CARREFÚ')]
+
+
+def pick_name(name, table, default):
+    low = (name or '').lower()
+    for k, v in table:
+        if k in low:
+            return v
+    return default
+
+
+def poi_of(t):
+    a, sh, tu = t.get('amenity'), t.get('shop'), t.get('tourism')
+    name = (t.get('name') or '').strip()
+    up = name.upper()
+    if a in ('school', 'kindergarten'):
+        return 'escuela', [up or ('JARDÍN DE INFANTES' if a == 'kindergarten' else 'ESCUELA')]
+    if a == 'police':
+        return 'policia', ['POLICÍA DEL CHUBUT', up if up and up not in ('POLICÍA', 'POLICIA') else 'COMISARÍA']
+    if a == 'clinic' or a == 'hospital':
+        public = any(k in up for k in ('CAPS', 'HOSPITAL', 'SALA', 'CENTRO DE SALUD')) and 'CLINICA' not in up and 'CLÍNICA' not in up
+        if public:
+            short = up.replace('CENTRO DE ATENCIÓN PRIMARIA DE SALUD', '').replace('CENTRO DE ATENCION PRIMARIA DE SALUD', '').replace('"', '').strip()
+            return 'salud', [short or 'CENTRO DE SALUD']
+        return 'salud', ['CLÍNICA', 'GUARDIA 24 HS']
+    if a == 'place_of_worship':
+        return 'iglesia', [up or 'IGLESIA']
+    if a == 'community_centre':
+        return 'vecinal', [up or 'CENTRO COMUNITARIO']
+    if a == 'library':
+        return 'otro', [up if len(up) < 40 else 'BIBLIOTECA POPULAR']
+    if a == 'townhall':
+        return 'otro', [up or 'MUNICIPALIDAD']
+    if a in ('cinema', 'theatre'):
+        return 'otro', [up or 'CINE']
+    if a == 'post_office':
+        return 'otro', ['CORREO']
+    if a == 'bank':
+        return 'banco', [pick_name(name, BANKS, 'BANCO')]
+    if a == 'pharmacy':
+        return 'farmacia', ['FARMACIA']
+    if a == 'cafe':
+        return 'comida', ['CONFITERÍA']
+    if a == 'fast_food':
+        return 'comida', ['LOMITERÍA']
+    if a == 'restaurant':
+        return 'comida', ['PARRILLA']
+    if a == 'bar':
+        return 'comida', ['BAR']
+    if a == 'ice_cream':
+        return 'comida', ['HELADERÍA']
+    if sh == 'supermarket' or sh == 'department_store' or sh == 'mall':
+        return 'super', [pick_name(name, SUPERS, 'SUPERMERCADO')]
+    if sh in ('convenience', 'kiosk', 'general', 'beverages'):
+        return 'kiosco', ['DESPENSA' if sh == 'general' else 'KIOSCO']
+    if sh == 'bakery':
+        return 'kiosco', ['PANADERÍA']
+    if sh == 'butcher':
+        return 'kiosco', ['CARNICERÍA']
+    if sh in ('car_repair', 'tyres'):
+        return 'taller', ['GOMERÍA' if sh == 'tyres' else 'TALLER MECÁNICO']
+    if sh in ('hardware', 'doityourself'):
+        return 'taller', ['FERRETERÍA']
+    if sh in ('books', 'copyshop'):
+        return 'kiosco', ['LIBRERÍA' if sh == 'books' else 'FOTOCOPIAS']
+    if sh in ('car', 'motorcycle'):
+        return 'taller', ['AGENCIA DE AUTOS' if sh == 'car' else 'MOTOS']
+    if tu == 'hotel':
+        return 'hotel', ['HOTEL']
+    return None, None
+
+
+pois_out = []
+try:
+    for e in load('pois.json'):
+        t = e.get('tags', {})
+        if t.get('amenity') == 'fuel' or t.get('amenity') == 'bus_station' or t.get('tourism') in ('museum', 'attraction'):
+            continue
+        typ, lines = poi_of(t)
+        if not typ:
+            continue
+        la, lo = (e['lat'], e['lon']) if 'lat' in e else (e['center']['lat'], e['center']['lon']) if 'center' in e else (None, None)
+        if la is None:
+            continue
+        x, z = proj(la, lo)
+        if not inside_world(x, z):
+            continue
+        X, Z = warp(x, z)
+        pois_out.append({'t': typ, 'x': round(X, 1), 'z': round(Z, 1), 'l': [' '.join(ln.split())[:60] for ln in lines]})
+except FileNotFoundError:
+    pass
+print('  comercios', len(pois_out))
+
+# ---------------------------------------------------------------------------
 # Salida
 # ---------------------------------------------------------------------------
 print('escribiendo...')
@@ -1308,11 +1411,12 @@ meta = {
     'fuel': [[round(x, 1), round(z, 1), n] for x, z, n in fuel],
     'piers': [[[round(x, 1), round(z, 1)] for x, z in p] for p in piers],
     'runways': runways,
+    'pois': pois_out,
 }
 
 with open(OUT, 'w') as f:
     f.write('// Generado por tools/mapa/build_map.py — no editar a mano.\n')
-    f.write('// Datos © colaboradores de OpenStreetMap (ODbL). Relieve: AWS Terrain Tiles (Mapzen).\n')
+    f.write('// Datos © colaboradores de OpenStreetMap (ODbL). Edificios: Microsoft Global ML Building Footprints (ODbL). Relieve: AWS Terrain Tiles (Mapzen).\n')
     f.write('export const MAP_META = ' + json.dumps(meta, ensure_ascii=False, separators=(',', ':')) + ';\n')
     f.write("export const MAP_BLOB = '" + b64 + "';\n")
 print('listo:', OUT, round(os.path.getsize(OUT) / 1024), 'KB (blob', round(len(comp_blob) / 1024), 'KB comprimido de', round(len(blob) / 1024), 'KB)')

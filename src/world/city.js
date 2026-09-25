@@ -156,7 +156,7 @@ export class City {
     this.buildPuerto(chunks, rng);
     this.buildOutside(chunks, rng, T);
     // edificios reales donde hay datos; si no, lotes inventados a lo largo de las calles
-    if (MAP.bldPos && MAP.bldPos.length) this.placeRealBuildings(chunks, rng);
+    if (MAP.bldPos && MAP.bldPos.length) { this.placeRealBuildings(chunks, rng); this.placePOIs(chunks); }
     else this.placeLots(chunks, rng);
     this.streetFurniture(rng);
 
@@ -297,7 +297,11 @@ export class City {
       const sg = this.chunkFor(chunks, cx, cz, 'shop');
       sg.walls(x0, x1, z0, z1, floor, floor + shopH, hexColor(0xffffff), 64, 8, Math.random() < 0.5 ? 0.5 : 0, Math.floor(Math.random() * 8) / 8);
     }
-    if (top > floor + shopH + 0.01) gb.walls(x0, x1, z0, z1, floor + shopH, top, color, uS, vS, (opts.vOff || 0), uOff);
+    if (mat === 'house' && floors > 1 && !shopH) {
+      // textura de casa: planta baja con puerta (v 0..0.5) y los pisos de arriba solo con ventanas
+      gb.walls(x0, x1, z0, z1, floor, floor + fh, color, uS, vS, 0, uOff);
+      for (let k = 1; k < floors; k++) gb.walls(x0, x1, z0, z1, floor + k * fh, floor + (k + 1) * fh, color, uS, vS, 0.5, uOff);
+    } else if (top > floor + shopH + 0.01) gb.walls(x0, x1, z0, z1, floor + shopH, top, color, uS, vS, (opts.vOff || 0), uOff);
     if (opts.roof === 'gable') {
       const rg = this.chunkFor(chunks, cx, cz, 'roof');
       const along = opts.ridgeX !== undefined ? opts.ridgeX : (x1 - x0) >= (z1 - z0);
@@ -1184,9 +1188,9 @@ export class City {
       if (!this.isFree(o)) { skip.ocupado++; continue; }
       cand.push({ o, lv: D[6 * i + 3], kind: D[6 * i + 4], ra: D[6 * i + 5] * 4, ar });
     }
-    // 2) tipo, altura y construcción
-    this.footprints = [];
-    for (const { o, lv, kind, ra, ar } of cand) {
+    // 2) tipo y altura
+    const acc = [];
+    for (const { o, lv, kind, ar } of cand) {
       const hs = this.obbCorners(o).map(([x, z]) => t.heightAt(x, z));
       hs.push(t.heightAt(o.cx, o.cz));
       const mn = Math.min(...hs), mx = Math.max(...hs);
@@ -1203,14 +1207,165 @@ export class City {
       else if (A > 280) type = (zt === 'barrio' || zt === 'km') && rng.chance(0.5) ? 'monoblock' : 'comercio';
       else type = big > 17 ? 'casona' : 'casa';
       if (mx - mn > (type === 'casa' || type === 'garaje' ? 3.2 : 7)) { skip.pendiente++; continue; }
-      this.emitReal(chunks, o, type, zt, lv, A, rng);
+      o.type = type; o.floor = mx; o.zt = zt; o.lv = lv; o.A = A;
+      acc.push(o);
+    }
+    this.footprints = acc;
+    // 3) comercios e instituciones reales: cada uno elige su edificio (y las instituciones no
+    // quedan arriba de un local)
+    this.matchPOIs(acc);
+    // 4) construcción
+    for (const o of acc) {
+      this.emitReal(chunks, o, o.type, o.zt, o.lv, o.A, rng);
       this.reserve(o);
-      this.footprints.push(o);
-      stat[type]++;
-      void ra;
+      stat[o.type]++;
     }
     this.lotCount = this.footprints.length;
     this.realStats = { total: n, ...stat, descartados: skip };
+  }
+
+  // ------------------------------------------------------------------
+  // Carteles de comercios e instituciones reales de OSM, en la fachada del edificio real más
+  // cercano. Todos en una sola malla con un atlas de textos (un solo draw call).
+  // ------------------------------------------------------------------
+  matchPOIs(acc) {
+    const list = META.pois || [];
+    const G = 40, grid = new Map();
+    for (const o of acc) {
+      const k = Math.floor(o.cx / G) * 100000 + Math.floor(o.cz / G);
+      let a = grid.get(k); if (!a) grid.set(k, (a = [])); a.push(o);
+    }
+    const nearest = (x, z, R, big) => {
+      let best = null, bd = Infinity;
+      for (let i = Math.floor((x - R) / G); i <= Math.floor((x + R) / G); i++) for (let j = Math.floor((z - R) / G); j <= Math.floor((z + R) / G); j++) {
+        for (const o of grid.get(i * 100000 + j) || []) {
+          if (o.sign || o.type === 'garaje') continue;
+          // distancia al rectángulo (0 si el punto cae adentro); los lugares grandes prefieren edificios grandes
+          const dx = x - o.cx, dz = z - o.cz;
+          const lx = Math.abs(dx * o.ax + dz * o.az) - o.hw, lz = Math.abs(-dx * o.az + dz * o.ax) - o.hd;
+          let d = Math.hypot(Math.max(0, lx), Math.max(0, lz));
+          if (big) d -= Math.min(10, Math.sqrt(o.hw * o.hd));
+          if (d < bd) { bd = d; best = o; }
+        }
+      }
+      return bd <= R ? best : null;
+    };
+    const INST = { escuela: 1, policia: 1, salud: 1, iglesia: 1, vecinal: 1, otro: 1, banco: 1 };
+    for (const p of list) {
+      const big = p.t === 'escuela' || p.t === 'super' || p.t === 'salud' || p.t === 'iglesia';
+      const o = nearest(p.x, p.z, 30, big);
+      if (!o) continue;
+      o.sign = p;
+      if (INST[p.t]) {
+        if (o.type === 'edificio') o.noShop = true;
+        else if (o.type !== 'galpon' && o.type !== 'monoblock') o.type = 'publico';
+      } else if (p.t === 'super' && o.A > 300) o.type = 'comercio';
+    }
+  }
+
+  placePOIs(chunks) {
+    if (!this.footprints) return;
+    const STY = {
+      escuela: ['#f4f4f0', '#1a3f8f'], policia: ['#0f2a5a', '#ffffff'], salud: ['#f4f4f0', '#c01818'], iglesia: ['#3b2a1e', '#f2e6c8'],
+      vecinal: ['#2f6b3a', '#ffffff'], otro: ['#34495e', '#ffffff'], banco: ['#0b3d6b', '#ffd24a'], farmacia: ['#138a3e', '#ffffff'],
+      comida: ['#b3261e', '#ffe28a'], super: ['#1c5aa8', '#ffffff'], kiosco: ['#f0c020', '#1a1a1a'], taller: ['#ffd400', '#111111'], hotel: ['#1b2a4a', '#e8c66a'],
+    };
+    const CW = 256, CH = 64, COLS = 8, ROWS = 32;
+    const cv = document.createElement('canvas'); cv.width = CW * COLS; cv.height = CH * ROWS;
+    const g = cv.getContext('2d');
+    const cells = new Map();
+    let next = 0;
+    const cell = (key, draw) => {
+      if (cells.has(key)) return cells.get(key);
+      if (next >= COLS * ROWS) return null;
+      const i = next++, x = (i % COLS) * CW, y = Math.floor(i / COLS) * CH;
+      g.save(); g.translate(x, y); draw(g); g.restore();
+      // uv (el canvas se da vuelta en y al subirlo)
+      const uv = [x / cv.width, 1 - (y + CH) / cv.height, (x + CW) / cv.width, 1 - y / cv.height];
+      cells.set(key, uv);
+      return uv;
+    };
+    // nombres largos en dos renglones, cortados en el espacio más cercano a la mitad
+    const wrap = (lines) => {
+      if (lines.length !== 1 || lines[0].length <= 24) return lines;
+      const t = lines[0], mid = t.length / 2;
+      let best = -1;
+      for (let i = 0; i < t.length; i++) if (t[i] === ' ' && (best < 0 || Math.abs(i - mid) < Math.abs(best - mid))) best = i;
+      return best < 0 ? lines : [t.slice(0, best), t.slice(best + 1)];
+    };
+    const textCell = (lines0, bg, fg) => { const lines = wrap(lines0); return cell(lines.join('|') + bg, (c) => {
+      c.fillStyle = bg; c.fillRect(0, 0, CW, CH);
+      c.strokeStyle = fg; c.globalAlpha = 0.6; c.lineWidth = 3; c.strokeRect(3, 3, CW - 6, CH - 6); c.globalAlpha = 1;
+      c.fillStyle = fg; c.textAlign = 'center'; c.textBaseline = 'middle';
+      if (lines.length === 1) {
+        const size = lines[0].length > 22 ? 17 : lines[0].length > 14 ? 22 : 30;
+        c.font = `bold ${size}px Arial, Helvetica, sans-serif`; c.fillText(lines[0], CW / 2, CH / 2 + 1, CW - 14);
+      } else {
+        const same = lines0.length === 1;
+        c.font = `bold ${same ? 19 : 22}px Arial, Helvetica, sans-serif`; c.fillText(lines[0], CW / 2, CH * (same ? 0.33 : 0.36), CW - 14);
+        c.font = `bold ${same ? 19 : 15}px Arial, Helvetica, sans-serif`; c.fillText(lines[1], CW / 2, CH * (same ? 0.7 : 0.74), CW - 14);
+      }
+    }); };
+    const flag = cell('bandera', (c) => {
+      c.fillStyle = '#74acdf'; c.fillRect(0, 0, 96, 64); c.fillStyle = '#ffffff'; c.fillRect(0, 21, 96, 22);
+      c.fillStyle = '#f6b40e'; c.beginPath(); c.arc(48, 32, 7, 0, Math.PI * 2); c.fill();
+    });
+    const crossCell = (col) => cell('cruz' + col, (c) => {
+      c.fillStyle = '#ffffff'; c.fillRect(0, 0, 64, 64); c.fillStyle = col; c.fillRect(22, 6, 20, 52); c.fillRect(6, 22, 52, 20);
+    });
+    const sub = (uv, fx0, fx1) => [uv[0] + (uv[2] - uv[0]) * fx0, uv[1], uv[0] + (uv[2] - uv[0]) * fx1, uv[3]];
+    const pos = [], uvs = [];
+    // cartel plano: centro (x,y,z), eje horizontal (ux,uz), medio ancho y medio alto
+    const quad = (x, y, z, ux, uz, hw, hh, uv) => {
+      const P = [[x - ux * hw, y - hh, z - uz * hw], [x + ux * hw, y - hh, z + uz * hw], [x + ux * hw, y + hh, z + uz * hw], [x - ux * hw, y + hh, z - uz * hw]];
+      const U = [[uv[0], uv[1]], [uv[2], uv[1]], [uv[2], uv[3]], [uv[0], uv[3]]];
+      for (const k of [0, 1, 2, 0, 2, 3]) { pos.push(...P[k]); uvs.push(...U[k]); }
+    };
+    let placed = 0;
+    for (const o of this.footprints) {
+      const p = o.sign;
+      if (!p) continue;
+      const big = p.t === 'escuela' || p.t === 'super' || p.t === 'salud' || p.t === 'iglesia';
+      const [bg, fg] = STY[p.t] || STY.otro;
+      const uv = textCell(p.l, bg, fg);
+      if (!uv) break;
+      // frente (-z local) y eje del frente
+      const fx = o.az, fz = -o.ax;
+      const w = clamp(o.hw * 2 - 0.8, 2.4, big ? 9 : 6), h = w / 4;
+      const y = o.floor + (o.type === 'edificio' ? 4.5 : o.type === 'casa' ? 2.45 : 3.1) + h / 2 - 0.3;
+      const cx = o.cx + fx * (o.hd + 0.07), cz = o.cz + fz * (o.hd + 0.07);
+      // el eje horizontal va hacia la derecha de quien mira la fachada desde la calle
+      quad(cx, y, cz, -o.ax, -o.az, w / 2, h / 2, uv);
+      if (p.t === 'farmacia' || p.t === 'salud') {
+        // cruz de bandera, perpendicular a la fachada
+        const cu = sub(crossCell(p.t === 'farmacia' ? '#1faa4a' : '#d42020'), 0, 0.25);
+        const ex = cx + o.ax * (w / 2 + 0.5) + fx * 0.45, ez = cz + o.az * (w / 2 + 0.5) + fz * 0.45;
+        quad(ex, y + 0.2, ez, fx, fz, 0.4, 0.4, cu);
+      }
+      if (p.t === 'escuela' && flag) {
+        // mástil con la bandera argentina
+        const mx = cx + o.ax * (w / 2 + 1.6) + fx * 1.6, mz = cz + o.az * (w / 2 + 1.6) + fz * 1.6;
+        const gy = this.terrain.heightAt(mx, mz);
+        const pg = chunks.get(mx, mz, 'plain'); pg.clearFrame();
+        pg.cylinder(mx, mz, 0.06, gy, gy + 7.5, hexColor(0xdcdcdc), 6);
+        this.colliders.addCircle(mx, mz, 0.12, gy - 1, gy + 7.5, 'mastil');
+        quad(mx - o.ax * 0.85, gy + 6.8, mz - o.az * 0.85, -o.ax, -o.az, 0.8, 0.55, sub(flag, 0, 0.375));
+      }
+      placed++;
+    }
+    if (!pos.length) return;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geo.computeBoundingSphere();
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+    const mat = new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide, fog: true });
+    mat.userData.sign = true;
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.matrixAutoUpdate = false;
+    this.signs.push(mesh);
+    this.poiCount = placed;
   }
 
   emitReal(chunks, o, type, zt, lv, A, rng) {
@@ -1232,7 +1387,7 @@ export class City {
       this.addBuilding(chunks, x0, x1, z0, z1, A > 1400 ? 3 : 2, { mat: 'metal', floorH: 3.1, color: rng.pick(PAL.metal), roof: 'gable', roofColor: rng.pick([0x9aa0a4, 0x8a9096, 0xa33a2a, 0x7c8a8f]), rise: Math.min(3, Math.min(o.hw, o.hd) * 0.3), ridgeX: o.hw >= o.hd });
     } else if (type === 'publico') {
       const floors = lv || (A > 500 ? 3 : 2);
-      this.addBuilding(chunks, x0, x1, z0, z1, floors, { mat: rng.chance(0.5) ? 'brick' : 'office', floorH: 3.6, color: rng.pick(PAL.publico), roofColor: 0xa29d94 });
+      this.addBuilding(chunks, x0, x1, z0, z1, floors, { mat: rng.chance(0.6) ? 'house' : 'office', floorH: 3.4, color: rng.pick(PAL.publico), roofColor: 0xa29d94 });
     } else if (type === 'edificio') {
       // edificación entre medianeras: las huellas grandes se parten en lotes de 7 a 14 m de
       // frente (y en dos si la manzana es profunda), cada uno con su altura, color y locales
@@ -1250,7 +1405,7 @@ export class City {
             else floors = q < 0.4 ? rng.int(2, 4) : q < 0.75 ? rng.int(5, 8) : q < 0.95 ? rng.int(9, 13) : rng.int(14, 19);
           }
           const brick = floors < 6 && rng.chance(0.2);
-          const shop = floors <= 12 && rng.chance(0.8);
+          const shop = !o.noShop && floors <= 12 && rng.chance(0.8);
           this.addBuilding(chunks, xa, xa + w, za, zb, floors, { mat: brick ? 'brick' : 'office', color: rng.pick(PAL.centro), shop });
           xa += w;
         }
