@@ -119,6 +119,8 @@ export class ChunkedGeo {
       if (!gb.count) continue;
       const m = new THREE.Mesh(gb.toGeometry(), materials[mat]);
       m.matrixAutoUpdate = false;
+      m.castShadow = true;
+      m.receiveShadow = true;
       parent.add(m);
     }
   }

@@ -44,6 +44,7 @@ export class Game {
     };
     this.settings = {
       ps2: true, quality: 1, music: 0.55, sfx: 0.8, sens: 1, invertY: false, tts: false, touch: 'auto',
+      shadows: !(window.matchMedia && window.matchMedia('(pointer: coarse)').matches),
     };
     try { Object.assign(this.settings, JSON.parse(safeStorageGet('gtasj-settings') || '{}')); } catch (e) { /* default */ }
   }
@@ -59,6 +60,7 @@ export class Game {
     this.canvas = canvas;
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
     renderer.setPixelRatio(1);
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer = renderer;
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(62, 1, 0.3, 1400);
@@ -115,6 +117,7 @@ export class Game {
   applySettings() {
     const s = this.settings;
     this.post.enabled = !!s.ps2;
+    this.setShadows(!!s.shadows);
     this.renderScale = s.quality;
     this.onResize();
     this.audio.setVolumes(s.music, s.sfx);
@@ -122,6 +125,20 @@ export class Game {
     this.input.sensitivity = s.sens;
     this.input.invertY = !!s.invertY;
     if (this.touch) this.touch.setMode(s.touch);
+  }
+
+  setShadows(on) {
+    const r = this.renderer;
+    if (r.shadowMap.enabled === on && this.env.sun.castShadow === on) return;
+    r.shadowMap.enabled = on;
+    this.env.sun.castShadow = on;
+    this.env.sun.shadow.radius = 2;
+    // los materiales tienen que recompilarse para recibir (o dejar de recibir) sombras
+    this.scene.traverse((o) => {
+      if (!o.material) return;
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) m.needsUpdate = true;
+    });
+    for (const v of this.vehicles || []) v.shadow.material.opacity = on ? 0.55 : 0.9;
   }
 
   onResize() {

@@ -371,6 +371,7 @@ export class RoadNetwork {
       geo.computeVertexNormals();
       geo.computeBoundingSphere();
       const m = new THREE.Mesh(geo, material);
+      m.receiveShadow = true;
       m.renderOrder = order;
       m.matrixAutoUpdate = false;
       group.add(m);

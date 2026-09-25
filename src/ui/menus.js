@@ -254,6 +254,7 @@ export class Menus {
       const st = g.settings;
       html = `<h2>Opciones</h2><div class="pane">
         <label>Filtro PS2 (estela y colores de época) <input type="checkbox" id="o-ps2" ${st.ps2 ? 'checked' : ''}></label>
+        <label>Sombras del sol <input type="checkbox" id="o-sh" ${st.shadows ? 'checked' : ''}></label>
         <label>Calidad de imagen <select id="o-q"><option value="0.6">Baja</option><option value="0.8">Media</option><option value="1">Alta</option></select></label>
         <label>Volumen de la radio <input type="range" id="o-music" min="0" max="1" step="0.05" value="${st.music}"></label>
         <label>Volumen de efectos <input type="range" id="o-sfx" min="0" max="1" step="0.05" value="${st.sfx}"></label>
@@ -319,6 +320,7 @@ export class Menus {
       const t = s.querySelector('#o-touch'); t.value = st.touch;
       const upd = () => {
         st.ps2 = s.querySelector('#o-ps2').checked;
+        st.shadows = s.querySelector('#o-sh').checked;
         st.quality = parseFloat(q.value);
         st.music = parseFloat(s.querySelector('#o-music').value);
         st.sfx = parseFloat(s.querySelector('#o-sfx').value);

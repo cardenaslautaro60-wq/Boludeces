@@ -3,6 +3,7 @@ import { GeoBuilder, hexColor } from './geom.js';
 import { PUMP_AREAS, TURBINES, RAMPS, BAGS, FLATS, POI, DECKS } from './mapdata.js';
 import { RNG, clamp } from '../util.js';
 import { coastX } from './terrain.js';
+import { foliageAtlas, treeGeometry, tuftAssets } from './foliage.js';
 
 const vcMat = () => new THREE.MeshLambertMaterial({ vertexColors: true });
 
@@ -17,6 +18,7 @@ const tmpQ = new THREE.Quaternion();
 const tmpS = new THREE.Vector3(1, 1, 1);
 const tmpP = new THREE.Vector3();
 const tmpE = new THREE.Euler();
+const tmpC = new THREE.Color();
 
 export class Props {
   constructor() {
@@ -45,6 +47,7 @@ export class Props {
     this.buildBenches(city, terrain, colliders);
     this.buildOilTanks(terrain, colliders);
     this.buildDecks(colliders);
+    for (const o of this.group.children) if (o.isMesh && !o.userData.noShadow) o.castShadow = true;
     game.scene.add(this.group);
   }
 
@@ -325,37 +328,14 @@ export class Props {
       }
     }
     const trunk = new GeoBuilder();
-    trunk.cylinder(0, 0, 0.18, 0, 3, hexColor(0x5a4632), 5, false);
-    const alamo = new GeoBuilder();
-    // copa alargada del álamo
-    const segs = 7;
-    for (let k = 0; k < segs; k++) {
-      const a0 = (k / segs) * Math.PI * 2, a1 = ((k + 1) / segs) * Math.PI * 2;
-      const ring = (y, r, a) => [Math.cos(a) * r, y, Math.sin(a) * r];
-      const lv = [[1.5, 0.4], [4, 1.5], [8, 1.6], [12, 1.0], [15, 0.0]];
-      for (let l = 0; l < lv.length - 1; l++) {
-        const [y0, r0] = lv[l], [y1, r1] = lv[l + 1];
-        const c = hexColor(l % 2 ? 0x6f7f3a : 0x627535);
-        alamo.quad(ring(y0, r0, a0), ring(y0, r0, a1), ring(y1, r1, a1), ring(y1, r1, a0), [0, 0], [1, 0], [1, 1], [0, 1], c);
-      }
-    }
-    const pino = new GeoBuilder();
-    for (let k = 0; k < segs; k++) {
-      const a0 = (k / segs) * Math.PI * 2, a1 = ((k + 1) / segs) * Math.PI * 2;
-      const ring = (y, r, a) => [Math.cos(a) * r, y, Math.sin(a) * r];
-      const lv = [[1.2, 2.6], [4, 1.4], [4, 2.2], [7, 0.9], [7, 1.6], [10.5, 0]];
-      for (let l = 0; l < lv.length - 1; l++) {
-        const [y0, r0] = lv[l], [y1, r1] = lv[l + 1];
-        if (y0 === y1) continue;
-        const c = hexColor(0x2f4a2e);
-        pino.quad(ring(y0, r0, a0), ring(y0, r0, a1), ring(y1, r1, a1), ring(y1, r1, a0), [0, 0], [1, 0], [1, 1], [0, 1], c);
-      }
-    }
+    trunk.cylinder(0, 0, 0.2, 0.08, 4.5, hexColor(0x4a3a2a), 6, false);
     const mat = vcMat();
+    const fol = foliageAtlas().material;
     const al = spots.filter((s) => s[2] === 'alamo'), pi = spots.filter((s) => s[2] !== 'alamo');
     const trunks = instanced(trunk.toGeometry(), mat, spots.length);
-    const alMesh = instanced(alamo.toGeometry(), mat, al.length);
-    const piMesh = instanced(pino.toGeometry(), mat, pi.length);
+    const alMesh = instanced(treeGeometry('alamo'), fol, al.length);
+    const piMesh = instanced(treeGeometry('pino'), fol, pi.length);
+    const tint = new THREE.Color();
     let ti = 0;
     const place = (arr, mesh) => arr.forEach(([x, z], i) => {
       const y = terrain.heightAt(x, z) + (city.curbAt(x, z) || 0) - 0.1;
@@ -364,24 +344,27 @@ export class Props {
       tmpP.set(x, y, z);
       tmpM.compose(tmpP, tmpQ, new THREE.Vector3(s, s, s));
       mesh.setMatrixAt(i, tmpM);
+      const k = ((i * 2654435761) >>> 0) / 4294967296;
+      tint.setRGB(0.85 + k * 0.3, 0.9 + ((k * 7) % 1) * 0.2, 0.8 + ((k * 13) % 1) * 0.25);
+      mesh.setColorAt(i, tint);
       trunks.setMatrixAt(ti++, tmpM);
       colliders.addCircle(x, z, 0.3, y - 1, y + 10, 'arbol');
     });
     place(al, alMesh);
     place(pi, piMesh);
     this.group.add(trunks, alMesh, piMesh);
+    for (const m of [trunks, alMesh, piMesh]) m.castShadow = true;
     this.treeMeshes = [alMesh, piMesh];
   }
 
   // ---- Matas de la estepa (coirón, neneo) ----
   buildScrub(terrain, roads, city, rng) {
-    const geo = new THREE.IcosahedronGeometry(1, 0);
-    geo.scale(1, 0.55, 1);
-    geo.translate(0, 0.25, 0);
-    const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true });
+    const tf = tuftAssets();
     const N = 6500;
-    const mesh = new THREE.InstancedMesh(geo, mat, N);
-    mesh.frustumCulled = false;
+    const meshA = new THREE.InstancedMesh(tf.coiron, tf.material, N);
+    const meshB = new THREE.InstancedMesh(tf.neneo, tf.material, N);
+    meshA.frustumCulled = meshB.frustumCulled = false;
+    let nA = 0, nB = 0;
     const colors = [0x6b6a3a, 0x7a7440, 0x8a8150, 0x5e6438, 0x9a8c5a, 0x707a4a];
     const c = new THREE.Color();
     let i = 0, tries = 0;
@@ -395,17 +378,17 @@ export class Props {
       if (city.blockAt(x, z)) continue;
       const near = roads.nearestEdge(x, z, 10);
       if (near && near.d < near.edge.width / 2 + 1.5) continue;
-      const s = rng.range(0.35, 1.1);
+      const s = rng.range(0.4, 1.05);
       tmpE.set(0, rng.range(0, 6.28), 0); tmpQ.setFromEuler(tmpE);
-      tmpP.set(x, h - 0.1, z);
-      tmpM.compose(tmpP, tmpQ, new THREE.Vector3(s * rng.range(0.8, 1.3), s, s * rng.range(0.8, 1.3)));
-      mesh.setMatrixAt(i, tmpM);
-      c.setHex(rng.pick(colors));
-      mesh.setColorAt(i, c);
+      tmpP.set(x, h - 0.08, z);
+      tmpM.compose(tmpP, tmpQ, new THREE.Vector3(s * rng.range(0.8, 1.3), s * rng.range(0.8, 1.2), s * rng.range(0.8, 1.3)));
+      c.setHex(rng.pick(colors)).lerp(tmpC.setRGB(1, 1, 1), 0.55);
+      if (rng.chance(0.62)) { meshA.setMatrixAt(nA, tmpM); meshA.setColorAt(nA++, c); } else { meshB.setMatrixAt(nB, tmpM); meshB.setColorAt(nB++, c); }
       i++;
     }
-    mesh.count = i;
-    this.group.add(mesh);
+    meshA.count = nA; meshB.count = nB;
+    meshA.userData.noShadow = meshB.userData.noShadow = true;
+    this.group.add(meshA, meshB);
   }
 
   buildContainers(city) {

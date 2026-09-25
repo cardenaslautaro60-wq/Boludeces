@@ -435,6 +435,7 @@ export class Humanoid {
     mesh.bind(new THREE.Skeleton(list));
     mesh.frustumCulled = false;
     mesh.castShadow = true;
+    mesh.receiveShadow = true;
     this.mesh = mesh;
     this.body.add(mesh);
     this.hipY = B.hips.position.y;

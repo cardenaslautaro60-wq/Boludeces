@@ -16,6 +16,7 @@ const KEYS = [
   [24, 0x070b1c, 0x151c30, 0.16],
 ];
 
+const SHADOW_R = 70;
 const WEATHER = {
   despejado: { name: 'Despejado', wind: 9, fogNear: 140, fogFar: 760, clouds: 0.15, dust: 0.0 },
   nublado: { name: 'Nublado', wind: 13, fogNear: 110, fogFar: 600, clouds: 0.75, dust: 0.1 },
@@ -43,6 +44,14 @@ export class Environment {
     this.hemi = new THREE.HemisphereLight(0xcfe0ff, 0x8a7a5a, 1.2);
     this.sun = new THREE.DirectionalLight(0xfff2e0, 2.2);
     this.sun.position.set(-100, 200, 50);
+    // sombras: un mapa de 140 m alrededor de la cámara que acompaña al jugador
+    this.sun.shadow.mapSize.set(2048, 2048);
+    const sc = this.sun.shadow.camera;
+    sc.left = -SHADOW_R; sc.right = SHADOW_R; sc.top = SHADOW_R; sc.bottom = -SHADOW_R; sc.near = 20; sc.far = 520;
+    sc.updateProjectionMatrix();
+    this.sun.shadow.bias = -0.0002;
+    this.sun.shadow.normalBias = 0.03;
+    this.shadowR = new THREE.Vector3(); this.shadowU = new THREE.Vector3(); this.shadowC = new THREE.Vector3();
     scene.add(this.hemi, this.sun, this.sun.target);
 
     this.fog = new THREE.Fog(0xbccbd8, 140, 760);
@@ -193,8 +202,18 @@ export class Environment {
     this.sun.color.copy(U.uSunColor.value);
     if (elev <= 0) this.sun.color.setRGB(0.55, 0.62, 0.9); // luz de luna
     const L = elev > 0 ? U.uSunDir.value : this.moonDir;
-    this.sun.position.set(camPos.x + L.x * 200, camPos.y + Math.max(0.2, L.y) * 200, camPos.z + L.z * 200);
-    this.sun.target.position.copy(camPos);
+    // centro del mapa de sombras encajado a la grilla de texels (evita el "titileo" al moverse)
+    const Ld = this.tmpLd || (this.tmpLd = new THREE.Vector3());
+    Ld.set(L.x, Math.max(0.2, L.y), L.z).normalize();
+    const R = this.shadowR.set(0, 1, 0).cross(Ld).normalize();
+    const Up = this.shadowU.copy(Ld).cross(R);
+    const texel = (SHADOW_R * 2) / this.sun.shadow.mapSize.x;
+    const C = this.shadowC.copy(camPos);
+    const r = Math.round(C.dot(R) / texel) * texel, u = Math.round(C.dot(Up) / texel) * texel, f = C.dot(Ld);
+    C.copy(R).multiplyScalar(r).addScaledVector(Up, u).addScaledVector(Ld, f);
+    this.sun.target.position.copy(C);
+    this.sun.position.copy(C).addScaledVector(Ld, 260);
+    this.sun.target.updateMatrixWorld();
     this.hemi.intensity = lerp(0.35, 1.25, light) * (1 + clouds * 0.1);
     this.hemi.color.copy(this.tmpTop).lerp(this.tmpA.setRGB(1, 1, 1), 0.55);
     this.hemi.groundColor.setRGB(0.55, 0.47, 0.35).multiplyScalar(lerp(0.4, 1, light));

@@ -57,7 +57,7 @@ export class Vehicle {
       this.glassMesh.renderOrder = 5;
       this.body.add(this.glassMesh);
     }
-    for (const m of [this.paintMesh, this.detMesh, this.chromeMesh]) if (m) m.castShadow = true;
+    for (const m of [this.paintMesh, this.detMesh, this.chromeMesh]) if (m) { m.castShadow = true; m.receiveShadow = true; }
     this.wheels = this.model.wheels.map(([x, y, z]) => {
       const w = new THREE.Mesh(this.model.wheel, M.wheel);
       w.castShadow = true;
@@ -67,7 +67,7 @@ export class Vehicle {
       return w;
     });
     // sombra
-    const sh = new THREE.Mesh(new THREE.PlaneGeometry(this.type.W + 0.8, this.type.L + 0.8), new THREE.MeshBasicMaterial({ map: game.textures.shadow, transparent: true, depthWrite: false, opacity: 0.9 }));
+    const sh = new THREE.Mesh(new THREE.PlaneGeometry(this.type.W + 0.8, this.type.L + 0.8), new THREE.MeshBasicMaterial({ map: game.textures.shadow, transparent: true, depthWrite: false, opacity: game.renderer.shadowMap.enabled ? 0.55 : 0.9 }));
     sh.rotation.x = -Math.PI / 2;
     sh.position.y = 0.06;
     sh.renderOrder = 4;

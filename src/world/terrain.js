@@ -265,6 +265,7 @@ export class Terrain {
         geo.computeBoundingSphere();
         const mesh = new THREE.Mesh(geo, mat);
         mesh.matrixAutoUpdate = false;
+        mesh.receiveShadow = true;
         group.add(mesh);
       }
     }
