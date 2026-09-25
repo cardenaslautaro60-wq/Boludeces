@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { lam } from '../render/style.js';
+import { lam, STYLE } from '../render/style.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { hexColor } from '../world/geom.js';
 import { clamp, lerp, RNG } from '../util.js';
@@ -56,7 +56,7 @@ function dUV(geo, k) {
 }
 
 // Sección transversal redondeada (rectángulo con esquinas curvas y techo más angosto)
-function section(hw, y0, y1, rTop, rBot, topNarrow = 1, n = 3) {
+function section(hw, y0, y1, rTop, rBot, topNarrow = 1, n = STYLE.realista ? 7 : 3) {
   const pts = [];
   const hwTop = hw * topNarrow;
   pts.push([0, y0]);
@@ -391,8 +391,11 @@ export class CarMaterials {
     this.env = null;
     const d = detailAtlas();
     this.detail = lam({ map: d.map, emissive: 0xffffff, emissiveMap: d.emissive, emissiveIntensity: 0.25, side: THREE.DoubleSide });
-    this.glass = new THREE.MeshStandardMaterial({ color: 0x18222c, metalness: 0.2, roughness: 0.06, transparent: true, opacity: 0.62, depthWrite: false, side: THREE.DoubleSide });
-    this.chrome = new THREE.MeshStandardMaterial({ color: 0xd8dadc, metalness: 1, roughness: 0.2 });
+    // versión realista: vidrio polarizado espejado (no deja ver el interior vacío) y cromo de verdad
+    this.glass = STYLE.realista
+      ? new THREE.MeshPhysicalMaterial({ color: 0x0a0e12, metalness: 0, roughness: 0.03, transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide, clearcoat: 1, clearcoatRoughness: 0.02 })
+      : new THREE.MeshStandardMaterial({ color: 0x18222c, metalness: 0.2, roughness: 0.06, transparent: true, opacity: 0.62, depthWrite: false, side: THREE.DoubleSide });
+    this.chrome = new THREE.MeshStandardMaterial({ color: 0xd8dadc, metalness: 1, roughness: STYLE.realista ? 0.1 : 0.2 });
     this.wheel = lam({ vertexColors: true });
     this.burnt = lam({ color: 0x2a2624 });
   }
@@ -404,7 +407,10 @@ export class CarMaterials {
   paint(color) {
     let m = this.paints.get(color);
     if (!m) {
-      m = new THREE.MeshStandardMaterial({ color, metalness: 0.35, roughness: 0.34, envMap: this.env, envMapIntensity: 0.9 });
+      // realista: pintura con barniz (clearcoat) que refleja el cielo nítido encima del color
+      m = STYLE.realista
+        ? new THREE.MeshPhysicalMaterial({ color, metalness: 0.15, roughness: 0.42, clearcoat: 1, clearcoatRoughness: 0.05, envMapIntensity: 1 })
+        : new THREE.MeshStandardMaterial({ color, metalness: 0.35, roughness: 0.34, envMap: this.env, envMapIntensity: 0.9 });
       this.paints.set(color, m);
     }
     return m;

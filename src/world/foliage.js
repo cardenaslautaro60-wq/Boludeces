@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { lam } from '../render/style.js';
+import { lam, STYLE } from '../render/style.js';
 import { RNG } from '../util.js';
 
 // ---------------------------------------------------------------------------
@@ -24,8 +24,11 @@ const hsl = (h, s, l) => `hsl(${h},${s}%,${l}%)`;
 export function foliageAtlas() {
   if (ATLAS) return ATLAS;
   const S = 512;
-  const c = document.createElement('canvas'); c.width = c.height = S;
+  // versión realista: el doble de resolución, el triple de hojas y más chicas
+  const RL = STYLE.realista, K = RL ? 3 : 1, RS = RL ? 0.55 : 1;
+  const c = document.createElement('canvas'); c.width = c.height = S * (RL ? 2 : 1);
   const g = c.getContext('2d');
+  if (RL) g.scale(2, 2);
   const rng = new RNG(99);
   g.clearRect(0, 0, S, S);
   // --- álamo (columnar, punta arriba) ---
@@ -33,21 +36,21 @@ export function foliageAtlas() {
     const [x0, x1] = A.alamo, w = x1 - x0, cx = x0 + w / 2;
     const top = 8, bot = 500;
     const halfW = (y) => { const t = (y - top) / (bot - top); return w * 0.46 * Math.pow(Math.sin(Math.min(1, t * 1.05) * Math.PI * 0.92 + 0.05), 0.9) * (0.55 + 0.45 * t); };
-    for (let i = 0; i < 5200; i++) {
+    for (let i = 0; i < 5200 * K; i++) {
       const y = rng.range(top, bot);
       const hw = halfW(y);
       const x = cx + rng.range(-1, 1) * hw * Math.sqrt(rng.next());
       const t = (y - top) / (bot - top);
       const side = (x - cx) / (hw || 1);
-      const l = 20 + rng.range(0, 14) + (1 - t) * 8 + side * 5 - (i < 1800 ? 6 : 0);
-      leaf(g, x, y, rng.range(2.5, 6), hsl(rng.range(70, 95), rng.range(35, 55), l), rng);
+      const l = 20 + rng.range(0, 14) + (1 - t) * 8 + side * 5 - (i < 1800 * K ? 6 : 0);
+      leaf(g, x, y, rng.range(2.5, 6) * RS, hsl(rng.range(70, 95), rng.range(35, 55), l), rng);
     }
     // ramitas que asoman del contorno
-    for (let i = 0; i < 260; i++) {
+    for (let i = 0; i < 260 * K; i++) {
       const y = rng.range(top + 20, bot - 10);
       const s = rng.chance(0.5) ? 1 : -1;
       const x = cx + s * halfW(y) * rng.range(0.95, 1.15);
-      leaf(g, x, y, rng.range(2, 4), hsl(rng.range(70, 95), 45, rng.range(24, 36)), rng);
+      leaf(g, x, y, rng.range(2, 4) * RS, hsl(rng.range(70, 95), 45, rng.range(24, 36)), rng);
     }
   }
   // --- pino (pisos de ramas caídas) ---
@@ -58,7 +61,7 @@ export function foliageAtlas() {
       const t0 = k / tiers, t1 = (k + 1.35) / tiers;
       const yA = top + t0 * (bot - top), yB = Math.min(bot, top + t1 * (bot - top));
       const wB = w * (0.16 + 0.34 * ((k + 1) / tiers));
-      for (let i = 0; i < 700; i++) {
+      for (let i = 0; i < 700 * K; i++) {
         const u = Math.sqrt(rng.next());
         const y = yA + u * (yB - yA);
         const hw = wB * u;
@@ -66,7 +69,7 @@ export function foliageAtlas() {
         const droop = Math.abs(x - cx) / (wB || 1) * 10;
         const l = 13 + rng.range(0, 10) + (1 - u) * 6;
         g.strokeStyle = hsl(rng.range(120, 150), rng.range(25, 40), l);
-        g.lineWidth = rng.range(1.2, 2.6);
+        g.lineWidth = rng.range(1.2, 2.6) * RS;
         g.beginPath(); g.moveTo(x, y + droop); g.lineTo(x + rng.range(-5, 5), y + droop + rng.range(3, 8)); g.stroke();
       }
     }
@@ -77,12 +80,12 @@ export function foliageAtlas() {
     const [x0, x1] = A[key];
     g.fillStyle = hsl((h0 + h1) / 2, 40, l0 + 4);
     g.fillRect(x0, 0, x1 - x0, S);
-    for (let i = 0; i < 2600; i++) leaf(g, rng.range(x0, x1), rng.range(0, S), rng.range(2, 4.5), hsl(rng.range(h0, h1), rng.range(30, 50), l0 + rng.range(0, 16)), rng);
+    for (let i = 0; i < 2600 * K; i++) leaf(g, rng.range(x0, x1), rng.range(0, S), rng.range(2, 4.5) * RS, hsl(rng.range(h0, h1), rng.range(30, 50), l0 + rng.range(0, 16)), rng);
   }
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 4;
-  const mat = lam({ map: t, alphaTest: 0.45, side: THREE.FrontSide });
+  const mat = lam({ map: t, alphaTest: 0.45, side: THREE.FrontSide }, { roughness: 0.82 });
   ATLAS = { texture: t, material: mat };
   return ATLAS;
 }

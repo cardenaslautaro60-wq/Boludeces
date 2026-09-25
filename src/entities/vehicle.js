@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { STYLE } from '../render/style.js';
 import { buildCarModel, CarMaterials } from './carmodels.js';
 import { clamp, lerp, approach, angleWrap, rand, pick } from '../util.js';
 
@@ -67,7 +68,7 @@ export class Vehicle {
       return w;
     });
     // sombra
-    const sh = new THREE.Mesh(new THREE.PlaneGeometry(this.type.W + 0.8, this.type.L + 0.8), new THREE.MeshBasicMaterial({ map: game.textures.shadow, transparent: true, depthWrite: false, opacity: game.renderer.shadowMap.enabled ? 0.55 : 0.9 }));
+    const sh = new THREE.Mesh(new THREE.PlaneGeometry(this.type.W + 0.8, this.type.L + 0.8), new THREE.MeshBasicMaterial({ map: game.textures.shadow, transparent: true, depthWrite: false, opacity: game.renderer.shadowMap.enabled ? (STYLE.realista ? 0.32 : 0.55) : 0.9 }));
     sh.rotation.x = -Math.PI / 2;
     sh.position.y = 0.06;
     sh.renderOrder = 4;

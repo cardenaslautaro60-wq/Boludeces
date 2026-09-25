@@ -120,7 +120,7 @@ export function humanGeometry(L, s) {
     // Los vértices de piel junto a una prenda llevan igual el color de la prenda.
     let mask = -1, c = null, puff = 0;
     if (zone === Z.torso) {
-      if (y >= waist) { mask = 1; c = shirt; puff = 0.012; } else { mask = 1; c = pants; puff = 0.008; }
+      if (y >= waist) { mask = 1; c = shirt; puff = 0.016; } else { mask = 1; c = pants; puff = 0.014; }
     } else if (zone === Z.neck) {
       // cuello de la remera: tapa los trapecios (lejos del eje del cuello)
       mask = Math.max((neckY - 0.012 - y) * 40, (Math.abs(x) - 0.062) * 60); c = shirt; puff = mask > 0 ? 0.008 : 0;
@@ -129,9 +129,9 @@ export function humanGeometry(L, s) {
     } else if (zone === Z.lowerarm) {
       mask = L.longSleeves ? (0.9 - t) * 8 : -1; c = sleeve; puff = mask > 0 ? 0.01 : 0;
     } else if (zone === Z.thigh) {
-      mask = 1; c = pants; puff = 0.012;
+      mask = 1; c = pants; puff = 0.02;
     } else if (zone === Z.calf) {
-      if (L.shoeKind === 'bota' && t > 0.62) { mask = 1; c = shoes; puff = 0.014; } else if (t < 0.96) { mask = 1; c = pants; puff = 0.012; } else { mask = 1; c = shoes; puff = 0.01; }
+      if (L.shoeKind === 'bota' && t > 0.62) { mask = 1; c = shoes; puff = 0.014; } else if (t < 0.96) { mask = 1; c = pants; puff = 0.018; } else { mask = 1; c = shoes; puff = 0.01; }
     } else if (zone === Z.foot) {
       mask = 1; c = y < 0.022 ? sole : shoes; puff = 0.012;
     }
@@ -172,7 +172,7 @@ export function humanGeometry(L, s) {
     cloth[i * 4 + 3] = Math.max(-1, Math.min(1, mask));
   }
   // --- la tela no marca los músculos: suavizado laplaciano de la ropa del torso y brazos
-  smoothCloth(pos, cloth, b, n, b.zone, 4 + Math.round(fat * 3), s);
+  smoothCloth(pos, cloth, b, n, b.zone, 9 + Math.round(fat * 3), s);
   // --- partes extra: ojos, cejas, pelo, barba (todas con los huesos de la cabeza)
   const extras = [['eyes', D.eyes, true]];
   if (L.hairStyle !== 'bald') extras.push(['brows', D.brows, true]);
@@ -272,7 +272,10 @@ function smoothCloth(pos, cloth, b, n, zone, iters, scale) {
   for (let i = 0; i < n; i++) {
     const c = canon[i];
     P[c * 3] += pos[i * 3]; P[c * 3 + 1] += pos[i * 3 + 1]; P[c * 3 + 2] += pos[i * 3 + 2]; cnt[c]++;
-    if (cloth[i * 4 + 3] > 0 && (zone[i] === Z.torso || zone[i] === Z.upperarm || zone[i] === Z.neck) && pos[i * 3 + 1] > hipsY + 0.12) on[c] = 1;
+    // remera (arriba de la cintura) y pantalón (muslos y pantorrillas): la tela no marca músculos
+    const top = (zone[i] === Z.torso || zone[i] === Z.upperarm || zone[i] === Z.neck) && pos[i * 3 + 1] > hipsY + 0.1;
+    const legs = zone[i] === Z.thigh || (zone[i] === Z.calf && pos[i * 3 + 1] > 0.18 * scale) || (zone[i] === Z.torso && pos[i * 3 + 1] <= hipsY + 0.1);
+    if (cloth[i * 4 + 3] > 0 && (top || legs)) on[c] = 1;
   }
   for (let c = 0; c < m; c++) { P[c * 3] /= cnt[c]; P[c * 3 + 1] /= cnt[c]; P[c * 3 + 2] /= cnt[c]; }
   const tmp = new Float32Array(P.length);

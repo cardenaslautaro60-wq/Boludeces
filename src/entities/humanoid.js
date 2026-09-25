@@ -569,7 +569,7 @@ export class Humanoid {
     this.anim = { phase: 0, speed: 0, punch: 0, aim: 0, air: 0, sit: 0, dead: 0, swim: 0 };
     this.build();
     if (shadowTex) {
-      const sh = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.2), new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false, fog: true }));
+      const sh = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.2), new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false, fog: true, opacity: STYLE.realista ? 0.5 : 1 }));
       sh.rotation.x = -Math.PI / 2;
       sh.position.y = 0.04;
       sh.renderOrder = 4;

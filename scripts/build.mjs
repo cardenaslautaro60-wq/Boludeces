@@ -54,7 +54,8 @@ async function artifact(v, outPath) {
   const body = html.slice(html.indexOf('<body>') + 6, html.indexOf('</body>')).replace(/<script src="build\/game(-realista)?\.js"><\/script>/, '').replace(/<script src="media\/medios\.js"><\/script>/, '');
   const fonts = (html.match(/<link[^>]+fonts\.googleapis[^>]+>/g) || []).join('\n');
   const title = (html.match(/<title>[^<]*<\/title>/) || [''])[0];
-  const importmap = JSON.stringify({ imports: { three: `${cdn}/build/three.module.min.js`, 'three/': `${cdn}/` } });
+  // (three/addons/ es un alias del package.json; en el CDN la carpeta real es examples/jsm/)
+  const importmap = JSON.stringify({ imports: { three: `${cdn}/build/three.module.min.js`, 'three/addons/': `${cdn}/examples/jsm/`, 'three/': `${cdn}/` } });
   const out = `${title}\n${fonts}\n<style>\n${css}\n</style>\n${body}\n<script type="importmap">${importmap}</script>\n<script type="module">\n${js}\n</script>\n`;
   mkdirSync(outPath.split('/').slice(0, -1).join('/') || '.', { recursive: true });
   writeFileSync(outPath, out);

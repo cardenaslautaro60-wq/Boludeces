@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { lam } from '../render/style.js';
+import { lam, STYLE } from '../render/style.js';
 import { GeoBuilder, hexColor } from './geom.js';
 import { MAP, LANDMARKS, BAGS, POI, FRAME, fromAB } from './mapdata.js';
 import { RNG, clamp } from '../util.js';
@@ -294,6 +294,25 @@ export class Props {
     this.lampGlow.frustumCulled = false;
     this.group.add(this.lampGlow);
     this.lampPositions = glowPos;
+    // versión realista: el farol ilumina la vereda (un "charco" de luz cálida en el piso)
+    if (STYLE.realista) {
+      const n = glowPos.length / 3;
+      const pg = new THREE.PlaneGeometry(1, 1);
+      pg.rotateX(-Math.PI / 2);
+      const pm = new THREE.MeshBasicMaterial({ map: T.glow, color: 0xffb870, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, fog: true, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8 });
+      const pools = new InstChunks(pg, pm, 300);
+      for (let i = 0; i < n; i++) {
+        const x = glowPos[i * 3], z = glowPos[i * 3 + 2];
+        const y = terrain.groundAt ? terrain.groundAt(x, z) : glowPos[i * 3 + 1] - 7;
+        tmpP.set(x, y + 0.06, z);
+        tmpM.compose(tmpP, tmpQ.identity(), tmpS.set(15, 1, 15));
+        pools.add(x, z, tmpM);
+      }
+      tmpS.set(1, 1, 1);
+      pools.build(this.group, { cullDist: 260 });
+      for (const m of pools.meshes) { m.renderOrder = 5; m.castShadow = false; m.receiveShadow = false; }
+      this.lampPools = pm;
+    }
   }
 
   // ---- Árboles (álamos y pinos) ----
@@ -626,6 +645,7 @@ export class Props {
     this.updatePumps(t, cam);
     this.updateTurbines(t, env.windSpeed);
     this.updateLobos(t);
-    if (this.lampGlow) this.lampGlow.material.opacity = clamp(env.night * 1.2, 0, 0.9);
+    if (this.lampGlow) this.lampGlow.material.opacity = clamp(env.night * 1.2, 0, STYLE.realista ? 0.55 : 0.9);
+    if (this.lampPools) this.lampPools.opacity = clamp(env.night * 1.3, 0, 0.85);
   }
 }

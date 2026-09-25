@@ -121,6 +121,14 @@ export class RealSky {
     U.cloudScale.value = 0.00022;
     U.cloudSpeed.value = 0.00003;
     U.cloudElevation.value = 0.55;
+    // de noche se funde el cielo original (azul noche con estrellas) sobre el físico
+    const om = env.sky.material;
+    om.transparent = true;
+    om.uniforms.uMix = { value: 0 };
+    om.fragmentShader = om.fragmentShader.replace('uniform vec3 uTop', 'uniform float uMix;\nuniform vec3 uTop')
+      .replace('gl_FragColor = vec4(col, 1.0);', 'gl_FragColor = vec4(col * 0.9, uMix);');
+    om.needsUpdate = true;
+    env.sky.renderOrder = -9;
     env.sky.visible = false;
     env.realSun = true;
     env.fogScale = 1.7;
@@ -167,10 +175,14 @@ export class RealSky {
     // luz: sol más fuerte y cielo como luz ambiente (la hemisférica queda como relleno)
     // (el cielo físico tiene radiancias altas: exposición baja, como una cámara de día)
     const day = clamp(env.dayLight, 0, 1);
-    env.sun.intensity *= 3.3;
+    const mix = smoothstep(0.35, 0.85, night);
+    env.skyUniforms && (env.sky.material.uniforms.uMix.value = mix);
+    env.sky.visible = mix > 0.01;
+    // luna: más tenue que en la PS2 (de noche manda la luz de los faroles y las ventanas)
+    env.sun.intensity *= elev > 0 ? 3.3 : 1.2;
     env.hemi.intensity *= 0.08;
     g.scene.environmentIntensity = lerp(0.5, 1.0, day) * (1 + clouds * 0.25);
-    const exposure = lerp(2.4, 1.0, day);
+    const exposure = lerp(1.6, 1.0, day);
     g.renderer.toneMappingExposure = exposure;
     // el resplandor trabaja antes de la exposición: el umbral acompaña (solo el sol, reflejos
     // fuertes y luces de noche)

@@ -149,7 +149,7 @@ export class Game {
       if (!o.material) return;
       for (const m of Array.isArray(o.material) ? o.material : [o.material]) m.needsUpdate = true;
     });
-    for (const v of this.vehicles || []) v.shadow.material.opacity = on ? 0.55 : 0.9;
+    for (const v of this.vehicles || []) v.shadow.material.opacity = on ? (STYLE.realista ? 0.32 : 0.55) : 0.9;
   }
 
   // Resolución dinámica: si la máquina no llega a ~30 cuadros, baja la resolución de a poco
@@ -234,6 +234,13 @@ export class Game {
       mission(id) { const d = g.missions.list.find((m) => m.id === id); if (d) g.missions.start(d); },
       car(key) { return g.cheats.spawnNear(key); },
       poi: POI,
+      // qué objeto se ve en un punto de la pantalla (coordenadas -1..1), para depurar
+      pick(x, y) {
+        const rc = new THREE.Raycaster();
+        rc.setFromCamera(new THREE.Vector2(x, y), g.camera);
+        const hits = rc.intersectObjects(g.scene.children, true).filter((h) => h.object.visible);
+        return hits.slice(0, 4).map((h) => { const o = h.object; const path = []; for (let q = o; q; q = q.parent) path.push(q.type + (q.name ? ':' + q.name : '')); return { d: +h.distance.toFixed(1), type: o.type, mat: [].concat(o.material).map((m) => m && (m.type + (m.map ? '+map' : '') + (m.vertexColors ? '+vc' : '') + ' #' + (m.color ? m.color.getHexString() : ''))), verts: o.geometry && o.geometry.attributes.position.count, path: path.slice(0, 4).join('<'), ud: Object.keys(o.userData || {}) }; });
+      },
       state() { const p = g.player; return { pos: [p.pos.x, p.pos.y, p.pos.z].map((v) => +v.toFixed(1)), veh: p.vehicle && p.vehicle.key, hp: p.health, money: g.money, wanted: g.police.level, mission: g.missions.active && g.missions.active.def.id, fps: +g.fps.toFixed(1) }; },
     };
   }
