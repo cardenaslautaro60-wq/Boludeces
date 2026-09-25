@@ -18,6 +18,8 @@ import { Missions } from './missions.js';
 import { Activities } from './activities.js';
 import { Pickups } from './pickups.js';
 import { Cheats } from './cheats.js';
+import { NPCs } from './npcs.js';
+import { WorldEvents } from './events.js';
 import { SaveSystem } from './save.js';
 import { Brain } from './ai.js';
 import { HUD } from '../ui/hud.js';
@@ -97,6 +99,8 @@ export class Game {
     this.activities = new Activities(this);
     this.missions = new Missions(this);
     this.cheats = new Cheats(this);
+    this.npcs = new NPCs(this);
+    this.events = new WorldEvents(this);
     this.saves = new SaveSystem(this);
     this.menus = new Menus(this);
     this.touch = new Touch(this);
@@ -113,6 +117,7 @@ export class Game {
     this.applySettings();
     progress(0.95, 'Casi listo...');
     this.createCharacters();
+    this.npcs.spawnAll();
     this.activities.setupBlips();
     this.activities.updateBody();
     // pre-render para compilar shaders
@@ -514,6 +519,8 @@ export class Game {
     this.pickups.update(dt);
     this.activities.update(dt);
     this.missions.update(dt);
+    this.npcs.update(dt, this.input);
+    this.events.update(dt);
     this.effects.update(dt, this.camera.position);
     this.props.update(this.time, dt, this.env, this.camera.position);
     this.world.water.userData.material.uniforms.uTime.value = this.time;
@@ -541,13 +548,14 @@ export class Game {
   updateLighting() {
     const n = this.env.night;
     const mats = this.city.materialsList;
-    const e = clamp((n - 0.25) * 1.6, 0, 1);
+    const eCars = clamp((n - 0.25) * 1.6, 0, 1);
+    const e = eCars * (this.env.blackout ? 0.04 : 1);
     mats.office.emissiveIntensity = e * 0.9;
     mats.house.emissiveIntensity = e * 0.8;
     if (mats.shop) mats.shop.emissiveIntensity = e * 1.1;
     if (this.city.houses && this.city.houses.material) this.city.houses.material.emissiveIntensity = e * 0.8;
     const cm = carMaterials();
-    cm.setLights(e);
+    cm.setLights(eCars);
     cm.setEnvIntensity(0.25 + this.env.dayLight * 0.8);
     // carteles un poco apagados de noche
   }
@@ -566,6 +574,12 @@ export class Game {
         const lf = dx * f.x + dz * f.z, ll = dx * lx + dz * lz;
         const hl = v.type.L / 2 + 0.3, hw = v.type.W / 2 + 0.3;
         if (Math.abs(lf) > hl || Math.abs(ll) > hw) continue;
+        // arriba del techo (o trepando): no choca; si el auto anda, lo lleva ("surfear" el techo)
+        if (p.climb) continue;
+        if (p.pos.y > v.pos.y + v.type.H - 0.4) {
+          if (p.onGround && Math.abs(lf) < v.type.L / 2 && Math.abs(ll) < v.type.W / 2) { p.pos.x += v.vx * dt; p.pos.z += v.vz * dt; p.pos.y = Math.max(p.pos.y, v.pos.y + v.type.H); }
+          continue;
+        }
         // dentro de la caja: ¿atropello o empujón?
         const relV = (v.vx * dx + v.vz * dz) / (Math.hypot(dx, dz) || 1);
         if (sp > 4.5 && relV > 1 && !p.dead) {

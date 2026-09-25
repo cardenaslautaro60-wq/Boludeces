@@ -26,6 +26,7 @@ export const BINDINGS = {
   camera: ['KeyV'],
   lookBack: ['KeyX'],
   action: ['KeyG'],
+  reload: ['KeyR'],
 };
 
 export class Input {
@@ -121,7 +122,7 @@ export class Input {
     const map = {
       sprint: b(0), handbrake: b(5), jump: b(2), enter: b(3), fire: b(7) && !this.inVehicle || b(1), aim: b(6) && !this.inVehicle,
       nextWeapon: b(5) && !this.inVehicle, prevWeapon: b(4) && !this.inVehicle, horn: b(10), radio: b(12) || b(13), pause: b(9), map: b(8), switchChar: b(11), job: b(14),
-      yes: b(15), no: b(14), camera: b(12),
+      yes: b(15), no: b(14), camera: b(12), reload: b(13) && !this.inVehicle, action: b(15),
     };
     this.padPressed = {};
     for (const k in map) if (map[k] && !this.padPrev[k]) this.padPressed[k] = true;

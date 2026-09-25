@@ -1,5 +1,6 @@
 // Trucos: se escriben durante el juego, como en San Andreas para PC
 import { Brain } from './ai.js';
+import { LANDMARKS } from '../world/mapdata.js';
 
 export class Cheats {
   constructor(game) {
@@ -26,6 +27,22 @@ export class Cheats {
       CISTERNA: ['Camión cisterna', () => this.spawnNear('cisterna')],
       ENDURO: ['Moto enduro', () => this.spawnNear('enduro')],
       FITITO: ['Fitito 600', () => this.spawnNear('fitito')],
+      // de Comodoro
+      CHENQUE: ['Arriba del Cerro Chenque', () => this.tp(['miradorChenque', 'chenque'])],
+      MADRIGUERA: ['A La Madriguera', () => this.tp(['madriguera', 'estadio'])],
+      LOBERIA: ['A la lobería de Punta del Marqués', () => this.tp(['puntaMarques', 'puntaMarquesPeak'])],
+      RADATILLY: ['A la playa de Rada Tilly', () => this.tp(['rada'])],
+      SUPERSALTO: ['Salto de guanaco', (g) => { const p = g.player; p.jumpMul = p.jumpMul > 1 ? 1 : 3; for (const q of [g.gordopin, g.petroca]) if (q) q.jumpMul = p.jumpMul; }],
+      BALASINFINITAS: ['Balas infinitas, sin recargar', (g) => { for (const q of [g.gordopin, g.petroca]) if (q) q.infiniteAmmo = !q.infiniteAmmo; }],
+      PETRODOLARES: ['Regalías petroleras: $500.000', (g) => g.addMoney(500000)],
+      TORTAFRITA: ['Tortas fritas: salud, chaleco y unos kilos', (g) => { const p = g.player; p.health = p.maxHealth; p.armor = 100; g.stats.fat = Math.min(100, g.stats.fat + 10); g.activities.updateBody(); }],
+      VIENTAZO: ['Vientazo de 120 km/h', (g) => g.events.start('vientazo')],
+      TIERRA: ['Temporal de tierra', (g) => g.events.start('tierra')],
+      NEVADA: ['Nieva en Comodoro', (g) => g.events.start('nevada')],
+      CORTEDERUTA: ['Corte de ruta', (g) => g.events.start('piquete')],
+      ANIVERSARIO: ['Fuegos artificiales del aniversario', (g) => g.events.start('aniversario')],
+      APAGON: ['Corte de luz', (g) => g.events.start('apagon')],
+      CARAVANA: ['Caravana del Lobo', (g) => g.events.start('caravana')],
     };
   }
 
@@ -41,6 +58,17 @@ export class Cheats {
       }
     }
     return false;
+  }
+
+  // Teletransporte a un lugar de Comodoro (con el auto, si está manejando)
+  tp(keys) {
+    const g = this.game, p = g.player;
+    const L = keys.map((k) => LANDMARKS[k]).find(Boolean);
+    if (!L) return;
+    const { x, z } = g.safeSpot(L.x, L.z, p.vehicle ? 2.2 : 0.6, !!p.vehicle);
+    if (p.vehicle) { const v = p.vehicle; v.pos.set(x, g.terrain.groundAt(x, z) + 0.3, z); v.vx = v.vz = 0; v.vy = 0; }
+    else { p.pos.set(x, g.world.footGround(x, z), z); p.vx = p.vz = p.vy = 0; }
+    g.cameraRig.snapBehind(p.vehicle ? p.vehicle.heading : p.heading);
   }
 
   spawnNear(key, color) {

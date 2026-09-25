@@ -83,7 +83,7 @@ export class Touch {
     inp.touch.buttons.clear(); inp.touch.gas = false; inp.touch.brake = false;
     const defs = inCar
       ? [['horn', 'BOCINA'], ['radio', 'RADIO'], ['enter', 'BAJAR'], ['handbrake', 'FRENO<br>MANO'], ['brake', 'FRENO'], ['gas', 'GAS'], ['fire', 'TIRO'], ['job', 'REMÍS'], ['lookBack', 'ATRÁS']]
-      : [['nextWeapon', 'ARMA'], ['aim', 'APUNTAR'], ['enter', 'SUBIR'], ['jump', 'SALTAR'], ['sprint', 'CORRER'], ['fire', 'GOLPE<br>TIRO']];
+      : [['nextWeapon', 'ARMA'], ['aim', 'APUNTAR'], ['enter', 'SUBIR'], ['jump', 'SALTAR'], ['sprint', 'CORRER'], ['fire', 'GOLPE<br>TIRO'], ['action', 'HABLAR'], ['reload', 'RECARGAR']];
     this.btns.innerHTML = '';
     for (const [a, label] of defs) {
       const b = document.createElement('div');

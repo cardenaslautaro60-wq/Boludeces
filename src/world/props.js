@@ -647,7 +647,9 @@ export class Props {
     this.updatePumps(t, cam);
     this.updateTurbines(t, env.windSpeed);
     this.updateLobos(t);
-    if (this.lampGlow) this.lampGlow.material.opacity = clamp(env.night * 1.2, 0, STYLE.realista ? 0.55 : 0.9);
-    if (this.lampPools) this.lampPools.opacity = clamp(env.night * 1.3, 0, 0.85);
+    // corte de luz (evento): los faroles se apagan
+    const on = env.blackout ? 0 : 1;
+    if (this.lampGlow) this.lampGlow.material.opacity = clamp(env.night * 1.2, 0, STYLE.realista ? 0.55 : 0.9) * on;
+    if (this.lampPools) this.lampPools.opacity = clamp(env.night * 1.3, 0, 0.85) * on;
   }
 }

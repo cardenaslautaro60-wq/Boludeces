@@ -13,6 +13,9 @@ export class PlayerController {
     this.enterT = 0;
     this.hornWas = false;
     this.fireHeld = 0;
+    this.jumpBuf = 0;
+    this.lock = null;       // blanco fijado al apuntar
+    this.lockT = 0;
   }
 
   get ped() { return this.game.player; }
@@ -67,18 +70,25 @@ export class PlayerController {
     const m = Math.hypot(mx, mz);
     if (m > 0.05) { p.moveX = mx / m; p.moveZ = mz / m; p.moveMag = Math.min(1, m); } else p.moveMag = 0;
     p.gait = input.is('walk') ? 0 : input.is('sprint') ? 2 : 1;
-    if (input.was('jump')) p.jump();
+    // salto con "buffer": si se aprieta un instante antes de tocar el piso, salta igual
+    if (input.was('jump')) this.jumpBuf = 0.16;
+    p.holdJump = input.is('jump');
+    if (this.jumpBuf > 0) { if (p.jump()) this.jumpBuf = 0; else this.jumpBuf -= dt; }
+    if (input.was('reload')) p.reload();
 
     // armas
-    if (input.was('nextWeapon') || input.wheel > 0) p.cycleWeapon(1);
-    if (input.was('prevWeapon') || input.wheel < 0) p.cycleWeapon(-1);
+    // con joystick, apuntando, los gatillos cambian de blanco en vez de arma
+    const padAim = input.is('aim') && !!input.padAxis;
+    if (!padAim && (input.was('nextWeapon') || input.wheel > 0)) p.cycleWeapon(1);
+    if (!padAim && (input.was('prevWeapon') || input.wheel < 0)) p.cycleWeapon(-1);
     const W = WEAPONS[p.weapon];
     p.aiming = input.is('aim') && !W.melee;
     if (p.aiming || !W.melee) {
       cam.aimDirection(tmp);
       if (p.aiming) {
+        this.aimAssist(dt, input);
         // apuntar desde el hombro: corregir hacia el punto donde mira la cámara
-        const far = 60;
+        const far = this.lock ? Math.max(3, cam.camera.position.distanceTo(this.lock.pos)) : 60;
         const tx = cam.camera.position.x + tmp.x * far, ty = cam.camera.position.y + tmp.y * far, tz = cam.camera.position.z + tmp.z * far;
         const h = p.handWorld();
         p.aimDir.set(tx - h.x, ty - h.y, tz - h.z).normalize();
@@ -93,6 +103,7 @@ export class PlayerController {
         p.aimPitch = 0;
       }
     }
+    if (!p.aiming) this.lock = null;
     const fire = input.is('fire');
     if (fire && (input.was('fire') || W.auto || (!W.melee && this.fireHeld > W.rate))) {
       if (!W.melee && !p.aiming) { const t = this.autoTarget(); if (t) p.heading = Math.atan2(t.pos.x - p.pos.x, t.pos.z - p.pos.z); }
@@ -106,6 +117,51 @@ export class PlayerController {
       const v = this.nearestVehicle(5);
       if (v) { this.enterTarget = v; this.enterT = 0; }
     }
+  }
+
+  // Apuntado con ayuda: con mouse la mira se "pega" al blanco que tiene encima (fricción y
+  // un tirón suave); con joystick o pantalla táctil fija el blanco más cercano al centro.
+  aimAssist(dt, input) {
+    const g = this.game, p = this.ped, cam = g.cameraRig;
+    const hard = !!(input.padAxis || input.isTouch || (input.touch && input.touch.active));
+    const cp = cam.camera.position;
+    cam.aimDirection(tmp);
+    const ax = tmp.x, ay = tmp.y, az = tmp.z;
+    const pointOf = (o) => ({ x: o.pos.x, y: o.pos.y + (o.knockT > 0 ? 0.4 : 1.25), z: o.pos.z });
+    const angTo = (o) => {
+      const q = pointOf(o);
+      const dx = q.x - cp.x, dy = q.y - cp.y, dz = q.z - cp.z, d = Math.hypot(dx, dy, dz) || 1;
+      return { ang: Math.acos(clamp((dx * ax + dy * ay + dz * az) / d, -1, 1)), d, dx: dx / d, dy: dy / d, dz: dz / d };
+    };
+    const valid = (o) => o && !o.dead && !o.removed && !o.vehicle && !o.isFriend && o !== p && Math.hypot(o.pos.x - p.pos.x, o.pos.z - p.pos.z) < 48;
+    // mantener el blanco si sigue cerca de la mira
+    const thr = hard ? 0.42 : 0.11;
+    if (this.lock && (!valid(this.lock) || angTo(this.lock).ang > thr * 2.2)) this.lock = null;
+    if (!this.lock || (hard && input.was('nextWeapon'))) {
+      let best = null, bs = Infinity;
+      for (const o of g.peds) {
+        if (!valid(o) || (hard && o === this.lock)) continue;
+        const a = angTo(o);
+        if (a.ang > thr) continue;
+        // visible (sin paredes en el medio)
+        const hit = g.colliders.raycast(cp.x, cp.y, cp.z, a.dx, a.dy, a.dz, a.d - 0.5);
+        if (hit) continue;
+        const sc = a.ang * (1 + a.d * 0.02) * (o.brain && o.brain.hostile ? 0.5 : 1) * (o.kind === 'cana' ? 0.7 : 1);
+        if (sc < bs) { bs = sc; best = o; }
+      }
+      if (best && best !== this.lock) this.lockT = 0;
+      this.lock = best || this.lock;
+    }
+    this.lockT += dt;
+    if (!this.lock) return;
+    const a = angTo(this.lock);
+    // error en yaw y pitch entre la mira y el blanco
+    const yawErr = Math.atan2(Math.sin(Math.atan2(a.dx, a.dz) - Math.atan2(ax, az)), Math.cos(Math.atan2(a.dx, a.dz) - Math.atan2(ax, az)));
+    const pitchErr = Math.asin(clamp(a.dy, -1, 1)) - Math.asin(clamp(ay, -1, 1));
+    const moved = performance.now() - (input.lastMouseMove || 0) < 80;
+    const k = hard ? 1 - Math.exp(-9 * dt) : (moved ? 1 - Math.exp(-2.2 * dt) : 1 - Math.exp(-5 * dt));
+    cam.yaw += yawErr * k;
+    cam.pitch = clamp(cam.pitch - pitchErr * k, -0.6, 1.2);
   }
 
   autoTarget() {

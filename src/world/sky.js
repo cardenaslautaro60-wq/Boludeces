@@ -18,10 +18,12 @@ const KEYS = [
 
 const SHADOW_R = 70;
 const WEATHER = {
-  despejado: { name: 'Despejado', wind: 9, fogNear: 140, fogFar: 760, clouds: 0.15, dust: 0.0 },
-  nublado: { name: 'Nublado', wind: 13, fogNear: 110, fogFar: 600, clouds: 0.75, dust: 0.1 },
-  ventoso: { name: 'Viento fuerte', wind: 22, fogNear: 60, fogFar: 430, clouds: 0.35, dust: 0.55 },
-  temporal: { name: 'Temporal de viento', wind: 34, fogNear: 15, fogFar: 190, clouds: 0.6, dust: 1.0 },
+  despejado: { name: 'Despejado', wind: 9, fogNear: 140, fogFar: 760, clouds: 0.15, dust: 0.0, snow: 0 },
+  nublado: { name: 'Nublado', wind: 13, fogNear: 110, fogFar: 600, clouds: 0.75, dust: 0.1, snow: 0 },
+  ventoso: { name: 'Viento fuerte', wind: 22, fogNear: 60, fogFar: 430, clouds: 0.35, dust: 0.55, snow: 0 },
+  temporal: { name: 'Temporal de viento', wind: 34, fogNear: 15, fogFar: 190, clouds: 0.6, dust: 1.0, snow: 0 },
+  // rara vez, en invierno: nieva en Comodoro
+  nevada: { name: 'Nevada', wind: 7, fogNear: 40, fogFar: 330, clouds: 0.95, dust: 0.0, snow: 1 },
 };
 
 export class Environment {
@@ -38,6 +40,9 @@ export class Environment {
     this.night = 0;
     this.dayLight = 1;
     this.dust = 0;
+    this.snow = 0;
+    this.extraWind = 0;  // eventos: ráfagas y temporal de tierra
+    this.extraDust = 0;
     this.nextWeatherChange = 180;
     this.moonDir = new THREE.Vector3(0.3, 0.8, -0.4).normalize();
     // la versión realista usa el recorrido real del sol y ve más lejos (aire patagónico)
@@ -156,7 +161,7 @@ export class Environment {
     const base = this.current('wind');
     const g = noise2(realT * 0.35, 3.7) * 0.7 + noise2(realT * 1.3, 8.1) * 0.3;
     this.gust = g;
-    this.windSpeed = base * (0.65 + g * 0.7);
+    this.windSpeed = base * (0.65 + g * 0.7) + this.extraWind * (0.75 + g * 0.5);
     const ang = 0.15 + (noise2(realT * 0.05, 1.1) - 0.5) * 0.6;
     this.windDir.set(Math.cos(ang), Math.sin(ang));
 
@@ -172,8 +177,9 @@ export class Environment {
     this.night = clamp(1 - (light - 0.16) / 0.5, 0, 1);
 
     const clouds = this.current('clouds');
-    const dust = this.current('dust');
+    const dust = clamp(this.current('dust') + this.extraDust, 0, 1);
     this.dust = dust;
+    this.snow = this.current('snow');
     const grey = this.tmpA.setRGB(0.62, 0.64, 0.66).multiplyScalar(light);
     this.tmpTop.lerp(grey, clouds * 0.55);
     this.tmpHor.lerp(grey, clouds * 0.4);
@@ -198,8 +204,8 @@ export class Environment {
     U.uSunColor.value.setRGB(1, lerp(0.92, 0.55, low), lerp(0.8, 0.35, low));
 
     this.fog.color.copy(this.tmpHor);
-    this.fog.near = this.current('fogNear') * this.fogScale;
-    this.fog.far = this.current('fogFar') * lerp(1, 0.75, this.night) * this.fogScale;
+    this.fog.near = lerp(this.current('fogNear'), 8, this.extraDust) * this.fogScale;
+    this.fog.far = lerp(this.current('fogFar'), 140, this.extraDust) * lerp(1, 0.75, this.night) * this.fogScale;
 
     const sunI = Math.max(0, elev) > 0 ? lerp(0.3, 2.4, smoothstep(0, 0.5, elev)) * (1 - clouds * 0.45) * (1 - dust * 0.4) : 0;
     this.sun.intensity = sunI + this.night * 0.25;

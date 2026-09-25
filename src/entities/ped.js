@@ -23,6 +23,14 @@ export class Ped {
     this.kx = 0; this.kz = 0; // empuje (golpes/atropellos)
     this.onGround = true;
     this.swimming = false;
+    this.airT = 0;        // tiempo en el aire (para el salto "coyote")
+    this.jumpHold = 0;    // mantener el salto: sube un poco más
+    this.holdJump = false;
+    this.jumpMul = 1;     // truco SUPERSALTO
+    this.climb = null;    // trepando una pared, baranda o auto
+    this.landT = 0;       // aterrizaje fuerte
+    this.mag = {};        // balas en el cargador (solo el jugador recarga)
+    this.reloadT = 0;
     this.maxHealth = opts.health || 100;
     this.health = this.maxHealth;
     this.armor = 0;
@@ -64,6 +72,7 @@ export class Ped {
 
   setWeapon(w) {
     if (!this.owned.includes(w)) return;
+    if (w !== this.weapon) this.reloadT = 0;
     this.weapon = w;
     const W = WEAPONS[w];
     this.model.setHeld(W.mesh ? weaponMesh(W.mesh) : null);
@@ -88,14 +97,130 @@ export class Ped {
 
   get speed() { return Math.hypot(this.vx, this.vz); }
 
+  // Salto: con carrera salta más lejos, manteniendo la tecla un poco más alto, y se puede
+  // saltar un instante después de salir de un cordón ("coyote"). Contra una pared o una
+  // baranda baja, el jugador trepa.
   jump() {
-    if (this.onGround && !this.swimming && !this.vehicle && this.knockT <= 0 && !this.dead) {
-      this.vy = 5.6;
-      this.onGround = false;
+    if (this.swimming || this.vehicle || this.knockT > 0 || this.dead || this.climb) return false;
+    const coyote = !this.onGround && this.airT < 0.14 && this.vy <= 0.5 && !this.jumped;
+    if (!this.onGround && !coyote) return false;
+    if (this.isPlayer && this.tryClimb()) return true;
+    const sprint = this.gait === 2 && this.speed > 5;
+    this.vy = (sprint ? 6.1 : 5.7) * (this.jumpMul > 1 ? 2.2 : 1);
+    if (sprint) {
+      const fx = Math.sin(this.heading), fz = Math.cos(this.heading);
+      const along = this.vx * fx + this.vz * fz;
+      if (along < 7.6) { this.vx += fx * (7.6 - along); this.vz += fz * (7.6 - along); }
     }
+    this.onGround = false;
+    this.jumped = true;
+    this.jumpHold = 0.28;
+    return true;
+  }
+
+  // Altura del objeto más alto (collider o techo de un auto) bajo el punto que no pase de maxY
+  topAt(x, z, maxY, withCars = false) {
+    const g = this.game;
+    const list = g.colliders.near(x - 0.05, x + 0.05, z - 0.05, z + 0.05, this._near || (this._near = []));
+    let best = -Infinity;
+    for (const c of list) {
+      if (c.y1 > maxY || c.y1 <= best) continue;
+      let inside = false;
+      if (c.type === 'box') inside = x >= c.x0 && x <= c.x1 && z >= c.z0 && z <= c.z1;
+      else if (c.type === 'obb') {
+        const dx = x - c.cx, dz = z - c.cz;
+        inside = Math.abs(dx * c.ax + dz * c.az) <= c.hw && Math.abs(-dx * c.az + dz * c.ax) <= c.hd;
+      } else inside = (x - c.x) ** 2 + (z - c.z) ** 2 <= c.r * c.r;
+      if (inside) best = c.y1;
+    }
+    if (withCars) {
+      for (const v of g.vehicles) {
+        if (v.removed || v.type.bike) continue;
+        const dx = x - v.pos.x, dz = z - v.pos.z;
+        if (dx * dx + dz * dz > 16) continue;
+        const f = v.fwd, lx = dx * f.z - dz * f.x, lz = dx * f.x + dz * f.z;
+        const top = v.pos.y + v.type.H;
+        if (Math.abs(lx) <= v.type.W / 2 - 0.05 && Math.abs(lz) <= v.type.L / 2 - 0.1 && top <= maxY && top > best) best = top;
+      }
+    }
+    return best;
+  }
+
+  tryClimb() {
+    const W = this.game.world;
+    const fx = Math.sin(this.heading), fz = Math.cos(this.heading);
+    const y = this.pos.y;
+    for (const d of [0.5, 0.8]) {
+      const x = this.pos.x + fx * d, z = this.pos.z + fz * d;
+      const top = Math.max(this.topAt(x, z, y + 2.35, true), W.footGround(x, z));
+      if (top < y + 0.6) continue;
+      // ¿hay dónde pararse arriba? Si no (baranda, alambrado), se pasa por encima
+      const lx = x + fx * 0.55, lz = z + fz * 0.55;
+      const onTop = Math.max(this.topAt(lx, lz, top + 0.3, true), W.footGround(lx, lz)) > top - 0.3;
+      const ex = onTop ? lx : x + fx * 1.3, ez = onTop ? lz : z + fz * 1.3;
+      this.climb = { t: 0, dur: 0.3 + (top - y) * 0.2, x0: this.pos.x, y0: y, z0: this.pos.z, xm: x, zm: z, top, x1: ex, z1: ez, over: !onTop };
+      this.vx = this.vz = this.vy = 0;
+      this.onGround = false;
+      this.game.audio && this.game.audio.thud && this.game.audio.thud(this.pos, 0.15);
+      return true;
+    }
+    return false;
+  }
+
+  updateClimb(dt) {
+    const c = this.climb;
+    c.t += dt / c.dur;
+    const k = Math.min(1, c.t);
+    // primero sube pegado a la pared, después pasa el cuerpo por arriba
+    if (k < 0.65) {
+      const u = k / 0.65;
+      this.pos.x = lerp(c.x0, c.xm - Math.sin(this.heading) * 0.25, u);
+      this.pos.z = lerp(c.z0, c.zm - Math.cos(this.heading) * 0.25, u);
+      this.pos.y = lerp(c.y0, c.top + (c.over ? 0.25 : 0.02), u * u * (3 - 2 * u));
+    } else {
+      const u = (k - 0.65) / 0.35;
+      this.pos.x = lerp(c.xm - Math.sin(this.heading) * 0.25, c.x1, u);
+      this.pos.z = lerp(c.zm - Math.cos(this.heading) * 0.25, c.z1, u);
+    }
+    if (k >= 1) {
+      this.climb = null;
+      this.onGround = !c.over;
+      this.vy = 0;
+      if (c.over) { this.vx = Math.sin(this.heading) * 1.5; this.vz = Math.cos(this.heading) * 1.5; }
+    }
+    this.model.update(dt, { speed: 0, climb: k, air: false });
+    this.group.position.copy(this.pos);
+    this.group.rotation.y = this.heading;
+  }
+
+  // Cargadores: el jugador recarga (R o solo al vaciar el cargador)
+  magOf(w) {
+    const W = WEAPONS[w];
+    if (!W || W.melee || !this.isPlayer || this.infiniteAmmo) return this.ammo[w] || 0;
+    if (this.mag[w] === undefined) this.mag[w] = Math.min(W.clip || 1, this.ammo[w] || 0);
+    return Math.min(this.mag[w], this.ammo[w] || 0);
+  }
+
+  reload() {
+    const W = WEAPONS[this.weapon];
+    if (!W || W.melee || !this.isPlayer || this.infiniteAmmo || this.reloadT > 0) return false;
+    const have = this.ammo[this.weapon] || 0, inMag = this.magOf(this.weapon);
+    if (inMag >= (W.clip || 1) || have <= inMag) return false;
+    this.reloadT = W.reload || 1.2;
+    this.reloadW = this.weapon;
+    const a = this.game.audio;
+    if (a && a.click) { a.click(this.pos); setTimeout(() => a.click(this.pos), (W.reload || 1.2) * 700); }
+    return true;
+  }
+
+  finishReload() {
+    const w = this.reloadW, W = WEAPONS[w];
+    if (!W) return;
+    this.mag[w] = Math.min(W.clip || 1, this.ammo[w] || 0);
   }
 
   attack() {
+    if (this.reloadT > 0 && !(WEAPONS[this.weapon] || {}).melee) return false;
     if (this.dead || this.knockT > 0 || this.attackCD > 0) return false;
     const W = WEAPONS[this.weapon] || WEAPONS.punos;
     if (W.melee || (this.ammo[this.weapon] || 0) <= 0 && W.melee) {
@@ -110,9 +235,14 @@ export class Ped {
       this.game.audio && this.game.audio.click(this.pos);
       return false;
     }
+    if (this.isPlayer && this.magOf(this.weapon) <= 0) { this.reload(); return false; }
     this.attackCD = W.rate;
     const dir = this.aiming || this.vehicle ? this.aimDir : tmpV.set(Math.sin(this.heading), 0, Math.cos(this.heading)).clone();
     shoot(this.game, this, dir);
+    if (this.isPlayer && !this.infiniteAmmo && this.mag[this.weapon] !== undefined) {
+      this.mag[this.weapon] = Math.max(0, this.mag[this.weapon] - 1);
+      if (this.mag[this.weapon] <= 0) this.reload();
+    }
     return true;
   }
 
@@ -221,6 +351,13 @@ export class Ped {
       return;
     }
 
+    if (this.climb) { this.updateClimb(dt); return; }
+    if (this.landT > 0) this.landT -= dt;
+    if (this.reloadT > 0) {
+      this.reloadT -= dt;
+      if (this.reloadT <= 0) this.finishReload();
+    }
+
     let mx = this.moveX, mz = this.moveZ, mag = this.moveMag;
     if (this.knockT > 0) {
       this.knockT -= dt;
@@ -235,10 +372,15 @@ export class Ped {
     } else this.stamina = Math.min(100, this.stamina + dt * 12);
     if (this.aiming) spd = Math.min(spd, 2.2);
     if (this.swimming) spd = 2.3;
+    if (this.landT > 0) spd *= 0.35;
     const tvx = mx * spd * mag, tvz = mz * spd * mag;
-    const k = this.onGround || this.swimming ? 1 - Math.exp(-12 * dt) : 1 - Math.exp(-1.5 * dt);
-    this.vx = lerp(this.vx, tvx, k);
-    this.vz = lerp(this.vz, tvz, k);
+    const air = !this.onGround && !this.swimming;
+    // en el aire se conserva el impulso; con el jugador se puede corregir un poco la dirección
+    if (!air || mag > 0.1) {
+      const k = !air ? 1 - Math.exp(-12 * dt) : 1 - Math.exp(-(this.isPlayer ? 2.6 : 1.5) * dt);
+      this.vx = lerp(this.vx, tvx, k);
+      this.vz = lerp(this.vz, tvz, k);
+    }
 
     // orientación
     if (this.aiming) {
@@ -262,6 +404,8 @@ export class Ped {
       punchSide: this.punchSide,
       dead: knocked,
       knock: 0,
+      land: this.landT > 0 ? this.landT / 0.3 : 0,
+      reload: this.reloadT > 0,
       jugg: this.jugg, wave: this.wave, dance: this.dance,
     });
     this.group.position.copy(this.pos);
@@ -293,17 +437,31 @@ export class Ped {
       if (dead) this.pos.y = -0.3;
     } else {
       this.swimming = false;
-      this.vy -= 20 * dt;
+      // mantener el salto apretado: menos gravedad mientras sube
+      const hold = this.holdJump && this.vy > 0 && this.jumpHold > 0;
+      if (this.jumpHold > 0) this.jumpHold -= dt;
+      this.vy -= (hold ? 11 : 20) * dt;
+      const vy0 = this.vy;
       this.pos.y += this.vy * dt;
-      if (this.pos.y <= gy) {
-        if (this.vy < -14 && !dead) this.hurt((-this.vy - 14) * 6, null, null);
-        this.pos.y = gy;
+      // techos de autos, contenedores, muros: se puede parar arriba (solo el jugador y si ya está arriba)
+      let sy = gy;
+      if (this.isPlayer || !this.onGround) sy = Math.max(gy, this.topAt(this.pos.x, this.pos.z, this.pos.y + 0.3, this.isPlayer));
+      if (this.pos.y <= sy) {
+        const fall = this.jumpMul > 1 ? 30 : 14;
+        if (vy0 < -fall && !dead) this.hurt((-vy0 - fall) * 6, null, null);
+        if (vy0 < -9 && !dead && this.isPlayer) {
+          this.landT = 0.3;
+          g.effects && g.effects.dustPuff && g.effects.dustPuff(this.pos.x, sy + 0.1, this.pos.z, 4, 0.8);
+          if (g.cameraRig) g.cameraRig.shake = Math.max(g.cameraRig.shake, Math.min(0.6, -vy0 * 0.03));
+        }
+        this.pos.y = sy;
         this.vy = 0;
         this.onGround = true;
-      } else if (this.pos.y - gy < 0.35 && this.vy <= 0) {
+      } else if (this.pos.y - sy < 0.35 && this.vy <= 0) {
         // bajar escalones / cordones pegado al piso
-        this.pos.y = gy; this.vy = 0; this.onGround = true;
+        this.pos.y = sy; this.vy = 0; this.onGround = true;
       } else this.onGround = false;
+      if (this.onGround) { this.airT = 0; this.jumped = false; } else this.airT += dt;
     }
     // colisiones
     g.colliders.resolveCircle(this.pos, 0.33, this.pos.y);

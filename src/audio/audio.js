@@ -165,6 +165,13 @@ export class Audio {
     this.burst({ dur: 0.25, freq: 4000, q: 3, gain: v * 0.4, pos, range: 150 });
   }
   door(pos) { this.burst({ dur: 0.1, freq: 250, type: 'lowpass', gain: 0.6, pos }); this.tone({ freq: 120, dur: 0.08, gain: 0.3, pos }); }
+  // estruendo de fuegos artificiales (lejano, grave y con cola)
+  boom(x, y, z) {
+    const pos = { x, y, z };
+    this.burst({ dur: 0.9, freq: 140, type: 'lowpass', gain: 0.55, pos, range: 900 });
+    this.burst({ dur: 0.35, freq: 2600, q: 0.7, gain: 0.12, pos, range: 900, t: this.ctx && this.ctx.currentTime + 0.05 });
+  }
+
   explosion(pos) {
     this.burst({ dur: 1.8, freq: 400, type: 'lowpass', q: 0.5, gain: 1.4, pos, range: 400 });
     this.tone({ freq: 70, freq2: 25, dur: 1.2, type: 'sine', gain: 1, pos, range: 400 });

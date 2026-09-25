@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { WORLD, POI, FRAME, fromAB } from '../world/mapdata.js';
 import { formatMoney, clamp } from '../util.js';
 import { WEAPONS } from '../game/weapons.js';
@@ -80,6 +81,10 @@ export class HUD {
     this.bigSub = el('div', 'hud-bigsub', root);
     this.title = el('div', 'hud-title', root);
     this.cross = el('div', 'hud-cross', root);
+    this.lockEl = el('div', 'hud-lock', root);
+    this.hitEl = el('div', 'hud-hit', root);
+    this.spread = 0; this.hitT = 0;
+    this._v = new THREE.Vector3();
     this.bars = el('div', 'hud-letterbox', root, '<div></div><div></div>');
     this.fade = el('div', 'hud-fade', root);
     this.toast = el('div', 'hud-toast', root);
@@ -224,6 +229,14 @@ export class HUD {
   }
   removeCounter(id) { if (this.timers[id]) { this.timers[id].remove(); delete this.timers[id]; } }
   clearCounters() { for (const k in this.timers) this.removeCounter(k); }
+  // la mira se abre con cada disparo y se cierra sola
+  bloom(v) { this.spread = Math.min(1, this.spread + v * 10); }
+  hitMarker(head) {
+    this.hitT = head ? 0.3 : 0.18;
+    this.hitEl.classList.toggle('head', !!head);
+    this.hitEl.classList.add('show');
+  }
+
   setPrompt(text) {
     if (text) { this.prompt.innerHTML = text; this.prompt.classList.add('show'); } else this.prompt.classList.remove('show');
   }
@@ -262,9 +275,29 @@ export class HUD {
       this.weaponImg.src = weaponIcon(p.weapon);
     }
     const W = WEAPONS[p.weapon];
-    this.ammo.textContent = W && !W.melee ? String(p.ammo[p.weapon] || 0) : '';
-    // mira
+    if (W && !W.melee) {
+      const tot = p.ammo[p.weapon] || 0;
+      if (p.isPlayer && !p.infiniteAmmo && W.clip) { const m = p.magOf(p.weapon); this.ammo.textContent = p.reloadT > 0 ? `··· ${tot}` : `${m}-${tot - m}`; }
+      else this.ammo.textContent = p.infiniteAmmo ? '∞' : String(tot);
+    } else this.ammo.textContent = '';
+    // mira: se abre al disparar y al moverse, en rojo con un blanco fijado
+    const lock = g.controller && g.controller.lock;
+    this.spread = Math.max(0, this.spread - dt * 2.2);
+    const mv = Math.min(1, p.speed / 4);
+    const size = 26 + (this.spread + mv * 0.35) * 30;
+    this.cross.style.width = this.cross.style.height = size.toFixed(1) + 'px';
     this.cross.classList.toggle('show', !!p.aiming);
+    this.cross.classList.toggle('locked', !!(p.aiming && lock));
+    // marcador del blanco con su vida (verde → rojo), como en San Andreas
+    if (p.aiming && lock && !lock.dead) {
+      const v = this._v.set(lock.pos.x, lock.pos.y + 2.1, lock.pos.z).project(g.camera);
+      const hp = clamp(lock.health / (lock.maxHealth || 100), 0, 1);
+      this.lockEl.style.left = ((v.x + 1) / 2 * 100).toFixed(2) + '%';
+      this.lockEl.style.top = ((1 - v.y) / 2 * 100).toFixed(2) + '%';
+      this.lockEl.style.setProperty('--c', `hsl(${Math.round(hp * 120)},85%,50%)`);
+      this.lockEl.classList.toggle('show', v.z < 1);
+    } else this.lockEl.classList.remove('show');
+    if (this.hitT > 0) { this.hitT -= dt; if (this.hitT <= 0) this.hitEl.classList.remove('show'); }
     // temporizadores de texto
     const tick = (k, elx) => { if (this[k] > 0) { this[k] -= dt; if (this[k] <= 0) elx.classList.remove('show'); } };
     tick('radioCapT', this.radioCap);

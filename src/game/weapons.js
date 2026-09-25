@@ -6,9 +6,9 @@ export const WEAPONS = {
   punos: { id: 'punos', name: 'Puños', icon: '👊', melee: true, dmg: 7, range: 1.4, rate: 0.38, slot: 0 },
   clavas: { id: 'clavas', name: 'Clavas de malabar', icon: '🎳', melee: true, dmg: 13, range: 1.6, rate: 0.5, slot: 1, mesh: 'clava' },
   bate: { id: 'bate', name: 'Bate', icon: '🏏', melee: true, dmg: 24, range: 1.9, rate: 0.75, slot: 1, mesh: 'bate', swing: 'bate' },
-  pistola: { id: 'pistola', name: 'Pistola 9mm', icon: '🔫', dmg: 20, range: 70, rate: 0.26, clip: 17, spread: 0.018, slot: 2, mesh: 'pistola', price: 250, ammoPrice: 60, ammoPack: 34, sound: 'pistol' },
-  escopeta: { id: 'escopeta', name: 'Escopeta', icon: '💥', dmg: 11, pellets: 8, range: 32, rate: 0.95, clip: 6, spread: 0.08, slot: 3, mesh: 'escopeta', twoHanded: true, price: 700, ammoPrice: 120, ammoPack: 16, sound: 'shotgun' },
-  uzi: { id: 'uzi', name: 'Uzi', icon: '🔫', dmg: 11, range: 55, rate: 0.085, clip: 50, spread: 0.05, auto: true, slot: 4, mesh: 'uzi', price: 1200, ammoPrice: 150, ammoPack: 100, sound: 'smg' },
+  pistola: { id: 'pistola', name: 'Pistola 9mm', icon: '🔫', dmg: 20, range: 70, rate: 0.26, clip: 17, reload: 1.1, recoil: 0.018, spread: 0.018, slot: 2, mesh: 'pistola', price: 250, ammoPrice: 60, ammoPack: 34, sound: 'pistol' },
+  escopeta: { id: 'escopeta', name: 'Escopeta', icon: '💥', dmg: 11, pellets: 8, range: 32, rate: 0.95, clip: 6, reload: 2.1, recoil: 0.055, spread: 0.08, slot: 3, mesh: 'escopeta', twoHanded: true, price: 700, ammoPrice: 120, ammoPack: 16, sound: 'shotgun' },
+  uzi: { id: 'uzi', name: 'Uzi', icon: '🔫', dmg: 11, range: 55, rate: 0.085, clip: 50, reload: 1.6, recoil: 0.009, spread: 0.05, auto: true, slot: 4, mesh: 'uzi', price: 1200, ammoPrice: 150, ammoPack: 100, sound: 'smg' },
 };
 export const WEAPON_ORDER = ['punos', 'clavas', 'bate', 'pistola', 'escopeta', 'uzi'];
 
@@ -110,7 +110,7 @@ export function shoot(game, ped, aimDir) {
   const hand = ped.handWorld();
   const pellets = W.pellets || 1;
   const spread = W.spread * (ped.isPlayer ? (ped.aiming ? 0.5 : 1.2) : ped.aimSkill || 2);
-  let hitSomething = false;
+  let hitSomething = false, lastHead = false;
   for (let k = 0; k < pellets; k++) {
     tmpDir.copy(aimDir);
     tmpDir.x += rand(-spread, spread); tmpDir.y += rand(-spread, spread) * 0.7; tmpDir.z += rand(-spread, spread);
@@ -122,6 +122,7 @@ export function shoot(game, ped, aimDir) {
       h.p.hurt(dmg, ped, { x: tmpDir.x, z: tmpDir.z, force: pellets > 1 ? 2 : 1 });
       game.effects.blood(h.x, h.y, h.z);
       hitSomething = true;
+      if (h.head) lastHead = true;
     } else if (h.kind === 'vehicle') {
       h.v.damage(W.dmg * 0.9 * (ped.isPlayer ? 1 : 0.5), ped);
       game.effects.sparks(h.x, h.y, h.z, 3);
@@ -131,6 +132,13 @@ export function shoot(game, ped, aimDir) {
       if (k < 2) game.effects.dustPuff(h.x, h.y, h.z, 2, 0.7);
       if (k < 1) game.effects.sparks(h.x, h.y, h.z, 2);
     }
+  }
+  if (ped.isPlayer) {
+    // retroceso: la mira salta un poco para arriba (y se abre)
+    const cam = game.cameraRig;
+    if (cam && ped.aiming) { cam.pitch -= (W.recoil || 0.01) * (0.8 + Math.random() * 0.4); cam.yaw += (Math.random() - 0.5) * (W.recoil || 0.01) * 0.6; }
+    game.hud && game.hud.bloom && game.hud.bloom(W.recoil || 0.01);
+    if (hitSomething && game.hud && game.hud.hitMarker) game.hud.hitMarker(lastHead);
   }
   game.effects.muzzle(hand.x + aimDir.x * 0.3, hand.y + aimDir.y * 0.3, hand.z + aimDir.z * 0.3);
   game.audio && game.audio.gun(W.sound, ped.pos);

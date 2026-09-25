@@ -154,6 +154,22 @@ export class Effects {
     this.tracerLife[i] = 0.06;
   }
 
+  // Fuegos artificiales: cohete que sube y estalla en una esfera de color
+  firework(x, y, z, h = 60) {
+    const cols = [[1, 0.25, 0.2], [0.3, 0.6, 1], [1, 0.85, 0.2], [0.4, 1, 0.45], [1, 0.4, 0.9], [1, 1, 1]];
+    const c = cols[Math.floor(Math.random() * cols.length)];
+    const up = 34, t = h / up;
+    for (let i = 0; i < 10; i++) this.glow.spawn(x, y + i * 0.3, z, { vy: up, life: t, s0: 1.6, s1: 0.6, r: 1, g: 0.8, b: 0.5, a0: 0.9, a1: 0.3 });
+    setTimeout(() => {
+      const n = 70;
+      for (let i = 0; i < n; i++) {
+        const u = Math.random() * 2 - 1, th = Math.random() * Math.PI * 2, r = Math.sqrt(1 - u * u), sp = rand(26, 32);
+        this.glow.spawn(x, y + h, z, { vx: r * Math.cos(th) * sp, vy: u * sp, vz: r * Math.sin(th) * sp, life: rand(1.6, 2.4), s0: 8, s1: 2.5, r: c[0], g: c[1], b: c[2], r1: c[0] * 0.6, g1: c[1] * 0.4, b1: c[2] * 0.3, a0: 1, a1: 0, grav: 4, drag: 1.1 });
+      }
+      this.game.audio && this.game.audio.boom && this.game.audio.boom(x, y + h, z);
+    }, t * 1000);
+  }
+
   explosion(x, y, z, cause) {
     for (let i = 0; i < 40; i++) {
       this.glow.spawn(x, y, z, { vx: rand(-7, 7), vy: rand(1, 9), vz: rand(-7, 7), life: rand(0.4, 1), s0: 3.5, s1: 0.5, r: 1, g: 0.8, b: 0.35, r1: 0.8, g1: 0.2, b1: 0.05, a0: 1, a1: 0, drag: 2.5 });
@@ -179,20 +195,28 @@ export class Effects {
       }
     }
     if (tAny || this.tracerDirty) { this.tracers.geometry.attributes.position.needsUpdate = true; this.tracerDirty = tAny; }
-    // polvo
+    // polvo (o nieve, con la nevada)
     const w = env.windSpeed;
-    const dens = clamp((w - 10) / 18, 0, 1) * 0.55 + env.dust * 0.4;
+    const snow = env.snow || 0;
+    const dens = snow > 0.05 ? snow * 0.95 : clamp((w - 10) / 18, 0, 1) * 0.55 + env.dust * 0.4;
     this.dust.material.opacity = dens;
     this.dust.visible = dens > 0.02;
+    if (snow > 0.05 !== !!this.snowing) {
+      this.snowing = snow > 0.05;
+      this.dust.material.color.setHex(this.snowing ? 0xffffff : 0xc8b088);
+      this.dust.material.size = this.snowing ? 0.55 : 0.25;
+    }
     if (this.dust.visible) {
       const dp = this.dustPos;
-      const vx = env.windDir.x * w * 1.1, vz = env.windDir.y * w * 1.1;
+      const k = this.snowing ? 0.25 : 1.1;
+      const vx = env.windDir.x * w * k, vz = env.windDir.y * w * k, vy = this.snowing ? -1.6 : 0;
       for (let i = 0; i < this.dustN; i++) {
-        let x = dp[i * 3] + vx * dt, y = dp[i * 3 + 1] + Math.sin(i + performance.now() * 0.003) * 0.02, z = dp[i * 3 + 2] + vz * dt;
-        // envolver alrededor de la cámara
-        if (x - camPos.x > 60) x -= 120; else if (x - camPos.x < -60) x += 120;
-        if (z - camPos.z > 60) z -= 120; else if (z - camPos.z < -60) z += 120;
-        if (y - camPos.y > 25) y -= 30; else if (y - camPos.y < -5) y += 30;
+        let x = dp[i * 3] + vx * dt + (this.snowing ? Math.sin(i * 1.7 + performance.now() * 0.0011) * dt * 0.6 : 0), y = dp[i * 3 + 1] + vy * dt + Math.sin(i + performance.now() * 0.003) * 0.02, z = dp[i * 3 + 2] + vz * dt;
+        // envolver alrededor de la cámara (la nieve, en una caja más chica y más densa)
+        const R = this.snowing ? 24 : 60, top = this.snowing ? 16 : 25;
+        if (x - camPos.x > R) x -= 2 * R; else if (x - camPos.x < -R) x += 2 * R;
+        if (z - camPos.z > R) z -= 2 * R; else if (z - camPos.z < -R) z += 2 * R;
+        if (y - camPos.y > top) y -= top + 5; else if (y - camPos.y < -5) y += top + 5;
         dp[i * 3] = x; dp[i * 3 + 1] = y; dp[i * 3 + 2] = z;
       }
       this.dust.geometry.attributes.position.needsUpdate = true;

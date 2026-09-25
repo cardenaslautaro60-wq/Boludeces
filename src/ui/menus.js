@@ -21,6 +21,12 @@ const TIPS = [
   'En el semáforo de San Martín y Rivadavia el Gordopin hace malabares por monedas.',
   'La Madriguera es la cancha de Newbery. En 2004 todavía era de tierra.',
   'Cuidado con los derrumbes del Chenque. Bah, en el juego no hay. Todavía.',
+  'El canillita de la plaza San Martín vende El Patagónnico y sabe todos los chismes (y algún truco).',
+  'Don Chiche vende choripanes en la Costanera. Con viento incluido.',
+  'Doña Rosa espera en la Terminal. Ayudala y te ganás unas tortas fritas.',
+  'Mantené apretado Shift para saltar más alto. Contra un muro bajo o un auto, trepás.',
+  'Si escuchás en la radio que hay un corte de ruta, buscá otro camino.',
+  'Escribí CHENQUE para aparecer arriba del cerro, o SUPERSALTO para saltar como un guanaco.',
 ];
 
 export class Menus {
@@ -234,11 +240,13 @@ export class Menus {
         <tr><td>Moverse / Manejar</td><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> o flechas</td></tr>
         <tr><td>Cámara</td><td>Mouse (hacé clic para capturarlo)</td></tr>
         <tr><td>Correr / Freno de mano</td><td><kbd>Espacio</kbd></td></tr>
-        <tr><td>Saltar / Saltito en bici</td><td><kbd>Shift</kbd></td></tr>
+        <tr><td>Saltar (mantené para más alto) / trepar muros y autos / saltito en bici</td><td><kbd>Shift</kbd></td></tr>
         <tr><td>Caminar despacio</td><td><kbd>C</kbd></td></tr>
         <tr><td>Subir / bajar del auto</td><td><kbd>F</kbd> o <kbd>Enter</kbd></td></tr>
         <tr><td>Golpear / disparar</td><td>Clic izquierdo o <kbd>Ctrl</kbd></td></tr>
-        <tr><td>Apuntar</td><td>Clic derecho</td></tr>
+        <tr><td>Apuntar (la mira se pega al blanco)</td><td>Clic derecho</td></tr>
+        <tr><td>Recargar</td><td><kbd>R</kbd> (a pie)</td></tr>
+        <tr><td>Hablar con alguien</td><td><kbd>G</kbd> · <kbd>Y</kbd>/<kbd>N</kbd> para responder</td></tr>
         <tr><td>Cambiar arma</td><td><kbd>Q</kbd> <kbd>E</kbd> o ruedita</td></tr>
         <tr><td>Bocina / sirena</td><td><kbd>H</kbd></td></tr>
         <tr><td>Cambiar radio</td><td><kbd>R</kbd> o ruedita (manejando)</td></tr>

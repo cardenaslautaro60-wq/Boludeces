@@ -77,6 +77,15 @@ canvas.game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
 .hud-cross { position: absolute; left: 50%; top: 50%; width: 30px; height: 30px; transform: translate(-50%, -50%); opacity: 0; border: 2px solid rgba(255,255,255,0.85); border-radius: 50%; box-shadow: 0 0 0 1px #000; }
 .hud-cross::after { content: ''; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; transform: translate(-50%, -50%); background: #ff3030; border-radius: 50%; }
 .hud-cross.show { opacity: 1; }
+.hud-cross.locked { border-color: rgba(255,70,50,0.95); }
+.hud-lock { position: absolute; width: 0; height: 0; transform: translate(-50%, -100%); border-left: 9px solid transparent; border-right: 9px solid transparent; border-top: 14px solid var(--c, #4c4); filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000); opacity: 0; pointer-events: none; }
+.hud-lock.show { opacity: 1; }
+.hud-hit { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; transform: translate(-50%, -50%) rotate(45deg); opacity: 0; pointer-events: none; }
+.hud-hit::before, .hud-hit::after { content: ''; position: absolute; background: #fff; box-shadow: 0 0 2px #000; }
+.hud-hit::before { left: 50%; top: 0; width: 2px; height: 100%; transform: translateX(-50%); clip-path: polygon(0 0, 100% 0, 100% 35%, 0 35%, 0 65%, 100% 65%, 100% 100%, 0 100%); }
+.hud-hit::after { top: 50%; left: 0; height: 2px; width: 100%; transform: translateY(-50%); clip-path: polygon(0 0, 35% 0, 35% 100%, 0 100%, 65% 0, 100% 0, 100% 100%, 65% 100%); }
+.hud-hit.head::before, .hud-hit.head::after { background: #ff3b30; }
+.hud-hit.show { opacity: 1; }
 .hud-letterbox div { position: absolute; left: 0; right: 0; height: 0; background: #000; transition: height 0.6s; }
 .hud-letterbox div:first-child { top: 0; }
 .hud-letterbox div:last-child { bottom: 0; }

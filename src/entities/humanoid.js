@@ -671,6 +671,20 @@ export class Humanoid {
       armL = lerp(armL, -1.0, a.air); armR = lerp(armR, -1.0, a.air);
       armLz = lerp(armLz, 0.6, a.air); armRz = lerp(armRz, -0.6, a.air);
     }
+    if (st.climb > 0) {
+      // trepando: brazos arriba agarrando el borde, una rodilla que sube
+      const k = st.climb, up = k < 0.65 ? 1 : 1 - (k - 0.65) / 0.35, sk = Math.sin(k * Math.PI);
+      armL = lerp(-0.6, -2.75, up); armR = lerp(-0.6, -2.75, up); elL = -0.35 * up; elR = -0.35 * up;
+      armLz = 0.25; armRz = -0.25;
+      legL = lerp(-0.2, -1.35, sk); knL = lerp(0.3, 1.7, sk); legR = -0.35 * up; knR = 0.9 * up;
+      torsoX = 0.1 + 0.35 * (1 - up); bob = 0;
+    }
+    if (st.land > 0) {
+      // aterrizaje fuerte: flexiona las piernas
+      const k = st.land;
+      lower += 0.24 * k; knL += 1.0 * k; knR += 1.0 * k; legL -= 0.55 * k; legR -= 0.55 * k;
+      torsoX += 0.3 * k; armL -= 0.5 * k; armR -= 0.5 * k; armLz += 0.3 * k; armRz -= 0.3 * k;
+    }
     a.swim = lerp(a.swim, st.swim ? 1 : 0, clamp(dt * 5, 0, 1));
     if (a.swim > 0.05) {
       const k = a.swim;
@@ -686,6 +700,11 @@ export class Humanoid {
       armR = lerp(armR, -Math.PI / 2 + (st.aimPitch || 0), a.aim);
       armRz = lerp(armRz, 0.05, a.aim); elR = lerp(elR, 0, a.aim);
       if (st.twoHanded) { armL = lerp(armL, -Math.PI / 2 + (st.aimPitch || 0) + 0.15, a.aim); armLz = lerp(armLz, -0.55, a.aim); elL = lerp(elL, -0.5, a.aim); }
+    }
+    if (st.reload) {
+      // recargando: la mano izquierda va al arma
+      armR = -0.75; elR = -0.9; armRz = 0.05;
+      armL = -0.95; elL = -1.45 + Math.sin(now * 0.02) * 0.2; armLz = -0.35;
     }
     if (a.punch > 0) {
       a.punch = Math.max(0, a.punch - dt * 3.2);

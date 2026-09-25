@@ -84,10 +84,12 @@ En una vista típica se dibujan entre 250.000 y 450.000 triángulos. Si anda len
 | Moverse / manejar | W A S D o flechas |
 | Cámara | Mouse (clic para capturarlo) |
 | Correr / freno de mano | Espacio |
-| Saltar | Shift |
+| Saltar (mantené para más alto) / trepar | Shift |
 | Subir / bajar | F o Enter |
 | Golpear / disparar | Clic izquierdo o Ctrl |
 | Apuntar | Clic derecho |
+| Recargar | R (a pie) |
+| Hablar | G (Y / N para responder) |
 | Cambiar arma | Q / E o ruedita |
 | Bocina / sirena | H |
 | Radio | R o ruedita manejando |
@@ -99,6 +101,46 @@ También anda con joystick y con pantalla táctil.
 ## Trucos
 
 Se escriben durante el juego: `HESOYAM`, `AEZAKMI`, `ASNAEB`, `OSRBLHH`, `LXGIWYL`, `BTCDBCB` (Gordopin XXL), `KVGYZQK`, `JYSDSOD`, `XJVSNAJ`, `CPKTNWT`, y los locales `BUENAPETROCA`, `VIENTOBLANCO`, `AGUANTENEWBERY`, `CHORIPAN`, `REMISERO`, `PATRULLERO`, `CISTERNA`, `ENDURO` y `FITITO`.
+
+Y los de Comodoro:
+
+| Truco | Qué hace |
+|---|---|
+| `CHENQUE` | Te lleva arriba del Cerro Chenque |
+| `MADRIGUERA` | A la cancha de Newbery |
+| `LOBERIA` | A la lobería de Punta del Marqués |
+| `RADATILLY` | A la playa de Rada Tilly |
+| `SUPERSALTO` | Salto de guanaco (sin daño al caer) |
+| `BALASINFINITAS` | Balas infinitas y sin recargar |
+| `PETRODOLARES` | Regalías: $500.000 |
+| `TORTAFRITA` | Salud, chaleco... y unos kilos más |
+| `VIENTAZO` | Ráfagas de 120 km/h |
+| `TIERRA` | Temporal de tierra |
+| `NEVADA` | Nieva en Comodoro |
+| `CORTEDERUTA` | Corte de ruta de petroleros |
+| `ANIVERSARIO` | Fuegos artificiales en la Costanera |
+| `APAGON` | Corte de luz |
+| `CARAVANA` | La caravana del Lobo sale a festejar |
+
+## Gente para hablar y cosas que pasan
+
+Con <kbd>G</kbd> se habla con algunos personajes (están en el radar con una **i** verde):
+
+- **El Canillita** (plaza San Martín): vende *El Patagónnico* con los titulares del día y algún chisme sobre trucos.
+- **Don Chiche** (Costanera): choripán completo, cura y engorda.
+- **Doña Rosa** (Terminal): pide que le lleves el bolso a su hija al Km 3, contra reloj.
+- **Ramírez, el petrolero** (YPF): changa de llevar un repuesto de bomba a Restinga Alí en 3 minutos.
+- **Don Aníbal** (mirador del Chenque): cuenta historias de Comodoro (el petróleo que salió buscando agua en 1907, el viento...).
+- **El Negro** (La Madriguera): te hace cantar con la barra del Lobo.
+
+Cada tanto, si no hay una misión en curso, pasa algo y lo avisa la radio: un **vientazo**, un **corte de ruta** de los petroleros (cubiertas prendidas fuego y la bandera cruzada en la avenida), un **temporal de tierra**, la **caravana del Lobo** con bocinazo, un **corte de luz** de noche, los **fuegos artificiales del aniversario** en la Costanera y, muy de vez en cuando, una **nevada**.
+
+## Saltos y tiros
+
+- El salto es más alto si mantenés <kbd>Shift</kbd>, más largo si venís corriendo, y se puede saltar un instante después de salir del cordón.
+- Contra un muro bajo, un contenedor o un auto, el salto se convierte en **trepada**; arriba del techo de un auto te podés quedar parado (y si arranca, te lleva).
+- Al apuntar, la mira **se pega al blanco** que tenés encima y muestra su vida con un triángulo de color (con joystick o en el celular, fija el blanco más cercano; los gatillos cambian de blanco).
+- Las armas tienen **cargador** (`17-34` en el HUD = balas en el cargador y de reserva): <kbd>R</kbd> recarga, y recarga sola al vaciarse. La mira se abre al disparar y marca los impactos (en rojo, a la cabeza).
 
 ## Aclaración
 
