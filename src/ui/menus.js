@@ -191,8 +191,7 @@ export class Menus {
         <tr><td>Trabajo de remisero</td><td><kbd>2</kbd> arriba de un remís</td></tr>
         <tr><td>Mirar atrás</td><td><kbd>X</kbd></td></tr>
         <tr><td>Cámara cerca/lejos</td><td><kbd>V</kbd></td></tr>
-        <tr><td>Mapa</td><td><kbd>M</kbd></td></tr>
-        <tr><td>Pausa</td><td><kbd>Esc</kbd> o <kbd>P</kbd></td></tr>
+        <tr><td>Pausa y mapa</td><td><kbd>Esc</kbd></td></tr>
         <tr><td>Joystick</td><td>Stick izq. moverse · stick der. cámara · RT/LT acelerar/frenar · A correr · X saltar · Y subir</td></tr>
         <tr><td>Celular</td><td>Joystick en pantalla, botones a la derecha y deslizá para girar la cámara</td></tr>
         </table></div>`;

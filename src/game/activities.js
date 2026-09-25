@@ -109,7 +109,7 @@ export class Activities {
     B(POI.semaforo.x, POI.semaforo.z, 'M', '#c8a010', 'Malabares en el semáforo');
     if (M.hospital) B(M.hospital.x, M.hospital.z, 'H', '#e8e8e8', 'Hospital');
     if (M.comisaria) B(M.comisaria.x, M.comisaria.z, '★', '#1d3f8f', 'Comisaría');
-    if (M.remiseria) B(M.remiseria.x, M.remiseria.z, 'R', '#1a6b2a', 'Remisería (subite a un remís y apretá 2)');
+    if (M.remiseria) B(M.remiseria.x, M.remiseria.z, 'R', '#1a6b2a', 'Remisería (subite a un remís y activá el trabajo)');
     g.blips.find((b) => b.letter === 'H') && (g.blips.find((b) => b.letter === 'H').fg = '#c01818');
   }
 
@@ -312,7 +312,7 @@ export class Activities {
   startRemis() {
     const g = this.game;
     this.remis = { fares: 0, state: 'find', timer: 0, pax: null, blip: null, total: 0 };
-    g.hud.showHelp('<b>Remisero</b>: buscá al pasajero marcado en el radar. Tocá la bocina si no lo ves. Apretá <b>2</b> para terminar.', 6);
+    g.hud.showHelp(`<b>Remisero</b>: buscá al pasajero marcado en el radar y frená al lado. Para terminar el turno, ${g.key('job')}.`, 6);
     this.nextFare();
   }
 

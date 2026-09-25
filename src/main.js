@@ -37,10 +37,15 @@ function loadingScreen() {
   };
 }
 
-async function start() {
+async function start(data = {}) {
   const ls = loadingScreen();
   const game = new Game();
   window.__game = game;
+  const hot = window.claude && window.claude.hot;
+  // si la página se actualiza mientras se juega, se conserva la partida
+  if (hot && hot.snapshot) {
+    try { hot.snapshot(() => ({ snap: game.started ? game.saves.snapshot() : null })); } catch (e) { /* sin recarga en caliente */ }
+  }
   try {
     await game.init((p, m) => ls.progress(p, m));
   } catch (e) {
@@ -50,9 +55,25 @@ async function start() {
     return;
   }
   ls.done();
-  game.menus.showMain();
+  if (data && data.snap) {
+    game.saves.apply(data.snap);
+    game.menus.main.hidden = true;
+    game.hud.show(true);
+    game.input.wantLock = true;
+    game.started = true;
+    game.paused = false;
+    const wake = () => { game.audio.init(); window.removeEventListener('pointerdown', wake); window.removeEventListener('keydown', wake); };
+    window.addEventListener('pointerdown', wake);
+    window.addEventListener('keydown', wake);
+  } else game.menus.showMain();
   game.ready = true;
 }
 
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
-else start();
+function boot() {
+  const hot = window.claude && window.claude.hot;
+  if (hot && hot.ready) hot.ready(start);
+  else start((hot && hot.data) || {});
+}
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+else boot();

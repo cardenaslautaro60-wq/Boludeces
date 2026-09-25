@@ -176,7 +176,7 @@ export class DriverAI {
       const fwd = ox * f.x + oz * f.z;
       if (fwd <= 0 || fwd > bd + o.type.L / 2) continue;
       const lat = Math.abs(ox * f.z - oz * f.x);
-      if (lat > (v.type.W + o.type.W) / 2 + 0.3) continue;
+      if (lat > (v.type.W + o.type.W) / 2 + 0.05) continue;
       if (this.mode === 'chase' && this.target && (o === this.target || o === this.target.vehicle)) continue;
       bd = fwd - o.type.L / 2; block = o;
     }
@@ -208,9 +208,12 @@ export class DriverAI {
     c.throttle = clamp(err * 0.35, -1, 1);
     if (desired < 0.5 && vF < 1) { c.throttle = 0; c.brake = 1; } else c.brake = 0;
     c.handbrake = this.mode === 'chase' && Math.abs(diff) > 1.2 && speed > 12;
-    // atascado
-    if (c.throttle > 0.3 && speed < 0.8 && !block) {
+    // atascado (o bloqueado mucho tiempo persiguiendo)
+    const wantsToMove = this.mode !== 'cruise' ? desired > 3 || (block && block !== this.target) : c.throttle > 0.3 && !block;
+    this.blockT = block && speed < 0.8 ? (this.blockT || 0) + dt : 0;
+    if ((wantsToMove && speed < 0.8) || this.blockT > (this.mode === 'cruise' ? 8 : 2.5)) {
       this.stuckT += dt;
+      if (this.blockT > 2.5) this.stuckT += dt;
       if (this.stuckT > 1.2) { this.reverseT = rand(0.8, 1.4); this.revSteer = -Math.sign(diff || 1); this.stuckT = 0; this.placeOnRoad(); }
     } else this.stuckT = Math.max(0, this.stuckT - dt);
     this.totalStuck = speed < 0.5 ? (this.totalStuck || 0) + dt : 0;
@@ -227,7 +230,16 @@ export class DriverAI {
     const tp = this.targetPos();
     const v = this.v;
     const d = dist(v.pos.x, v.pos.z, tp.x, tp.z);
-    if (d < 45) return true;
+    if (d < 45) {
+      // ir directo solo si no hay edificios en el medio
+      this.losT = (this.losT || 0) - 1 / 30;
+      if (this.losT <= 0) {
+        this.losT = 0.3;
+        const dx = tp.x - v.pos.x, dz = tp.z - v.pos.z, L = Math.hypot(dx, dz) || 1;
+        this.los = !this.game.colliders.raycast(v.pos.x, v.pos.y + 1, v.pos.z, dx / L, 0, dz / L, Math.max(0, L - 2));
+      }
+      if (this.los || d < 8) return true;
+    }
     // si el objetivo está lejos de las calles, ir directo
     if (this.game.roads.surfaceAt(tp.x, tp.z) === 0 && d < 120) return true;
     this.replanT -= 1 / 60;
@@ -373,7 +385,7 @@ export class Traffic {
     const t = n.t * e.len;
     if (t < 12 || e.len - t < 12) return;
     const side = chance(0.5) ? 1 : -1;
-    const off = e.width / 2 - 1.1;
+    const off = e.width / 2 - 0.65;
     const x = n.x - e.dz * off * side, z = n.z + e.dx * off * side;
     for (const o of g.vehicles) if (dist(o.pos.x, o.pos.z, x, z) < 7) return;
     const zk = this.zoneKind(x, z, e);

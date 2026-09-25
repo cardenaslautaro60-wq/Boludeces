@@ -84,6 +84,7 @@ export class Game {
     this.menus = new Menus(this);
     this.touch = new Touch(this);
     this.input.onType = (s) => this.cheats.check(s);
+    if (this.touch.enabled) { this.traffic.max = 10; this.traffic.maxParked = 8; this.population.max = 12; }
     this.audio.onTalk = (line) => { if (this.player && this.player.vehicle) this.hud.showToast(`<small>📻 ${line}</small>`, 5); };
     this.applySettings();
     progress(0.95, 'Casi listo...');
@@ -140,6 +141,16 @@ export class Game {
   }
 
   playerName() { return this.player ? this.player.name : ''; }
+
+  // Nombre del control según se juegue con teclado o con pantalla táctil
+  key(action) {
+    const touch = this.touch && this.touch.enabled;
+    const K = {
+      enter: ['F', 'SUBIR'], jump: ['Shift', 'SALTAR'], forward: ['W', 'el joystick'], switchChar: ['TAB', '⇄'],
+      job: ['2', 'REMÍS'], horn: ['H', 'BOCINA'], fire: ['clic', 'GOLPE'], aim: ['clic derecho', 'APUNTAR'], map: ['M', 'MAPA'],
+    }[action] || [action, action];
+    return `${touch ? 'tocá' : 'apretá'} <b>${touch ? K[1] : K[0]}</b>`;
+  }
 
   // Herramientas de prueba (se usan desde la consola: __game.debug.tp(x, z))
   get debug() {
@@ -320,6 +331,7 @@ export class Game {
     this.population.clearAround(p.pos, 40);
     this.env.time = (this.env.time + 6 * 60) % 1440;
     this.post.mat.uniforms.uGrey.value = 0;
+    this.hud.big.classList.remove('show'); this.hud.bigSub.classList.remove('show'); this.hud.bigT = 0;
     this.cameraRig.snapBehind(0);
     await this.hud.fadeTo(false, 0.8);
     this.hud.showToast(busted ? 'Pagaste $100 de fianza. Te sacaron las armas.' : 'Pagaste $100 de guardia en el Hospital Regional.', 4);

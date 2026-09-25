@@ -183,6 +183,7 @@ export class Police {
     }
     v.ai = new DriverAI(g, v, 'chase', { target: g.player, aggressive: true, speedMul: 1.15 });
     v.siren = true;
+    g.traffic.cars.push(v); // así el tránsito actualiza su conductor
     this.units.push({ v, cops });
     void e;
   }

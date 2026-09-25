@@ -65,7 +65,7 @@ Versión libre y comprimida de Comodoro Rivadavia: Cerro Chenque con sus antenas
 | Bocina / sirena | H |
 | Radio | R o ruedita manejando |
 | Cambiar de personaje | TAB |
-| Mapa / pausa | M / Esc |
+| Pausa y mapa | Esc |
 
 También anda con joystick y con pantalla táctil.
 

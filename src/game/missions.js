@@ -346,7 +346,7 @@ export class Missions {
             await c.say('Gordopin', 'Aaah, la concha de la lora... otra vez lo mismo.', 3.5);
           });
           g.removePed(ten); g.removePed(pul);
-          c.help('Acercate a la <b>bici</b> y apretá <b>F</b> para subirte. Pedaleá con <b>W</b>, saltito con <b>Shift</b>.', 8);
+          c.help(`Acercate a la <b>bici</b> y ${g.key('enter')} para subirte. Pedaleá con ${g.key('forward').replace(/^\S+ /, '')}; para el saltito, ${g.key('jump')}.`, 8);
           await c.until(() => G.vehicle && G.vehicle.type.bike);
           await c.goTo(M().casaAbuela.x, M().casaAbuela.z, { text: 'Andá a la <b>Casa de la Abuela</b> en el Barrio Pietrobelli.', radius: 2.5 });
           // llega el Petroca
@@ -377,7 +377,7 @@ export class Missions {
             await c.say('Petroca', 'Tranqui. Yo tengo un par de ideas... y guita. Mucha guita. Tomá, para que no andes seco.');
           });
           P.brain = new Brain(g, P, 'follow');
-          c.help('El <b>Petroca</b> ahora te acompaña. Apretá <b>TAB</b> para jugar con él. Las misiones con la <b>P</b> amarilla te las da el Petroca.', 8);
+          c.help(`El <b>Petroca</b> ahora te acompaña: ${g.key('switchChar')} para jugar con él. Las misiones con la <b>P</b> amarilla te las da el Petroca.`, 8);
         },
         start: null,
       },

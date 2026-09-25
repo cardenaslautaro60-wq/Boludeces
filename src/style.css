@@ -96,8 +96,8 @@ canvas.game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
   linear-gradient(180deg, rgba(0,0,0,0) 55%, #000 100%),
   radial-gradient(ellipse at 70% 30%, #e89a50 0%, #9a4a3a 30%, #2a1a2a 70%); }
 .logo { position: relative; text-align: center; line-height: 0.85; filter: drop-shadow(5px 6px 0 #000); }
-.logo .gta { font: clamp(90px, 20vw, 190px) var(--display); color: #f2f2f2; -webkit-text-stroke: 4px #000; letter-spacing: 6px; display: block; }
-.logo .sj { font: clamp(48px, 10vw, 104px) var(--gothic); color: #f2c230; -webkit-text-stroke: 2.5px #000; display: block; margin-top: 4px; }
+.logo .gta { font: clamp(64px, min(20vw, 24vh), 190px) var(--display); color: #f2f2f2; -webkit-text-stroke: 4px #000; letter-spacing: 6px; display: block; }
+.logo .sj { font: clamp(38px, min(10vw, 13vh), 104px) var(--gothic); color: #f2c230; -webkit-text-stroke: 2.5px #000; display: block; margin-top: 4px; }
 .logo .tag { font: bold clamp(11px, 2.4vw, 16px) var(--body); letter-spacing: 3px; text-transform: uppercase; color: #f2f2f2; display: block; margin-top: 14px; text-shadow: 2px 2px 0 #000; }
 .load-bar { position: absolute; bottom: calc(60px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); width: min(520px, 80vw); height: 16px; border: 3px solid #000; background: #1a1a1a; box-shadow: 0 0 0 2px #9a9a9a; }
 .load-bar i { display: block; height: 100%; width: 0; background: linear-gradient(#e8b423, #9a6a10); transition: width 0.2s; }
@@ -136,10 +136,27 @@ canvas.game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
 .touch .btns { position: absolute; right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(20px + env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: repeat(3, 64px); gap: 10px; pointer-events: auto; }
 .touch .btn { width: 64px; height: 64px; border-radius: 50%; background: rgba(0,0,0,0.4); border: 2px solid rgba(255,255,255,0.45); color: #fff; font: bold 12px var(--body); display: grid; place-items: center; text-align: center; line-height: 1.1; }
 .touch .btn.on { background: rgba(255,255,255,0.35); }
-.touch .top { position: absolute; top: calc(10px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; gap: 10px; pointer-events: auto; }
-.touch .top .btn { width: 48px; height: 48px; font-size: 11px; }
+.touch .top { position: absolute; top: calc(134px + env(safe-area-inset-top, 0px)); left: calc(10px + env(safe-area-inset-left, 0px)); display: flex; gap: 8px; pointer-events: auto; }
+.touch .top .btn { width: 44px; height: 44px; font-size: 10px; }
+.rotate-hint { display: none; }
+@media (orientation: portrait) and (max-width: 700px) {
+  body.is-touch .rotate-hint { display: block; position: fixed; left: 50%; top: 45%; transform: translateX(-50%); z-index: 50; background: rgba(0,0,0,0.8); padding: 10px 16px; font: bold 15px var(--body); color: #fff; border: 1px solid #555; pointer-events: none; text-align: center; }
+}
+@media (max-height: 520px) {
+  .menu button { font-size: 26px; padding: 0 14px; }
+  .menu .panel { gap: 0; margin-top: 8px; }
+  .menu h2 { font-size: 40px; }
+  .logo .tag { margin-top: 6px; }
+  .pane { max-height: 62vh; }
+}
 .touch .lookpad { position: absolute; right: 0; top: 0; width: 55%; height: 60%; pointer-events: auto; }
-body.is-touch .hud-radar { width: 130px; height: 130px; left: auto; right: 14px; top: calc(170px + env(safe-area-inset-top, 0px)); bottom: auto; }
+body.is-touch .hud-radar { width: 118px; height: 118px; left: calc(10px + env(safe-area-inset-left, 0px)); top: calc(8px + env(safe-area-inset-top, 0px)); bottom: auto; }
+body.is-touch .hud-help { left: calc(140px + env(safe-area-inset-left, 0px)); top: calc(8px + env(safe-area-inset-top, 0px)); max-width: 36vw; }
+body.is-touch .hud-title { font-size: 30px; bottom: auto; top: 30%; }
+body.is-touch .hud-vname { bottom: auto; top: 26%; font-size: 22px; }
+body.is-touch .hud-radio { font-size: 20px; top: auto; bottom: 46%; }
+body.is-touch .hud-counters { margin-top: 2px; }
+body.is-touch .hud-counter { font-size: 17px; }
 body.is-touch .hud-money { font-size: 28px; }
 body.is-touch .hud-clock { font-size: 26px; }
 body.is-touch .hud-weapon { width: 56px; height: 56px; }

@@ -14,6 +14,10 @@ export class Touch {
       <div class="top"><div class="btn" data-a="pause">❚❚</div><div class="btn" data-a="map">MAPA</div><div class="btn" data-a="switchChar">⇄</div><div class="btn" data-a="camera">CÁM</div></div>`;
     document.body.appendChild(root);
     this.root = root;
+    const hint = document.createElement('div');
+    hint.className = 'rotate-hint';
+    hint.textContent = 'Girá el celular para jugar mejor 🔄';
+    document.body.appendChild(hint);
     this.btns = root.querySelector('.btns');
     this.mode = null;
     const inp = game.input;
@@ -103,7 +107,8 @@ export class Touch {
   update() {
     if (!this.enabled) return;
     const g = this.game;
-    this.root.hidden = !g.started || g.paused || !!g.activities.mini || !!g.menus.choiceEl;
+    const cut = g.missions.active && g.missions.active.inCutscene;
+    this.root.hidden = !g.started || g.paused || !!g.activities.mini || !!g.menus.choiceEl || cut || g.respawning;
     if (g.player) this.layout(!!g.player.vehicle);
   }
 }
