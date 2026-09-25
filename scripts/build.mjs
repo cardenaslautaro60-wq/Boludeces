@@ -37,6 +37,24 @@ function single(full, outPath) {
   console.log(outPath, (out.length / 1024).toFixed(0) + ' KB');
 }
 
+// Versión para publicar como Artifact: Three.js se carga desde jsDelivr con un importmap
+async function artifact(outPath) {
+  const res = await esbuild.build({ ...opts, format: 'esm', external: ['three', 'three/*'], write: false, outfile: 'build/game.esm.js' });
+  const js = res.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
+  const pkg = JSON.parse(readFileSync('node_modules/three/package.json', 'utf8'));
+  const cdn = `https://cdn.jsdelivr.net/npm/three@${pkg.version}`;
+  const html = readFileSync('index.html', 'utf8');
+  const css = readFileSync('src/style.css', 'utf8');
+  const body = html.slice(html.indexOf('<body>') + 6, html.indexOf('</body>')).replace(/<script src="build\/game\.js"><\/script>/, '');
+  const fonts = (html.match(/<link[^>]+fonts\.googleapis[^>]+>/g) || []).join('\n');
+  const title = (html.match(/<title>[^<]*<\/title>/) || [''])[0];
+  const importmap = JSON.stringify({ imports: { three: `${cdn}/build/three.module.min.js`, 'three/': `${cdn}/` } });
+  const out = `${title}\n${fonts}\n<style>\n${css}\n</style>\n${body}\n<script type="importmap">${importmap}</script>\n<script type="module">\n${js}\n</script>\n`;
+  mkdirSync(outPath.split('/').slice(0, -1).join('/') || '.', { recursive: true });
+  writeFileSync(outPath, out);
+  console.log(outPath, (out.length / 1024).toFixed(0) + ' KB');
+}
+
 if (watch) {
   const ctx = await esbuild.context(opts);
   await ctx.watch();
@@ -45,5 +63,5 @@ if (watch) {
   await esbuild.build(opts);
   single(true, 'dist/gta-san-jorge.html');
   const art = process.argv.find((a) => a.startsWith('--artifact='));
-  if (art) single(false, art.slice('--artifact='.length));
+  if (art) await artifact(art.slice('--artifact='.length));
 }
