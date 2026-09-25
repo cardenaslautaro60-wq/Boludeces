@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { lam } from '../render/style.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { clamp, lerp, RNG } from '../util.js';
 
@@ -399,7 +400,7 @@ const matCache = new Map();
 function materialFor(L) {
   const tex = paintAtlas(L);
   let m = matCache.get(tex);
-  if (!m) { m = new THREE.MeshLambertMaterial({ map: tex }); matCache.set(tex, m); }
+  if (!m) { m = lam({ map: tex }); matCache.set(tex, m); }
   return m;
 }
 

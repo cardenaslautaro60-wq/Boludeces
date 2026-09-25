@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { lam } from '../render/style.js';
 import { rand, pick, chance, clamp, dist } from '../util.js';
 import { Brain } from './ai.js';
 import { DriverAI } from './traffic.js';
@@ -238,8 +239,8 @@ export class Police {
     gb.box(-1.4, -1.3, -0.4, -0.3, -1.6, 1.6, dark);
     gb.box(1.3, 1.4, -0.4, -0.3, -1.6, 1.6, dark);
     gb.box(-0.9, 0.9, 0.8, 1.7, 1.9, 2.3, hexColor(0x2a3a4a));
-    const body = new THREE.Mesh(gb.toGeometry(), new THREE.MeshLambertMaterial({ vertexColors: true }));
-    const rotor = new THREE.Mesh(new THREE.BoxGeometry(11, 0.08, 0.35), new THREE.MeshLambertMaterial({ color: 0x222222 }));
+    const body = new THREE.Mesh(gb.toGeometry(), lam({ vertexColors: true }));
+    const rotor = new THREE.Mesh(new THREE.BoxGeometry(11, 0.08, 0.35), lam({ color: 0x222222 }));
     rotor.position.y = 2.2;
     const grp = new THREE.Group();
     grp.add(body, rotor);

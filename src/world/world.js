@@ -7,6 +7,7 @@ import { Zones } from './zones.js';
 import { StaticColliders } from './collision.js';
 import { DistanceCuller } from './culling.js';
 import { makeTextures } from '../render/textures.js';
+import { STYLE } from '../render/style.js';
 import { META, MAP, FRAME, LANDMARKS, POI, SPAWNS, RAMPS, BAGS, DECKS, loadMapData } from './mapdata.js';
 import { RNG, pointSegDist } from '../util.js';
 
@@ -61,6 +62,8 @@ export class World {
     progress(0.26, 'Pintando la estepa...');
     await nextFrame();
     const textures = makeTextures();
+    // versión realista: fotos y fachadas con relieve en lugar de las texturas PS2
+    if (STYLE.realista) STYLE.realTextures(textures, STYLE.tex);
     g.textures = textures;
     this.terrainMesh = terrain.buildMesh();
     g.scene.add(this.terrainMesh);

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { lam } from '../render/style.js';
 import { POI, RAMPS } from '../world/mapdata.js';
 import { WEAPONS } from './weapons.js';
 import { dist, rand, pick, chance, clamp } from '../util.js';
@@ -445,7 +446,7 @@ export class Activities {
     // clavas volando
     const clubs = [];
     for (let i = 0; i < 3; i++) {
-      const m = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.02, 0.45, 6), new THREE.MeshLambertMaterial({ color: i === 1 ? 0x1c2f6b : 0xf2f2f2 }));
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.02, 0.45, 6), lam({ color: i === 1 ? 0x1c2f6b : 0xf2f2f2 }));
       g.scene.add(m);
       clubs.push(m);
     }

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { lam } from '../render/style.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { hexColor } from '../world/geom.js';
 import { clamp, lerp, RNG } from '../util.js';
@@ -389,11 +390,11 @@ export class CarMaterials {
     this.paints = new Map();
     this.env = null;
     const d = detailAtlas();
-    this.detail = new THREE.MeshLambertMaterial({ map: d.map, emissive: 0xffffff, emissiveMap: d.emissive, emissiveIntensity: 0.25, side: THREE.DoubleSide });
+    this.detail = lam({ map: d.map, emissive: 0xffffff, emissiveMap: d.emissive, emissiveIntensity: 0.25, side: THREE.DoubleSide });
     this.glass = new THREE.MeshStandardMaterial({ color: 0x18222c, metalness: 0.2, roughness: 0.06, transparent: true, opacity: 0.62, depthWrite: false, side: THREE.DoubleSide });
     this.chrome = new THREE.MeshStandardMaterial({ color: 0xd8dadc, metalness: 1, roughness: 0.2 });
-    this.wheel = new THREE.MeshLambertMaterial({ vertexColors: true });
-    this.burnt = new THREE.MeshLambertMaterial({ color: 0x2a2624 });
+    this.wheel = lam({ vertexColors: true });
+    this.burnt = lam({ color: 0x2a2624 });
   }
   setEnv(env, intensity) {
     this.env = env;

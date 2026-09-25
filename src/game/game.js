@@ -4,6 +4,7 @@ import { Environment } from '../world/sky.js';
 import { WORLD, POI, SPAWNS } from '../world/mapdata.js';
 import { Effects } from '../render/effects.js';
 import { Post } from '../render/post.js';
+import { STYLE } from '../render/style.js';
 import { Ped, sayLine, PED_LINES } from '../entities/ped.js';
 import { Vehicle, VTYPES, carMaterials } from '../entities/vehicle.js';
 import { makeEnvMap } from '../entities/carmodels.js';
@@ -46,10 +47,12 @@ export class Game {
       ps2: true, quality: 1, music: 0.55, sfx: 0.8, sens: 1, invertY: false, tts: false, touch: 'auto',
       shadows: !(window.matchMedia && window.matchMedia('(pointer: coarse)').matches),
     };
-    try { Object.assign(this.settings, JSON.parse(safeStorageGet('gtasj-settings') || '{}')); } catch (e) { /* default */ }
+    // la versión realista guarda sus opciones aparte (calidad, postproceso)
+    this.settingsKey = STYLE.realista ? 'gtasj-settings-real' : 'gtasj-settings';
+    try { Object.assign(this.settings, JSON.parse(safeStorageGet(this.settingsKey) || '{}')); } catch (e) { /* default */ }
   }
 
-  saveSettings() { safeStorageSet('gtasj-settings', JSON.stringify(this.settings)); }
+  saveSettings() { safeStorageSet(this.settingsKey, JSON.stringify(this.settings)); }
 
   async init(progress) {
     this.media = new MediaLibrary();
@@ -64,9 +67,16 @@ export class Game {
     this.renderer = renderer;
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(62, 1, 0.3, 1400);
+    if (STYLE.realista) {
+      progress(0.02, 'Revelando las fotos de Comodoro...');
+      await STYLE.load(renderer);
+      STYLE.setupRenderer(renderer);
+    }
     this.env = new Environment(this.scene, renderer);
-    carMaterials().setEnv(makeEnvMap(renderer), 1.0);
-    this.post = new Post(renderer);
+    if (STYLE.realista) this.realSky = new STYLE.RealSky(this);
+    // en la versión realista los autos reflejan el cielo de verdad (scene.environment)
+    carMaterials().setEnv(STYLE.realista ? null : makeEnvMap(renderer), 1.0);
+    this.post = STYLE.realista ? new STYLE.RealPost(this) : new Post(renderer);
     this.onResize();
     window.addEventListener('resize', () => this.onResize());
     this.audio = new Audio();
@@ -117,6 +127,7 @@ export class Game {
   applySettings() {
     const s = this.settings;
     this.post.enabled = !!s.ps2;
+    if (this.post.setAO) this.post.setAO(s.quality >= 1 && !this.touch?.enabled);
     this.setShadows(!!s.shadows);
     this.renderScale = s.quality;
     this.onResize();
@@ -157,7 +168,9 @@ export class Game {
 
   onResize() {
     const w = window.innerWidth, h = window.innerHeight;
-    const scale = (this.renderScale || 1) * (this.dynScale || 1) * Math.min(window.devicePixelRatio || 1, 1.5) * (this.post && this.post.enabled ? 0.75 : 1);
+    // el filtro PS2 dibuja a 3/4 de resolución a propósito; el realista no
+    const ps2 = this.post && this.post.enabled && !STYLE.realista;
+    const scale = (this.renderScale || 1) * (this.dynScale || 1) * Math.min(window.devicePixelRatio || 1, 1.5) * (ps2 ? 0.75 : 1);
     this.renderer.setSize(w, h, false);
     this.renderer.setPixelRatio(this.post && this.post.enabled ? 1 : scale);
     this.post && this.post.setSize(w, h, scale);
@@ -428,6 +441,7 @@ export class Game {
     this.camera.position.set(cx, 110, cz);
     this.camera.lookAt(c0.x, 20, c0.z);
     this.env.update(dt * 0.5, this.camera.position, this.time);
+    if (this.realSky) this.realSky.update(dt);
     this.world.updateVisibility(this.camera.position, dt);
     this.props.update(this.time, dt, this.env, this.camera.position);
     this.effects.update(dt, this.camera.position);
@@ -439,6 +453,7 @@ export class Game {
     this.stats.timePlayed += dt;
     const p = this.player;
     this.env.update(dt, this.camera.position, this.time);
+    if (this.realSky) this.realSky.update(dt);
     this.controller.update(dt, this.input);
     // entidades
     for (let i = 0; i < this.peds.length; i++) {

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { lam } from '../render/style.js';
 import { RNG } from '../util.js';
 
 // ---------------------------------------------------------------------------
@@ -81,7 +82,7 @@ export function foliageAtlas() {
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 4;
-  const mat = new THREE.MeshLambertMaterial({ map: t, alphaTest: 0.45, side: THREE.FrontSide });
+  const mat = lam({ map: t, alphaTest: 0.45, side: THREE.FrontSide });
   ATLAS = { texture: t, material: mat };
   return ATLAS;
 }
@@ -192,7 +193,7 @@ export function tuftAssets() {
   }
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
-  const mat = new THREE.MeshLambertMaterial({ map: t, alphaTest: 0.4, side: THREE.DoubleSide });
+  const mat = lam({ map: t, alphaTest: 0.4, side: THREE.DoubleSide });
   const make = (u0, u1) => {
     const pos = [], nor = [], uv = [], idx = [];
     for (let p = 0; p < 3; p++) {

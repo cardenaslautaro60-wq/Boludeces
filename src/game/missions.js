@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { lam } from '../render/style.js';
 import { POI } from '../world/mapdata.js';
 import { Marker } from './activities.js';
 import { Brain } from './ai.js';
@@ -665,7 +666,7 @@ export class Missions {
             chetos.push(q);
           }
           // el trapo (pickup)
-          const flag = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 2.2, 10), new THREE.MeshLambertMaterial({ color: 0x1c2f6b }));
+          const flag = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 2.2, 10), lam({ color: 0x1c2f6b }));
           flag.rotation.z = Math.PI / 2;
           flag.position.set(mans.x, g.world.footGround(mans.x, mans.z) + 0.5, mans.z - 2);
           g.scene.add(flag);

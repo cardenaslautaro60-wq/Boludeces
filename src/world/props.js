@@ -1,11 +1,12 @@
 import * as THREE from 'three';
+import { lam } from '../render/style.js';
 import { GeoBuilder, hexColor } from './geom.js';
 import { MAP, LANDMARKS, BAGS, POI, FRAME, fromAB } from './mapdata.js';
 import { RNG, clamp } from '../util.js';
 import { foliageAtlas, treeGeometry, tuftAssets } from './foliage.js';
 import { InstChunks } from './culling.js';
 
-const vcMat = () => new THREE.MeshLambertMaterial({ vertexColors: true });
+const vcMat = () => lam({ vertexColors: true });
 
 function instanced(geo, mat, count) {
   const m = new THREE.InstancedMesh(geo, mat, count);
@@ -395,7 +396,7 @@ export class Props {
     if (!city.containers) return;
     const geo = new THREE.BoxGeometry(12.2, 2.6, 2.44);
     geo.translate(0, 1.3, 0);
-    const mat = new THREE.MeshLambertMaterial({ map: this.game.textures.metal });
+    const mat = lam({ map: this.game.textures.metal });
     const mesh = new THREE.InstancedMesh(geo, mat, city.containers.length);
     const c = new THREE.Color();
     city.containers.forEach((k, i) => {
@@ -511,7 +512,7 @@ export class Props {
   buildLoberia(terrain) {
     const geo = new THREE.SphereGeometry(1, 7, 5);
     geo.scale(0.7, 0.45, 1.3);
-    const mat = new THREE.MeshLambertMaterial({ color: 0x5a4432 });
+    const mat = lam({ color: 0x5a4432 });
     const n = 16;
     this.lobos = new THREE.InstancedMesh(geo, mat, n);
     this.loboData = [];

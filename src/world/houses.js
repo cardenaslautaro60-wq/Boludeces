@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { lam, STYLE } from '../render/style.js';
 
 // Casas de barrio instanciadas: 4 plantillas (1 o 2 plantas, techo a dos aguas o plano),
 // cada instancia con su escala, color de pared y color de techo. Agrupadas por sector.
@@ -6,8 +7,46 @@ const WN = 10, DN = 9, FH = 2.8;
 const CHUNK = 260;
 
 let ATLAS = null;
+
+// Versión realista: el mismo esquema de atlas, 4 veces más grande, con fotos y mapas de
+// relieve (normal) y de rugosidad/metal. El alfa del color marca qué se tiñe.
+function realAtlas(T) {
+  const R = T.real, W = 1024, H = 2048;
+  const mk = () => { const c = document.createElement('canvas'); c.width = W; c.height = H; return [c, c.getContext('2d')]; };
+  const [c, g] = mk(), [cn, gn] = mk(), [cm, gm] = mk(), [ce, ge] = mk();
+  const tile = (ctx, img, x, y, w, h, size) => {
+    ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+    for (let yy = y; yy < y + h; yy += size) for (let xx = x; xx < x + w; xx += size) ctx.drawImage(img, xx, yy, size, size);
+    ctx.restore();
+  };
+  ge.fillStyle = '#000'; ge.fillRect(0, 0, W, H);
+  // paredes (textura de casa de 2 plantas, con su alfa)
+  g.drawImage(T.house.image, 0, 0, W, 1024);
+  gn.drawImage(T.houseN.image, 0, 0, W, 1024);
+  gm.drawImage(T.houseM.image, 0, 0, W, 1024);
+  ge.drawImage(T.houseE.image, 0, 0, W, 1024);
+  // techo de chapa acanalada (se tiñe con el color del techo)
+  tile(g, R.chapa.img, 0, 1024, W, 512, 256); tile(gn, R.chapa.nimg, 0, 1024, W, 512, 256); tile(gm, R.chapa.mimg, 0, 1024, W, 512, 256);
+  g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(0, 1024, W, 10);
+  // techo plano y zócalo: hormigón
+  tile(g, R.hormigon.img, 0, 1536, W, 512, 256); tile(gn, R.hormigon.nimg, 0, 1536, W, 512, 256); tile(gm, R.hormigon.mimg, 0, 1536, W, 512, 256);
+  // la chapa es metal: canal azul del mapa de rugosidad/metal al máximo en la zona del techo
+  const md = gm.getImageData(0, 1024, W, 512);
+  for (let i = 0; i < md.data.length; i += 4) { md.data[i + 2] = 200; md.data[i + 1] = Math.min(255, md.data[i + 1] * 0.8 + 30); }
+  gm.putImageData(md, 0, 1024);
+  const tx = (cc, color) => {
+    const t = new THREE.CanvasTexture(cc);
+    if (color) t.colorSpace = THREE.SRGBColorSpace;
+    t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.ClampToEdgeWrapping; t.anisotropy = 8;
+    return t;
+  };
+  ATLAS = { map: tx(c, true), emissive: tx(ce, true), normalMap: tx(cn, false), orm: tx(cm, false) };
+  return ATLAS;
+}
+
 function atlas(T) {
   if (ATLAS) return ATLAS;
+  if (T.real) return realAtlas(T);
   const W = 256, H = 512;
   const c = document.createElement('canvas'); c.width = W; c.height = H;
   const e = document.createElement('canvas'); e.width = W; e.height = H;
@@ -93,13 +132,15 @@ export class HouseInstances {
     this.T = T;
     this.items = [];
     const A = atlas(T);
-    const mat = new THREE.MeshLambertMaterial({ map: A.map, emissive: 0xffffff, emissiveMap: A.emissive, emissiveIntensity: 0 });
+    const mat = lam({ map: A.map, emissive: 0xffffff, emissiveMap: A.emissive, emissiveIntensity: 0 },
+      A.normalMap ? { normalMap: A.normalMap, roughnessMap: A.orm, metalnessMap: A.orm, roughness: 1, metalness: 1 } : {});
     mat.onBeforeCompile = (sh) => {
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', '#include <common>\nattribute float tint;\nattribute vec3 roofColor;')
         .replace('#include <color_vertex>', '#include <color_vertex>\n#ifdef USE_INSTANCING_COLOR\n  vColor.rgb = tint < 0.5 ? instanceColor : (tint < 1.5 ? roofColor : vec3(0.78));\n#endif');
     };
     mat.customProgramCacheKey = () => 'houses-v1';
+    if (STYLE.realista) STYLE.tintMask(mat);
     this.material = mat;
     this.templates = { '1g': template(1, false), '2g': template(2, false), '1f': template(1, true), '2f': template(2, true) };
   }

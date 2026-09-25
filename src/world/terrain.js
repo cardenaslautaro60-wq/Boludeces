@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { lam, STYLE } from '../render/style.js';
 import { META, MAP, FRAME as F, toAB, fromAB, DECKS, RAMPS } from './mapdata.js';
 import { clamp, lerp, smoothstep, fbm, noise2 } from '../util.js';
 import { srgbToLinear } from './geom.js';
@@ -241,19 +242,33 @@ export class Terrain {
   buildMesh() {
     const group = new THREE.Group();
     const T = 48;
-    const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+    const real = STYLE.realista;
+    const mat = real ? STYLE.terrainMaterial(STYLE.tex) : lam({ vertexColors: true });
     const nrm = new THREE.Vector3();
     const { na, nb } = this;
     // colores y posiciones de todos los vértices (se comparten entre niveles)
     const P = new Float32Array(na * nb * 3), C = new Float32Array(na * nb * 3);
+    // realista: pesos de arena, roca, tierra y estepa por vértice
+    const SP = real ? new Float32Array(na * nb * 4) : null;
+    const UR = real ? new Float32Array(na * nb) : null;
     for (let j = 0; j < nb; j++) for (let i = 0; i < na; i++) {
       const [x, z] = fromAB(this.a0 + i * CELL, this.b0 + j * CELL);
       const k = j * na + i;
       const h = this.h[k];
       P[k * 3] = x; P[k * 3 + 1] = h; P[k * 3 + 2] = z;
       this.normalAt(x, z, nrm);
-      const c = this.colorFor(x, z, h, nrm.y, this.urban ? this.urban[k] : 0, this.coast[k]);
+      const urban = this.urban ? this.urban[k] : 0, sd = this.coast[k];
+      const c = this.colorFor(x, z, h, nrm.y, urban, sd);
       C[k * 3] = c[0]; C[k * 3 + 1] = c[1]; C[k * 3 + 2] = c[2];
+      if (SP) {
+        const sand = h < 0.3 ? 1 : (1 - smoothstep(35, 70, sd)) * (1 - smoothstep(5, 11, h));
+        const rock = (1 - smoothstep(0.7, 0.86, nrm.y)) * (1 - sand);
+        const rest = Math.max(0, 1 - sand - rock);
+        const n = fbm(x * 0.009, z * 0.009, 3);
+        const dirt = rest * (urban ? 0.85 : smoothstep(0.38, 0.72, n) * 0.8 + 0.1);
+        SP[k * 4] = sand; SP[k * 4 + 1] = rock; SP[k * 4 + 2] = dirt; SP[k * 4 + 3] = Math.max(0, rest - dirt);
+        UR[k] = urban ? rest * (0.55 + 0.35 * noise2(x * 0.03, z * 0.03)) : 0;
+      }
     }
     const tile = (i0, i1, j0, j1, st) => {
       const is = [], js = [];
@@ -262,11 +277,13 @@ export class Terrain {
       const w = is.length, hgt = js.length;
       const n = w * hgt + (w + hgt) * 2 * 2;
       const pos = new Float32Array(n * 3), col = new Float32Array(n * 3);
+      const spl = SP ? new Float32Array(n * 4) : null, urb = UR ? new Float32Array(n) : null;
       let p = 0;
       let allUnder = true;
       const put = (k, dy = 0) => {
         pos[p * 3] = P[k * 3]; pos[p * 3 + 1] = P[k * 3 + 1] + dy; pos[p * 3 + 2] = P[k * 3 + 2];
         col[p * 3] = C[k * 3]; col[p * 3 + 1] = C[k * 3 + 1]; col[p * 3 + 2] = C[k * 3 + 2];
+        if (spl) { for (let q = 0; q < 4; q++) spl[p * 4 + q] = SP[k * 4 + q]; urb[p] = UR[k]; }
         return p++;
       };
       for (const j of js) for (const i of is) { const k = j * na + i; put(k); if (this.h[k] > -7) allUnder = false; }
@@ -293,6 +310,7 @@ export class Terrain {
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.BufferAttribute(pos.slice(0, p * 3), 3));
       geo.setAttribute('color', new THREE.BufferAttribute(col.slice(0, p * 3), 3));
+      if (spl) { geo.setAttribute('splat', new THREE.BufferAttribute(spl.slice(0, p * 4), 4)); geo.setAttribute('urb', new THREE.BufferAttribute(urb.slice(0, p), 1)); }
       geo.setIndex(idx);
       geo.computeVertexNormals();
       // el faldón es de doble cara: su normal se anula (y normalize(0) da NaN en la GPU);
@@ -393,6 +411,8 @@ export function buildWater(terrain) {
         #include <fog_fragment>
       }`,
   });
+  // versión realista: agua PBR (refleja el cielo, brilla con el sol)
+  const matR = STYLE.realista ? STYLE.waterMaterial() : null;
   // Malla fina solo cerca de la orilla (espuma y agua clara); el resto es un plano grande
   const step = 18;
   const a0 = terrain.a0, a1 = terrain.a0 + (terrain.na - 1) * CELL;
@@ -421,8 +441,11 @@ export function buildWater(terrain) {
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('depth', new THREE.BufferAttribute(depth, 1));
   geo.setIndex(idx);
+  // normales hacia arriba (el material realista las usa; sin ellas daría NaN)
+  geo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(na * nb * 3).map((v, i) => (i % 3 === 1 ? 1 : 0)), 3));
   geo.computeBoundingSphere();
-  const shore = new THREE.Mesh(geo, mat);
+  const shore = new THREE.Mesh(geo, matR || mat);
+  if (matR) shore.receiveShadow = true;
   shore.userData.noCull = true;
   group.add(shore);
 
@@ -431,12 +454,12 @@ export function buildWater(terrain) {
   farGeo.rotateX(-Math.PI / 2);
   const farDepth = new Float32Array(farGeo.attributes.position.count).fill(20);
   farGeo.setAttribute('depth', new THREE.BufferAttribute(farDepth, 1));
-  const far = new THREE.Mesh(farGeo, mat);
+  const far = new THREE.Mesh(farGeo, matR || mat);
   const [cx, cz] = fromAB((a0 + a1) / 2, (b0 + b1) / 2 - 3000);
   far.position.set(cx, -0.38, cz);
   far.rotation.y = -Math.atan2(F.uz, F.ux);
   far.userData.noCull = true;
   group.add(far);
-  group.userData.material = mat;
+  group.userData.material = matR || mat;
   return group;
 }

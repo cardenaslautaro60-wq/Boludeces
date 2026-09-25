@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { lam, STYLE } from '../render/style.js';
 import { META, MAP, FRAME as F, toAB } from './mapdata.js';
 import { pointSegDist, dist, clamp } from '../util.js';
 import { LeanChunks } from './geom.js';
@@ -365,15 +366,30 @@ export class RoadNetwork {
 
     const po = (mat, f) => { mat.polygonOffset = true; mat.polygonOffsetFactor = f; mat.polygonOffsetUnits = f * 2; return mat; };
     const materials = {
-      asphalt: po(new THREE.MeshLambertMaterial({ map: textures.asphalt }), -1),
-      dirt: po(new THREE.MeshLambertMaterial({ map: textures.dirt }), -1),
-      paving: po(new THREE.MeshLambertMaterial({ map: textures.sidewalk }), -1),
-      white: po(new THREE.MeshLambertMaterial({ map: textures.dash, transparent: true, alphaTest: 0.4 }), -3),
-      solidW: po(new THREE.MeshLambertMaterial({ color: 0xdedcd0 }), -3),
-      yellow: po(new THREE.MeshLambertMaterial({ color: 0xd9a826 }), -3),
-      patchA: po(new THREE.MeshLambertMaterial({ map: textures.asphalt }), -2),
-      patchD: po(new THREE.MeshLambertMaterial({ map: textures.dirt }), -2),
+      asphalt: po(lam({ map: textures.asphalt }), -1),
+      dirt: po(lam({ map: textures.dirt }), -1),
+      paving: po(lam({ map: textures.sidewalk }), -1),
+      white: po(lam({ map: textures.dash, transparent: true, alphaTest: 0.4 }), -3),
+      solidW: po(lam({ color: 0xdedcd0 }), -3),
+      yellow: po(lam({ color: 0xd9a826 }), -3),
+      patchA: po(lam({ map: textures.asphalt }), -2),
+      patchD: po(lam({ map: textures.dirt }), -2),
     };
+    if (STYLE.realista) {
+      // fotos por posición en el mundo (las esquinas empalman con los tramos) y relieve
+      const P = textures.pbr, GS = STYLE.GROUND_SCALE;
+      const src = { asphalt: 'asphalt', patchA: 'asphalt', dirt: 'dirt', patchD: 'dirt', paving: 'sidewalk' };
+      for (const [k, key] of Object.entries(src)) {
+        const m = materials[k];
+        Object.assign(m, P[key]);
+        m.map = textures[key];
+        m.userData.key = k;
+        STYLE.worldUV(m, GS[k], { vary: k === 'asphalt' || k === 'patchA' ? 0.25 : 0.2 });
+        m.needsUpdate = true;
+      }
+      // pintura vial: un poco gastada y con brillo
+      for (const k of ['white', 'solidW', 'yellow']) { materials[k].roughness = 0.6; }
+    }
     ch.build(materials, group, { order: { asphalt: 1, dirt: 1, paving: 1, patchA: 2, patchD: 2, white: 3, solidW: 3, yellow: 3 } });
     this.materials = materials;
     return group;

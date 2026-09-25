@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { lam } from '../render/style.js';
 import { rand, clamp } from '../util.js';
 
 export const WEAPONS = {
@@ -16,7 +17,7 @@ export function weaponMesh(kind) {
   if (!kind) return null;
   if (!meshCache[kind]) {
     const g = new THREE.Group();
-    const m = (c) => new THREE.MeshLambertMaterial({ color: c });
+    const m = (c) => lam({ color: c });
     if (kind === 'clava') {
       const b = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.02, 0.5, 6), m(0xf2f2f2));
       b.position.y = -0.2; b.rotation.x = 0;

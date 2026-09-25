@@ -40,6 +40,9 @@ export class Environment {
     this.dust = 0;
     this.nextWeatherChange = 180;
     this.moonDir = new THREE.Vector3(0.3, 0.8, -0.4).normalize();
+    // la versión realista usa el recorrido real del sol y ve más lejos (aire patagónico)
+    this.realSun = false;
+    this.fogScale = 1;
 
     this.hemi = new THREE.HemisphereLight(0xcfe0ff, 0x8a7a5a, 1.2);
     this.sun = new THREE.DirectionalLight(0xfff2e0, 2.2);
@@ -188,14 +191,15 @@ export class Environment {
     // sol
     const sunAng = ((h - 7) / 13) * Math.PI; // 7h amanece, 20h anochece
     const elev = Math.sin(sunAng);
-    const sx = -Math.cos(sunAng), sy = Math.max(elev, -0.3), sz = 0.35;
+    // versión realista: el sol de Comodoro (45° Sur) va por el norte (-z) y sube menos
+    const sx = -Math.cos(sunAng), sy = Math.max(elev, -0.3) * (this.realSun ? 0.78 : 1), sz = this.realSun ? -0.62 : 0.35;
     U.uSunDir.value.set(sx, sy, sz).normalize();
     const low = 1 - smoothstep(0.0, 0.35, elev);
     U.uSunColor.value.setRGB(1, lerp(0.92, 0.55, low), lerp(0.8, 0.35, low));
 
     this.fog.color.copy(this.tmpHor);
-    this.fog.near = this.current('fogNear');
-    this.fog.far = this.current('fogFar') * lerp(1, 0.75, this.night);
+    this.fog.near = this.current('fogNear') * this.fogScale;
+    this.fog.far = this.current('fogFar') * lerp(1, 0.75, this.night) * this.fogScale;
 
     const sunI = Math.max(0, elev) > 0 ? lerp(0.3, 2.4, smoothstep(0, 0.5, elev)) * (1 - clouds * 0.45) * (1 - dust * 0.4) : 0;
     this.sun.intensity = sunI + this.night * 0.25;

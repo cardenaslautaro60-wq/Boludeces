@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { lam, STYLE } from '../render/style.js';
 import { META, LANDMARKS, POI, SPAWNS, DECKS, RAMPS } from './mapdata.js';
 import { ChunkedGeo, LeanChunks, hexColor } from './geom.js';
 import { signTexture } from '../render/textures.js';
@@ -166,20 +167,29 @@ export class City {
   }
 
   materials(T) {
-    const lam = (o) => new THREE.MeshLambertMaterial({ vertexColors: true, ...o });
-    return {
-      office: lam({ map: T.office, emissive: 0xffffff, emissiveMap: T.officeE, emissiveIntensity: 0 }),
-      house: lam({ map: T.house, emissive: 0xffffff, emissiveMap: T.houseE, emissiveIntensity: 0 }),
-      metal: lam({ map: T.metal }),
-      brick: lam({ map: T.brick }),
-      plain: lam({}),
-      roof: lam({ map: T.roof }),
-      roofFlat: lam({ map: T.roofFlat }),
-      pitch: lam({ map: T.pitch, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }),
-      sidewalk: new THREE.MeshLambertMaterial({ map: T.sidewalk, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
-      curbFace: new THREE.MeshLambertMaterial({ color: 0xb8b4aa }),
-      grass: new THREE.MeshLambertMaterial({ color: 0x6e7d3e, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
+    // P: mapas extra de la versión realista (normales, rugosidad, metal); vacío en la PS2
+    const P = T.pbr || {};
+    const vc = (o, k) => lam({ vertexColors: true, ...o }, P[k] || {});
+    const M = {
+      office: vc({ map: T.office, emissive: 0xffffff, emissiveMap: T.officeE, emissiveIntensity: 0 }, 'office'),
+      house: vc({ map: T.house, emissive: 0xffffff, emissiveMap: T.houseE, emissiveIntensity: 0 }, 'house'),
+      metal: vc({ map: T.metal }, 'metal'),
+      brick: vc({ map: T.brick }, 'brick'),
+      plain: vc({ map: T.plain || null }, 'plain'),
+      roof: vc({ map: T.roof }, 'roof'),
+      roofFlat: vc({ map: T.roofFlat }, 'roofFlat'),
+      pitch: vc({ map: T.pitch, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }, 'pitch'),
+      sidewalk: lam({ map: T.sidewalk, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }, P.sidewalk || {}),
+      curbFace: lam({ color: 0xb8b4aa, map: T.curb || null }, P.curb || {}),
+      grass: lam({ color: T.grass ? 0xffffff : 0x6e7d3e, map: T.grass || null, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }, P.grass || {}),
     };
+    if (STYLE.realista) {
+      // pisos por posición en el mundo; paredes: el color del edificio no tiñe los vidrios
+      const GS = STYLE.GROUND_SCALE;
+      for (const k of ['sidewalk', 'grass', 'pitch']) { M[k].userData.key = 'c' + k; STYLE.worldUV(M[k], GS[k]); }
+      for (const k of ['office', 'house']) STYLE.tintMask(M[k]);
+    }
+    return M;
   }
 
   // ---- Ocupación del suelo (cajas orientadas) ----
