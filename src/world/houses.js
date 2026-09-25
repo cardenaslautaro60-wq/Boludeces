@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { lam, STYLE } from '../render/style.js';
+import { InstChunks } from './culling.js';
 
 // Casas de barrio instanciadas: 4 plantillas (1 o 2 plantas, techo a dos aguas o plano),
 // cada instancia con su escala, color de pared y color de techo. Agrupadas por sector.
@@ -13,7 +14,10 @@ let ATLAS = null;
 function realAtlas(T) {
   const R = T.real, W = 1024, H = 2048;
   const mk = () => { const c = document.createElement('canvas'); c.width = W; c.height = H; return [c, c.getContext('2d')]; };
-  const [c, g] = mk(), [cn, gn] = mk(), [cm, gm] = mk(), [ce, ge] = mk();
+  const [c, g] = mk(), [cn, gn] = mk(), [cm, gm] = mk(), [ce, ge] = mk(), [ck, gk] = mk();
+  // máscara de teñido: la pared se tiñe con el color de la casa; techo y zócalo, con el suyo
+  gk.fillStyle = '#fff'; gk.fillRect(0, 0, W, H);
+  if (T.houseMask) gk.drawImage(T.houseMask.image, 0, 0, W, 1024);
   const tile = (ctx, img, x, y, w, h, size) => {
     ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
     for (let yy = y; yy < y + h; yy += size) for (let xx = x; xx < x + w; xx += size) ctx.drawImage(img, xx, yy, size, size);
@@ -40,7 +44,7 @@ function realAtlas(T) {
     t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.ClampToEdgeWrapping; t.anisotropy = 8;
     return t;
   };
-  ATLAS = { map: tx(c, true), emissive: tx(ce, true), normalMap: tx(cn, false), orm: tx(cm, false) };
+  ATLAS = { map: tx(c, true), emissive: tx(ce, true), normalMap: tx(cn, false), orm: tx(cm, false), mask: tx(ck, false) };
   return ATLAS;
 }
 
@@ -148,7 +152,7 @@ export class HouseInstances {
         .replace('#include <color_vertex>', '#include <color_vertex>\n#ifdef USE_INSTANCING_COLOR\n  vColor.rgb = tint < 0.5 ? instanceColor : (tint < 1.5 ? roofColor : vec3(0.78));\n#endif');
     };
     mat.customProgramCacheKey = () => 'houses-v2';
-    if (STYLE.realista) STYLE.tintMask(mat);
+    if (STYLE.realista) STYLE.tintMask(mat, A.mask || null);
     this.material = mat;
     this.templates = { '1g': template(1, false), '2g': template(2, false), '1f': template(1, true), '2f': template(2, true) };
   }
@@ -200,6 +204,101 @@ export class HouseInstances {
       group.add(mesh);
     }
     this.count = this.items.length;
+    this.buildRoofProps(group);
     return group;
   }
+
+  // Lo que hay arriba de los techos de Comodoro: tanques de agua (negros, celestes o blancos,
+  // sobre una base o una torrecita de ladrillo), antenas de TV y alguna antena satelital
+  buildRoofProps(group) {
+    const box = (w, h, d, y = 0) => { const g = new THREE.BoxGeometry(w, h, d); g.translate(0, y + h / 2, 0); return g; };
+    const tankG = new THREE.CylinderGeometry(0.55, 0.52, 1.15, 14); tankG.translate(0, 0.575, 0);
+    const lid = new THREE.CylinderGeometry(0.2, 0.3, 0.12, 10); lid.translate(0, 1.2, 0);
+    const tankGeo = mergeGeos([tankG, lid]);
+    const baseGeo = box(1.3, 0.35, 1.3);
+    const towerGeo = box(1.5, 1, 1.5);
+    const mast = [box(0.04, 3.2, 0.04)];
+    for (const [y, w] of [[2.4, 1.6], [2.75, 1.25], [3.05, 0.9]]) mast.push(box(w, 0.03, 0.03, y));
+    mast.push(box(0.03, 0.03, 0.9, 2.6));
+    const antGeo = mergeGeos(mast);
+    const dishG = new THREE.SphereGeometry(0.42, 12, 6, 0, Math.PI * 2, 0, 0.9);
+    dishG.scale(1, 0.35, 1); dishG.rotateX(-Math.PI / 2 + 0.6); dishG.translate(0, 0.6, 0);
+    const dishGeo = mergeGeos([dishG, box(0.05, 0.6, 0.05)]);
+    const tanks = new InstChunks(tankGeo, lam({ color: 0xffffff, roughness: 0.55 }), 300);
+    const bases = new InstChunks(baseGeo, lam({ color: 0x8e8a82 }), 300);
+    const towers = new InstChunks(towerGeo, lam({ color: 0xa25a3e }), 300);
+    const ants = new InstChunks(antGeo, lam({ color: 0x9a9ea2, metalness: STYLE.realista ? 0.8 : 0, roughness: 0.45 }), 300);
+    const dishes = new InstChunks(dishGeo, lam({ color: 0xd8d8d4, roughness: 0.5 }), 300);
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3(1, 1, 1), up = new THREE.Vector3(0, 1, 0);
+    const col = new THREE.Color();
+    const TANK = [0x1c1c1e, 0x1c1c1e, 0x2a2a2c, 0x8fc3dd, 0xe8e4d8];
+    const put = (ic, it, lx, lz, y, rot = 0, s = 1, c = null) => {
+      const x = it.cx + it.ax * lx - it.az * lz, z = it.cz + it.az * lx + it.ax * lz;
+      p.set(x, y, z);
+      q.setFromAxisAngle(up, Math.atan2(-it.az, it.ax) + rot);
+      sc.setScalar(s);
+      m4.compose(p, q, sc);
+      ic.add(x, z, m4, c);
+    };
+    this.items.forEach((it, i) => {
+      const h = ((i * 2654435761) >>> 0) / 4294967296, h2 = ((i * 40503 + 17) % 1000) / 1000;
+      const Hh = it.floors * FH;
+      const top = it.y + Hh + (it.flat ? 0.02 : 0);
+      const side = h2 < 0.5 ? -1 : 1;
+      // tanque de agua
+      if (h < (it.flat ? 0.72 : 0.42)) {
+        const tc = col.setHex(TANK[Math.floor(h2 * TANK.length) % TANK.length]).clone();
+        const lx = side * it.hw * 0.45, lz = it.hd * 0.4;
+        if (it.flat) {
+          put(bases, it, lx, lz, top);
+          put(tanks, it, lx, lz, top + 0.35, 0, 1, tc);
+        } else {
+          // torrecita de ladrillo que asoma por encima del techo a dos aguas
+          const rise = it.floors === 1 ? 1.7 : 1.9;
+          const th = rise + 0.2;
+          p.set(0, 0, 0);
+          const x = it.cx + it.ax * lx - it.az * lz, z = it.cz + it.az * lx + it.ax * lz;
+          m4.compose(p.set(x, top - 0.1, z), q.setFromAxisAngle(up, Math.atan2(-it.az, it.ax)), sc.set(1, th, 1));
+          towers.add(x, z, m4);
+          sc.set(1, 1, 1);
+          put(tanks, it, lx, lz, top - 0.1 + th, 0, 1, tc);
+        }
+      }
+      // antena de TV (en 2004 casi todas las casas tenían una)
+      if (h2 > 0.45) {
+        const rise = it.flat ? 0.5 : (it.floors === 1 ? 1.7 : 1.9);
+        put(ants, it, -side * it.hw * 0.3, it.flat ? -it.hd * 0.2 : 0, top + rise - (it.flat ? 0 : 0.15), h * 3);
+      }
+      // antena satelital mirando al norte (-z)
+      if (h > 0.86) {
+        const x = it.cx - it.az * (-it.hd + 0.4), z = it.cz + it.ax * (-it.hd + 0.4);
+        p.set(x, top + (it.flat ? 0.5 : 0.2), z);
+        q.setFromAxisAngle(up, 0);
+        m4.compose(p, q, sc.setScalar(1));
+        dishes.add(x, z, m4);
+      }
+    });
+    const opts = { castShadow: false, receiveShadow: true, cullDist: 320 };
+    for (const ic of [tanks, bases, towers, ants, dishes]) ic.build(group, opts);
+    this.roofProps = tanks.count + ants.count + dishes.count;
+  }
+}
+
+// Junta varias geometrías (misma lista de atributos) en una
+function mergeGeos(list) {
+  const pos = [], nrm = [], idx = [];
+  let off = 0;
+  for (const g0 of list) {
+    const g = g0.index ? g0 : g0;
+    const P = g.attributes.position.array, Nn = g.attributes.normal.array;
+    for (let i = 0; i < P.length; i++) { pos.push(P[i]); nrm.push(Nn[i]); }
+    if (g.index) for (const k of g.index.array) idx.push(k + off);
+    else for (let k = 0; k < P.length / 3; k++) idx.push(k + off);
+    off += P.length / 3;
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  out.setIndex(idx);
+  return out;
 }

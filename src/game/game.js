@@ -554,10 +554,13 @@ export class Game {
     const mats = this.city.materialsList;
     const eCars = clamp((n - 0.25) * 1.6, 0, 1);
     const e = eCars * (this.env.blackout ? 0.04 : 1);
-    mats.office.emissiveIntensity = e * 0.9;
-    mats.house.emissiveIntensity = e * 0.8;
-    if (mats.shop) mats.shop.emissiveIntensity = e * 1.1;
-    if (this.city.houses && this.city.houses.material) this.city.houses.material.emissiveIntensity = e * 0.8;
+    // (en la realista la exposición de noche sube: las luces van más bajas para no saturar)
+    const k = STYLE.realista ? 0.45 : 1;
+    mats.office.emissiveIntensity = e * 0.9 * k;
+    for (const m of ['office2', 'office3', 'office4']) if (mats[m]) mats[m].emissiveIntensity = e * 0.9 * k;
+    mats.house.emissiveIntensity = e * 0.8 * k;
+    if (mats.shop) mats.shop.emissiveIntensity = e * 1.1 * (STYLE.realista ? 0.4 : 1);
+    if (this.city.houses && this.city.houses.material) this.city.houses.material.emissiveIntensity = e * 0.8 * k;
     const cm = carMaterials();
     cm.setLights(eCars);
     cm.setEnvIntensity(0.25 + this.env.dayLight * 0.8);

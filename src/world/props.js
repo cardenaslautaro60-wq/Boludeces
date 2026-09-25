@@ -3,7 +3,7 @@ import { lam, STYLE } from '../render/style.js';
 import { GeoBuilder, hexColor } from './geom.js';
 import { MAP, LANDMARKS, BAGS, POI, FRAME, fromAB } from './mapdata.js';
 import { RNG, clamp } from '../util.js';
-import { foliageAtlas, treeGeometry, tuftAssets } from './foliage.js';
+import { foliageAtlas, treeGeometry, tuftAssets, realTreeGeometry, clusterMaterial, WIND } from './foliage.js';
 import { InstChunks } from './culling.js';
 
 const vcMat = () => lam({ vertexColors: true });
@@ -367,11 +367,15 @@ export class Props {
     const fol = foliageAtlas().material;
     const al = spots.filter((s) => s[2] === 'alamo'), pi = spots.filter((s) => s[2] !== 'alamo');
     const trunks = new InstChunks(trunk.toGeometry(), mat);
-    const alMesh = new InstChunks(treeGeometry('alamo'), fol);
-    const piMesh = new InstChunks(treeGeometry('pino'), fol);
+    // realista: racimos de hojas + núcleo; PS2: planos cruzados
+    const RT = STYLE.realista;
+    const alMesh = new InstChunks(RT ? realTreeGeometry('alamo').clusters : treeGeometry('alamo'), RT ? clusterMaterial().material : fol);
+    const piMesh = new InstChunks(RT ? realTreeGeometry('pino').clusters : treeGeometry('pino'), RT ? clusterMaterial().material : fol);
+    const alCore = RT ? new InstChunks(realTreeGeometry('alamo').core, fol) : null;
+    const piCore = RT ? new InstChunks(realTreeGeometry('pino').core, fol) : null;
     const tint = new THREE.Color();
     let ti = 0;
-    const place = (arr, mesh) => arr.forEach(([x, z], i) => {
+    const place = (arr, mesh, coreMesh) => arr.forEach(([x, z], i) => {
       const y = terrain.heightAt(x, z) + (city.curbAt(x, z) || 0) - 0.1;
       const s = 0.8 + ((i * 7919) % 100) / 200;
       tmpE.set(0, i, 0); tmpQ.setFromEuler(tmpE);
@@ -380,14 +384,16 @@ export class Props {
       const k = ((i * 2654435761) >>> 0) / 4294967296;
       tint.setRGB(0.85 + k * 0.3, 0.9 + ((k * 7) % 1) * 0.2, 0.8 + ((k * 13) % 1) * 0.25);
       mesh.add(x, z, tmpM, tint);
+      if (coreMesh) coreMesh.add(x, z, tmpM, tint);
       trunks.add(x, z, tmpM);
       ti++;
       colliders.addCircle(x, z, 0.3, y - 1, y + 10, 'arbol');
     });
-    place(al, alMesh);
-    place(pi, piMesh);
+    place(al, alMesh, alCore);
+    place(pi, piMesh, piCore);
     trunks.build(this.group, { castShadow: true, cullDist: 520 });
     this.treeMeshes = [...alMesh.build(this.group, { castShadow: true }), ...piMesh.build(this.group, { castShadow: true })];
+    if (alCore) this.treeMeshes.push(...alCore.build(this.group, { castShadow: false }), ...piCore.build(this.group, { castShadow: false }));
   }
 
   // ---- Matas de la estepa (coirón, neneo) ----
@@ -653,12 +659,16 @@ export class Props {
   }
 
   update(t, dt, env, cam) {
+    // viento para el follaje
+    WIND.uWT.value = t;
+    WIND.uWS.value = env.windSpeed / 20;
+    WIND.uWD.value.set(env.windDir.x, env.windDir.y);
     this.updatePumps(t, cam);
     this.updateTurbines(t, env.windSpeed);
     this.updateLobos(t);
     // corte de luz (evento): los faroles se apagan
     const on = env.blackout ? 0 : 1;
     if (this.lampGlow) this.lampGlow.material.opacity = clamp(env.night * 1.2, 0, STYLE.realista ? 0.55 : 0.9) * on;
-    if (this.lampPools) this.lampPools.opacity = clamp(env.night * 1.3, 0, 0.85) * on;
+    if (this.lampPools) this.lampPools.opacity = clamp(env.night * 1.3, 0, 0.85) * on * (STYLE.realista ? 0.42 : 1);
   }
 }

@@ -105,6 +105,21 @@ export class Effects {
     this.dust.frustumCulled = false;
     this.dustPos = dp;
     game.scene.add(this.dust);
+    // Faros de noche: charco de luz en el asfalto delante de los autos cercanos (uno solo instanciado)
+    {
+      const c = document.createElement('canvas'); c.width = 64; c.height = 128;
+      const g = c.getContext('2d');
+      const gr = g.createRadialGradient(32, 10, 4, 32, 38, 90); // (v = 1, arriba del canvas, queda pegado al auto)
+      gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.35, 'rgba(255,255,255,0.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = gr; g.fillRect(0, 0, 64, 128);
+      const tex = new THREE.CanvasTexture(c);
+      const geo = new THREE.PlaneGeometry(1, 1); geo.rotateX(-Math.PI / 2); geo.translate(0, 0, 0.5);
+      const mat = new THREE.MeshBasicMaterial({ map: tex, color: 0xfff0d8, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, fog: true, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8 });
+      this.beams = new THREE.InstancedMesh(geo, mat, 16);
+      this.beams.count = 0; this.beams.frustumCulled = false; this.beams.renderOrder = 5;
+      game.scene.add(this.beams);
+      this._bm = new THREE.Matrix4(); this._bq = new THREE.Quaternion(); this._bp = new THREE.Vector3(); this._bs = new THREE.Vector3(); this._up = new THREE.Vector3(0, 1, 0);
+    }
     // Bolsas volando con el viento
     this.flyingBags = [];
     const bagMat = new THREE.SpriteMaterial({ map: T.bag, transparent: true, fog: true });
@@ -181,8 +196,33 @@ export class Effects {
     this.game.onExplosion && this.game.onExplosion(x, y, z, cause);
   }
 
+  updateBeams(camPos) {
+    const g = this.game, env = g.env, B = this.beams;
+    const night = clamp((env.night - 0.3) * 2, 0, 1);
+    B.material.opacity = night * 0.38;
+    let n = 0;
+    if (night > 0 && g.vehicles) {
+      for (const v of g.vehicles) {
+        if (n >= 16) break;
+        if (v.removed || v.dead || v.sinking || v.type.bike) continue;
+        if (!v.driver && !v.lightsOn) continue;
+        const dx = v.pos.x - camPos.x, dz = v.pos.z - camPos.z;
+        if (dx * dx + dz * dz > 110 * 110) continue;
+        const f = v.fwd;
+        const x = v.pos.x + f.x * v.type.L * 0.5, z = v.pos.z + f.z * v.type.L * 0.5;
+        const y = g.terrain.groundAt(x + f.x * 5, z + f.z * 5) + 0.06;
+        this._bq.setFromAxisAngle(this._up, v.heading);
+        this._bm.compose(this._bp.set(x, y, z), this._bq, this._bs.set(v.type.W * 2.6, 1, 13));
+        B.setMatrixAt(n++, this._bm);
+      }
+    }
+    B.count = n;
+    B.instanceMatrix.needsUpdate = true;
+  }
+
   update(dt, camPos) {
     const env = this.game.env;
+    this.updateBeams(camPos);
     this.soft.update(dt, env.windDir);
     this.glow.update(dt, env.windDir);
     // trazadoras

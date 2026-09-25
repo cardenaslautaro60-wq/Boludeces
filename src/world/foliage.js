@@ -8,6 +8,38 @@ import { RNG } from '../util.js';
 // vean vacíos desde arriba.
 // ---------------------------------------------------------------------------
 
+// Viento: todo el follaje se mece con el viento del juego (dirección y fuerza reales) y en
+// los temporales queda inclinado para el lado que sopla. props.update actualiza estos valores.
+export const WIND = { uWT: { value: 0 }, uWS: { value: 0.5 }, uWD: { value: new THREE.Vector2(1, 0) } };
+export function addWind(mat, stiff = 1) {
+  const prev = mat.onBeforeCompile;
+  mat.onBeforeCompile = (sh, r) => {
+    if (prev) prev(sh, r);
+    Object.assign(sh.uniforms, WIND);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uWT, uWS; uniform vec2 uWD;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        {
+          #ifdef USE_INSTANCING
+          vec3 ip = instanceMatrix[3].xyz;
+          mat3 im = mat3(instanceMatrix);
+          vec3 wl = transpose(im) * vec3(uWD.x, 0.0, uWD.y) / max(1e-4, dot(im[0], im[0]));
+          #else
+          vec3 ip = vec3(0.0); vec3 wl = vec3(uWD.x, 0.0, uWD.y);
+          #endif
+          float hgt = max(0.0, transformed.y - 0.8);
+          float ph = dot(ip.xz, vec2(0.071, 0.113)) + transformed.y * 0.13;
+          float gust = sin(uWT * 1.25 + ph) * 0.55 + sin(uWT * 2.7 + ph * 1.9) * 0.25 + sin(uWT * 6.1 + ph * 3.1 + transformed.x) * 0.1;
+          float bend = (gust * 0.5 + 0.35 * clamp(uWS - 0.6, 0.0, 2.0)) * uWS * ${(0.02 / stiff).toFixed(4)} * hgt * hgt / (1.0 + hgt * 0.08);
+          transformed.xz += wl.xz * bend;
+          transformed.y -= abs(bend) * 0.12;
+        }`);
+  };
+  const key = mat.customProgramCacheKey ? mat.customProgramCacheKey() : '';
+  mat.customProgramCacheKey = () => key + '-wind' + stiff;
+  return mat;
+}
+
 // Atlas 512x512: [0..224] álamo, [224..448] pino, [448..480] hojas densas verdes, [480..512] hojas densas oscuras
 const A = { alamo: [0, 224], pino: [224, 448], denseA: [448, 480], denseP: [480, 512] };
 let ATLAS = null;
@@ -85,7 +117,7 @@ export function foliageAtlas() {
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 4;
-  const mat = lam({ map: t, alphaTest: 0.45, side: THREE.FrontSide }, { roughness: 0.82 });
+  const mat = addWind(lam({ map: t, alphaTest: 0.45, side: THREE.FrontSide }, { roughness: 0.92, envMapIntensity: 0.25 }));
   ATLAS = { texture: t, material: mat };
   return ATLAS;
 }
@@ -168,6 +200,112 @@ export function treeGeometry(kind) {
   return g;
 }
 
+// ---------------------------------------------------------------------------
+// Versión realista: árboles armados con racimos de hojas (tres planos cruzados cada uno,
+// en distintas orientaciones) alrededor del tronco, en vez de tres planos grandes
+// ---------------------------------------------------------------------------
+let CLUSTER = null;
+export function clusterMaterial() {
+  if (CLUSTER) return CLUSTER;
+  const W = 1024, H = 512;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  const rng = new RNG(7);
+  // racimo de álamo: hojas chicas, más densas al centro, con huecos y bordes irregulares
+  {
+    const cx = 256, cy = 256;
+    for (let i = 0; i < 7000; i++) {
+      // (con margen: si las hojas tocan el borde se ve el corte recto del plano)
+      const a = rng.range(0, Math.PI * 2), r = Math.pow(rng.next(), 0.7) * 185 * (0.78 + 0.22 * Math.sin(a * 5 + 1));
+      const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r * 0.95;
+      const sh = (y - cy) / 240; // más oscuro abajo
+      leaf(g, x, y, rng.range(4, 9), hsl(rng.range(68, 98), rng.range(35, 58), 24 + rng.range(0, 18) - sh * 8 - (r < 80 ? 5 : 0)), rng);
+    }
+    g.strokeStyle = 'rgba(70,52,34,0.7)'; g.lineWidth = 4;
+    for (let k = 0; k < 6; k++) { const a = rng.range(0, Math.PI * 2); g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(a) * 150, cy + Math.sin(a) * 150); g.stroke(); }
+  }
+  // racimo de pino: agujas desde una rama central caída
+  {
+    const cx = 768, cy = 200;
+    for (let i = 0; i < 5200; i++) {
+      const t = rng.next(), bx = cx - 190 + t * 380, by = cy + Math.pow(Math.abs(t - 0.5) * 2, 2) * 80;
+      const a = rng.range(0, Math.PI * 2), len = rng.range(18, 44) * (1 - Math.abs(t - 0.5));
+      g.strokeStyle = hsl(rng.range(118, 150), rng.range(22, 40), rng.range(12, 30));
+      g.lineWidth = rng.range(1.5, 3);
+      g.beginPath(); g.moveTo(bx, by); g.lineTo(bx + Math.cos(a) * len, by + Math.abs(Math.sin(a)) * len * 0.9 + 6); g.stroke();
+    }
+    g.strokeStyle = '#4a3624'; g.lineWidth = 5; g.beginPath(); g.moveTo(cx - 190, cy + 80); g.quadraticCurveTo(cx, cy - 10, cx + 190, cy + 80); g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  const mat = addWind(lam({ map: t, alphaTest: 0.5, side: THREE.DoubleSide }, { roughness: 0.95, envMapIntensity: 0.2 }));
+  CLUSTER = { material: mat };
+  return CLUSTER;
+}
+
+const realCache = new Map();
+export function realTreeGeometry(kind) {
+  if (realCache.has(kind)) return realCache.get(kind);
+  const rng = new RNG(kind === 'alamo' ? 11 : 23);
+  const pos = [], nor = [], uv = [], idx = [];
+  const u0 = kind === 'alamo' ? 0 : 0.5, u1 = u0 + 0.5;
+  const q = new THREE.Quaternion(), e = new THREE.Euler(), v = new THREE.Vector3();
+  const cluster = (cx, cy, cz, size, droop) => {
+    // normal "esférica" desde el eje del árbol, para que la copa se ilumine como un volumen
+    const on = new THREE.Vector3(cx, (cy - (kind === 'alamo' ? 8 : 5)) * 0.25 + 0.4, cz).normalize();
+    for (let p = 0; p < 3; p++) {
+      e.set(rng.range(-0.6, 0.6) + droop, (p / 3) * Math.PI + rng.range(0, 1), rng.range(-0.4, 0.4));
+      q.setFromEuler(e);
+      const b = pos.length / 3;
+      for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+        v.set(sx * size / 2, sy * size / 2, 0).applyQuaternion(q);
+        pos.push(cx + v.x, cy + v.y, cz + v.z);
+        nor.push(on.x, on.y, on.z);
+        uv.push(u0 + (u1 - u0) * (sx + 1) / 2, (sy + 1) / 2);
+      }
+      idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
+    }
+  };
+  if (kind === 'alamo') {
+    // álamo criollo: columna angosta y alta
+    for (let i = 0; i < 28; i++) {
+      const y = 2.2 + (i / 27) * 12.8;
+      const t = (y - 2) / 13.5;
+      const R = 1.1 * Math.sin(Math.min(1, t * 1.1) * Math.PI * 0.9 + 0.1) * (0.6 + 0.4 * (1 - t));
+      const a = rng.range(0, Math.PI * 2), r = R * rng.range(0.2, 0.9);
+      cluster(Math.cos(a) * r, y, Math.sin(a) * r, rng.range(1.7, 2.5) * (1 - t * 0.35), 0);
+    }
+  } else {
+    // pino: pisos de ramas que caen
+    for (let k = 0; k < 7; k++) {
+      const y = 1.8 + k * 1.35, R = 2.6 * (1 - k / 8);
+      for (let j = 0; j < 4; j++) {
+        const a = (j / 4) * Math.PI * 2 + k * 0.7 + rng.range(-0.3, 0.3);
+        cluster(Math.cos(a) * R * 0.6, y, Math.sin(a) * R * 0.6, rng.range(2.4, 3.2) * (1 - k / 10), -0.35);
+      }
+    }
+  }
+  // núcleo más chico para que no se vea el cielo a través de la copa
+  const dense = [];
+  const dn = [], du = [], di = [];
+  if (kind === 'alamo') core('denseA', 0.75, 3, 12.5, dense, dn, du, di, 3); else core('denseP', 1.1, 2, 8, dense, dn, du, di, 4);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeBoundingSphere();
+  const cg = new THREE.BufferGeometry();
+  cg.setAttribute('position', new THREE.Float32BufferAttribute(dense, 3));
+  cg.setAttribute('normal', new THREE.Float32BufferAttribute(dn, 3));
+  cg.setAttribute('uv', new THREE.Float32BufferAttribute(du, 2));
+  cg.setIndex(di);
+  cg.computeBoundingSphere();
+  const out = { clusters: g, core: cg };
+  realCache.set(kind, out);
+  return out;
+}
+
 // ---- Matas de la estepa: coirón (pasto en mata) y neneo (arbusto redondo) ----
 export function tuftAssets() {
   if (TUFTS) return TUFTS;
@@ -196,7 +334,7 @@ export function tuftAssets() {
   }
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
-  const mat = lam({ map: t, alphaTest: 0.4, side: THREE.DoubleSide });
+  const mat = addWind(lam({ map: t, alphaTest: 0.4, side: THREE.DoubleSide }), 0.35);
   const make = (u0, u1) => {
     const pos = [], nor = [], uv = [], idx = [];
     for (let p = 0; p < 3; p++) {

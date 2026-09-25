@@ -6,6 +6,7 @@ import { signTexture } from '../render/textures.js';
 import { RNG, clamp, pointSegDist } from '../util.js';
 import { pointInRing } from './zones.js';
 import { HouseInstances } from './houses.js';
+import { InstChunks } from './culling.js';
 
 const CURB = 0.22;
 const SW = 2.6; // ancho de vereda
@@ -19,6 +20,7 @@ const PAL = {
   block: [0xd8cfc0, 0xc8c0b0, 0xe0d8c8, 0xb8b0a0, 0xd0c8b8],
   brickHouse: [0xc0785a, 0xb06848, 0xcc8a66, 0xa86a50],
   publico: [0xe8e2d4, 0xd6cbb4, 0xefe9dc, 0xc9c2b4, 0xe2d2b0],
+  fence: [0xe8e4da, 0xd8d0c0, 0xc9c0b0, 0xb8b0a4, 0xf0ece2, 0xc47a5a],
 };
 
 // Estilos de lote por tipo de zona
@@ -164,6 +166,7 @@ export class City {
     chunks.build(mats, group);
     this.lean.build(mats, group, { order: { sidewalk: 1, curbFace: 1, grass: 1 } });
     group.add(this.houses.build(colliders));
+    this.buildFrontFences(group);
     for (const s of this.signs) group.add(s);
     scene.add(group);
     this.materialsList = mats;
@@ -176,6 +179,10 @@ export class City {
     const vc = (o, k) => lam({ vertexColors: true, ...o }, P[k] || {});
     const M = {
       office: vc({ map: T.office, emissive: 0xffffff, emissiveMap: T.officeE, emissiveIntensity: 0 }, 'office'),
+      // tipos de edificio del Centro (en la PS2 son la misma fachada)
+      office2: vc({ map: T.office2 || T.office, emissive: 0xffffff, emissiveMap: T.office2E || T.officeE, emissiveIntensity: 0 }, T.office2 ? 'office2' : 'office'),
+      office3: vc({ map: T.office3 || T.office, emissive: 0xffffff, emissiveMap: T.office3E || T.officeE, emissiveIntensity: 0 }, T.office3 ? 'office3' : 'office'),
+      office4: vc({ map: T.office4 || T.office, emissive: 0xffffff, emissiveMap: T.office4E || T.officeE, emissiveIntensity: 0 }, T.office4 ? 'office4' : 'office'),
       house: vc({ map: T.house, emissive: 0xffffff, emissiveMap: T.houseE, emissiveIntensity: 0 }, 'house'),
       shop: vc({ map: T.shop, emissive: 0xffffff, emissiveMap: T.shopE, emissiveIntensity: 0 }, 'shop'),
       metal: vc({ map: T.metal }, 'metal'),
@@ -192,7 +199,7 @@ export class City {
       // pisos por posición en el mundo; paredes: el color del edificio no tiñe los vidrios
       const GS = STYLE.GROUND_SCALE;
       for (const k of ['sidewalk', 'grass', 'pitch']) { M[k].userData.key = 'c' + k; STYLE.worldUV(M[k], GS[k]); }
-      for (const k of ['office', 'house']) STYLE.tintMask(M[k]);
+      for (const k of ['office', 'office2', 'office3', 'office4', 'house']) STYLE.tintMask(M[k], T[k + 'Mask'] || T.officeMask);
     }
     return M;
   }
@@ -289,7 +296,7 @@ export class City {
     }
     let uS = 28, vS = 25.6, uOff = 0;
     if (mat === 'house') { uS = 14; vS = fh * 2; uOff = Math.floor(Math.random() * 4) / 4; }
-    if (mat === 'office') { uOff = Math.floor(Math.random() * 8) / 8; }
+    if (mat.startsWith('office')) { uOff = Math.floor(Math.random() * 8) / 8; }
     if (mat === 'metal') { uS = 3; vS = 3; }
     if (mat === 'brick') { uS = 2.5; vS = 2; }
     if (mat === 'plain') { uS = 4; vS = 3; }
@@ -312,7 +319,7 @@ export class City {
     }
     const rg = this.chunkFor(chunks, cx, cz, 'roofFlat');
     rg.top(x0, x1, z0, z1, top, hexColor(opts.roofColor || 0xaaaaaa), 4);
-    if (floors > 1 && (mat === 'office' || mat === 'brick')) {
+    if (floors > 1 && (mat.startsWith('office') || mat === 'brick')) {
       const pg = this.chunkFor(chunks, cx, cz, 'plain');
       pg.walls(x0 - 0.15, x1 + 0.15, z0 - 0.15, z1 + 0.15, top - 0.2, top + 0.7, color);
       pg.top(x0 - 0.15, x1 + 0.15, z0 - 0.15, z0 + 0.15, top + 0.7, color);
@@ -1368,6 +1375,95 @@ export class City {
     this.poiCount = placed;
   }
 
+  // Frente de la casa: si está retirada de la vereda, pared baja con reja, murito o tapia
+  // sobre la línea municipal (y los costados hasta la casa)
+  frontFence(o, zt, rng) {
+    const R = this.roads;
+    const fx = o.az, fz = -o.ax; // frente (-z local)
+    const px = o.cx + fx * o.hd, pz = o.cz + fz * o.hd;
+    const gap = R.clearance(px, pz, 16) - SW;
+    if (gap < 1.4 || gap > 9 || !rng.chance(zt === 'km' ? 0.45 : 0.8)) return;
+    const L = o.hw * 2 + 1.6;
+    const fzL = -o.hd - gap + 0.25; // línea municipal, en coordenadas locales
+    // las puntas no pueden pisar la vereda
+    for (const sx of [-1, 1]) {
+      const lx = sx * L / 2;
+      const wx = o.cx + o.ax * lx - o.az * fzL, wz = o.cz + o.az * lx + o.ax * fzL;
+      if (R.clearance(wx, wz, 8) < SW - 0.1) return;
+    }
+    const kind = zt === 'rada' ? (rng.chance(0.6) ? 1 : 0) : rng.chance(0.62) ? 0 : rng.chance(0.55) ? 1 : 2;
+    this.fences = this.fences || [];
+    this.fences.push({ o, z: fzL, L, gap: gap - 0.25, kind, color: rng.pick(kind === 2 ? PAL.house : PAL.fence) });
+    // jardín del frente con pasto (en muchos es tierra o ripio: eso ya lo pone el terreno)
+    if (rng.chance(zt === 'rada' ? 0.8 : zt === 'km' ? 0.35 : 0.55)) {
+      const t = this.terrain, lb = this.lean.get(o.cx, o.cz, 'grass');
+      const P = (lx, lz) => { const x = o.cx + o.ax * lx - o.az * lz, z = o.cz + o.az * lx + o.ax * lz; return [x, t.heightAt(x, z) + 0.04, z]; };
+      const x0 = -L / 2 + 0.25, x1 = L / 2 - 0.25, z0 = fzL + 0.2, z1 = -o.hd - 0.1;
+      const n = Math.max(1, Math.round((x1 - x0) / 3));
+      for (let k = 0; k < n; k++) {
+        const xa = x0 + (x1 - x0) * k / n, xb = x0 + (x1 - x0) * (k + 1) / n;
+        const a = P(xa, z0), b = P(xb, z0), c = P(xb, z1), d = P(xa, z1);
+        // normal hacia arriba (el frente mira a -z local)
+        lb.tri(a[0], a[1], a[2], a[0] / 2, a[2] / 2, d[0], d[1], d[2], d[0] / 2, d[2] / 2, c[0], c[1], c[2], c[0] / 2, c[2] / 2);
+        lb.tri(a[0], a[1], a[2], a[0] / 2, a[2] / 2, c[0], c[1], c[2], c[0] / 2, c[2] / 2, b[0], b[1], b[2], b[0] / 2, b[2] / 2);
+      }
+    }
+  }
+
+  buildFrontFences(group) {
+    const list = this.fences || [];
+    if (!list.length) return;
+    const t = this.terrain;
+    const wallG = new THREE.BoxGeometry(1, 1, 0.2); wallG.translate(0, 0.5, 0);
+    const wallMat = lam({ color: 0xffffff }, (this.T.pbr && this.T.pbr.plain) || {});
+    if (this.T.plain) wallMat.map = this.T.plain;
+    const walls = new InstChunks(wallG, wallMat, 300);
+    // reja: un plano con barrotes dibujados (se repiten cada 12 cm sin deformarse)
+    const c = document.createElement('canvas'); c.width = 32; c.height = 128;
+    const g = c.getContext('2d');
+    g.clearRect(0, 0, 32, 128);
+    g.fillStyle = '#26282b'; g.fillRect(12, 0, 8, 128); g.fillRect(0, 0, 32, 8); g.fillRect(0, 120, 32, 8);
+    g.fillStyle = '#26282b'; g.beginPath(); g.moveTo(16, 0); g.lineTo(9, 10); g.lineTo(23, 10); g.fill();
+    const tex = new THREE.CanvasTexture(c); tex.wrapS = THREE.RepeatWrapping; tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+    const barMat = lam({ map: tex, alphaTest: 0.5, side: THREE.DoubleSide, color: 0xffffff }, STYLE.realista ? { metalness: 0.6, roughness: 0.5 } : {});
+    barMat.onBeforeCompile = (sh) => {
+      sh.vertexShader = sh.vertexShader.replace('#include <uv_vertex>', `vec2 uvI = uv;
+#ifdef USE_INSTANCING
+  uvI.x *= length(instanceMatrix[0].xyz) / 0.12;
+#endif
+#define uv uvI
+#include <uv_vertex>
+#undef uv`);
+    };
+    barMat.customProgramCacheKey = () => 'reja';
+    const barG = new THREE.PlaneGeometry(1, 1); barG.translate(0, 0.5, 0);
+    const bars = new InstChunks(barG, barMat, 300);
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), col = new THREE.Color();
+    for (const f of list) {
+      const o = f.o;
+      const H = f.kind === 2 ? 1.8 : f.kind === 1 ? 0.6 : 0.75;
+      const segs = [[0, f.z, f.L, 0], [-f.L / 2 + 0.1, f.z + f.gap / 2, f.gap, Math.PI / 2], [f.L / 2 - 0.1, f.z + f.gap / 2, f.gap, Math.PI / 2]];
+      for (const [lx, lz, len, rot] of segs) {
+        if (len < 0.5) continue;
+        const x = o.cx + o.ax * lx - o.az * lz, z = o.cz + o.az * lx + o.ax * lz;
+        const y = t.heightAt(x, z) - 0.2;
+        const ang = Math.atan2(-o.az, o.ax) + rot;
+        q.setFromAxisAngle(up, ang);
+        m4.compose(p.set(x, y, z), q, sc.set(len, H + 0.2, 1));
+        walls.add(x, z, m4, col.setHex(f.color));
+        if (f.kind === 0) {
+          m4.compose(p.set(x, y + H + 0.2, z), q, sc.set(len, 0.85, 1));
+          bars.add(x, z, m4);
+        }
+        const ax = Math.cos(ang), az = -Math.sin(ang);
+        this.colliders.addOBB(x, z, ax, az, len / 2, 0.12, y, y + H + 0.2 + (f.kind === 0 ? 0.85 : 0), 'reja');
+      }
+    }
+    walls.build(group, { castShadow: true, receiveShadow: true, cullDist: 360 });
+    bars.build(group, { castShadow: false, receiveShadow: false, cullDist: 220 });
+    this.fenceCount = list.length;
+  }
+
   emitReal(chunks, o, type, zt, lv, A, rng) {
     const H = this.houses;
     if (type === 'casa') {
@@ -1377,6 +1473,7 @@ export class City {
       const wall = brick ? rng.pick(PAL.brickHouse) : zt === 'km' ? (rng.chance(0.7) ? 0xf2efe6 : rng.pick(PAL.house)) : zt === 'rada' ? rng.pick(PAL.rada) : rng.pick(PAL.house);
       const roof = flat ? 0x9d9890 : zt === 'km' ? (rng.chance(0.7) ? 0xa33a2a : 0x2f6b3a) : rng.pick(PAL.roof);
       H.add(o, floors, flat, wall, roof, this.terrain);
+      this.frontFence(o, zt, rng);
       return;
     }
     this.setFrame(o.cx, o.cz, o.ax, o.az);
@@ -1404,9 +1501,12 @@ export class City {
             if (sub < 60) floors = q < 0.6 ? rng.int(1, 3) : rng.int(4, 6);
             else floors = q < 0.4 ? rng.int(2, 4) : q < 0.75 ? rng.int(5, 8) : q < 0.95 ? rng.int(9, 13) : rng.int(14, 19);
           }
-          const brick = floors < 6 && rng.chance(0.2);
+          const q2 = rng.next();
+          // tipos: revoque con ventanas, balcones corridos (departamentos), franjas vidriadas, ladrillo visto
+          const mat = floors >= 5 ? (q2 < 0.35 ? 'office' : q2 < 0.72 ? 'office2' : q2 < 0.88 ? 'office3' : 'office4')
+            : (q2 < 0.45 ? 'office' : q2 < 0.65 ? 'office2' : q2 < 0.9 ? 'office4' : 'office3');
           const shop = !o.noShop && floors <= 12 && rng.chance(0.8);
-          this.addBuilding(chunks, xa, xa + w, za, zb, floors, { mat: brick ? 'brick' : 'office', color: rng.pick(PAL.centro), shop });
+          this.addBuilding(chunks, xa, xa + w, za, zb, floors, { mat, color: rng.pick(PAL.centro), shop });
           xa += w;
         }
       }

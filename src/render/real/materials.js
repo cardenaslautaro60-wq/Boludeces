@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { shopFacade } from '../textures.js';
+import { SHOP_NAMES } from '../textures.js';
 
 // Materiales de la versión realista armados con las texturas fotográficas (STYLE.tex).
 //  - worldUV: el piso (calles, veredas, plazas) se texturiza por posición en el mundo, así
@@ -48,13 +48,16 @@ export function worldUV(mat, scale, { vary = 0.22 } = {}) {
 
 // El color de vértice (o de instancia) solo tiñe donde el alfa del mapa es 1 (la pared),
 // no los vidrios, los marcos ni las puertas
-export function tintMask(mat) {
+// La máscara va en una textura aparte (canal rojo): en el alfa del canvas el navegador pierde
+// el color de lo que tiene alfa 0 y los vidrios salían negros.
+export function tintMask(mat, mask = null) {
   const prev = mat.onBeforeCompile;
   mat.onBeforeCompile = (sh, r) => {
     if (prev) prev(sh, r);
-    sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `
+    if (mask) sh.uniforms.tintMap = { value: mask };
+    sh.fragmentShader = (mask ? 'uniform sampler2D tintMap;\n' : '') + sh.fragmentShader.replace('#include <color_fragment>', `
       #if ( defined( USE_COLOR ) || defined( USE_COLOR_ALPHA ) ) && defined( USE_MAP )
-        diffuseColor.rgb *= mix(vec3(1.0), vColor.rgb, texture2D(map, vMapUv).a);
+        diffuseColor.rgb *= mix(vec3(1.0), vColor.rgb, ${mask ? 'texture2D(tintMap, vMapUv).r' : 'texture2D(map, vMapUv).a'});
       #elif defined( USE_COLOR ) || defined( USE_COLOR_ALPHA )
         diffuseColor *= vColor;
       #endif`);
@@ -115,7 +118,8 @@ function drawWindow(G, rng, x, y, w, h, opts = {}) {
     gr.addColorStop(0, `rgb(${shade + 8},${shade + 16},${shade + 24})`);
     gr.addColorStop(1, `rgb(${shade - 12},${shade - 6},${shade})`);
     g.fillStyle = gr; g.fillRect(xx, yy, ww, hh);
-    m.fillStyle = ORM(1, 0.08, 0); m.fillRect(xx, yy, ww, hh);
+    // vidrio espejado: poca rugosidad y algo de "metal" para que refleje el cielo y la ciudad
+    m.fillStyle = ORM(1, 0.07, 0.38); m.fillRect(xx, yy, ww, hh);
     n.fillStyle = N((rng() - 0.5) * 0.04, (rng() - 0.5) * 0.04); n.fillRect(xx, yy, ww, hh);
   };
   const half = Math.floor(gw / 2);
@@ -124,8 +128,17 @@ function drawWindow(G, rng, x, y, w, h, opts = {}) {
   // luz de noche detrás del vidrio
   if (rng() < (opts.lit ?? 0.38)) {
     const warm = rng() < 0.78;
-    e.fillStyle = warm ? `rgb(255,${190 + Math.floor(rng() * 40)},${110 + Math.floor(rng() * 50)})` : 'rgb(175,205,255)';
-    e.fillRect(gx, gy, gw, gh);
+    const k = 0.55 + rng() * 0.45;
+    const col = warm ? [255, 190 + Math.floor(rng() * 40), 110 + Math.floor(rng() * 50)] : [175, 205, 255];
+    const eg = e.createLinearGradient(0, gy, 0, gy + gh);
+    eg.addColorStop(0, `rgb(${col[0] * k | 0},${col[1] * k | 0},${col[2] * k | 0})`);
+    eg.addColorStop(0.6, `rgb(${col[0] * k * 0.75 | 0},${col[1] * k * 0.75 | 0},${col[2] * k * 0.75 | 0})`);
+    eg.addColorStop(1, `rgb(${col[0] * k * 0.35 | 0},${col[1] * k * 0.35 | 0},${col[2] * k * 0.35 | 0})`);
+    e.fillStyle = eg; e.fillRect(gx, gy, gw, gh);
+    // muebles y siluetas del interior
+    e.fillStyle = 'rgba(0,0,0,0.55)';
+    e.fillRect(gx + gw * rng() * 0.5, gy + gh * 0.62, gw * (0.2 + rng() * 0.3), gh * 0.38);
+    if (rng() < 0.5) e.fillRect(gx + gw * (0.55 + rng() * 0.3), gy + gh * 0.4, gw * 0.12, gh * 0.6);
   }
   // persiana de enrollar (muy de acá) o cortina
   const p = rng();
@@ -164,11 +177,7 @@ function wallBase(W, H, R, key, size) {
 }
 // Junta el alfa (máscara de teñido) con el color y arma las texturas
 function finish(G) {
-  const W = G.c.width, H = G.c.height;
-  const d = G.g.getImageData(0, 0, W, H), am = G.a.getImageData(0, 0, W, H);
-  for (let i = 3; i < d.data.length; i += 4) d.data[i] = am.data[i - 3];
-  G.g.putImageData(d, 0, 0);
-  return { map: texFrom(G.c, true), normalMap: texFrom(G.cn, false), orm: texFrom(G.cm, false), emissive: texFrom(G.ce, true) };
+  return { map: texFrom(G.c, true), normalMap: texFrom(G.cn, false), orm: texFrom(G.cm, false), emissive: texFrom(G.ce, true), mask: texFrom(G.ca, false), maskCanvas: G.ca };
 }
 
 function rngOf(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
@@ -190,6 +199,110 @@ function officeFacade(R) {
       drawWindow(G, rng, x0 + (cs - w) / 2, y0 + cs * 0.18, w, h, { shutter: 0.4, lit: 0.38 });
     }
   }
+  return finish(G);
+}
+
+// Departamentos con balcones corridos: losa de hormigón en cada piso, baranda (de caño o de
+// vidrio) y puertas-ventana; en algunos, ropa tendida o una planta
+function balconFacade(R) {
+  const S = 1024, n = 8, cs = S / n;
+  const G = wallBase(S, S, R, 'revoque2', 256);
+  const rng = rngOf(311);
+  for (let j = 0; j < n; j++) {
+    const y0 = j * cs;
+    const glassRail = rng() < 0.35;
+    for (let i = 0; i < n; i++) {
+      const x0 = i * cs;
+      // puerta-ventana alta
+      drawWindow(G, rng, x0 + cs * 0.14, y0 + cs * 0.12, Math.round(cs * 0.72), Math.round(cs * 0.72), { shutter: 0.35, lit: 0.4 });
+    }
+    // losa del balcón (no se tiñe): canto de hormigón con sombra debajo
+    const sy = y0 + cs - 16;
+    tile(G.g, R.hormigon.img, 0, sy, S, 12, 128);
+    G.a.fillStyle = '#000'; G.a.fillRect(0, sy, S, 12);
+    G.n.fillStyle = N(0, -0.8); G.n.fillRect(0, sy, S, 3);
+    G.n.fillStyle = N(0, 0.8); G.n.fillRect(0, sy + 9, S, 3);
+    G.m.fillStyle = ORM(0.8, 0.85, 0); G.m.fillRect(0, sy, S, 12);
+    G.g.fillStyle = 'rgba(0,0,0,0.35)'; G.g.fillRect(0, sy + 12, S, 5);
+    // baranda
+    const ry = y0 + cs * 0.52;
+    if (glassRail) {
+      G.g.fillStyle = 'rgba(150,175,185,0.45)'; G.g.fillRect(0, ry, S, sy - ry);
+      G.m.fillStyle = ORM(1, 0.06, 0.5); G.m.fillRect(0, ry, S, sy - ry);
+      G.a.fillStyle = '#000'; G.a.fillRect(0, ry, S, sy - ry);
+      G.g.fillStyle = '#b5b9bc'; G.g.fillRect(0, ry - 4, S, 4);
+    } else {
+      G.g.fillStyle = '#2c2e30'; G.g.fillRect(0, ry - 4, S, 5);
+      for (let x = 0; x < S; x += 9) G.g.fillRect(x, ry, 2, sy - ry);
+      G.a.fillStyle = '#000'; G.a.fillRect(0, ry - 4, S, 5);
+      G.m.fillStyle = ORM(1, 0.45, 0.8); G.m.fillRect(0, ry - 4, S, 5);
+    }
+    // ropa tendida o macetas en algunos balcones
+    for (let i = 0; i < n; i++) {
+      const x0 = i * cs, r = rng();
+      if (r < 0.18) {
+        for (let k = 0; k < 4; k++) {
+          G.g.fillStyle = ['#d8d4cc', '#3a5a8a', '#b03a3a', '#e8c040', '#f0f0f0'][Math.floor(rng() * 5)];
+          G.g.fillRect(x0 + 20 + k * 22, ry + 6, 16, 18 + rng() * 10);
+        }
+        G.a.fillStyle = '#000'; G.a.fillRect(x0 + 18, ry + 4, 96, 32);
+      } else if (r < 0.34) {
+        G.g.fillStyle = '#8a4a2a'; G.g.fillRect(x0 + 30, sy - 16, 18, 16);
+        G.g.fillStyle = '#3e6a2e'; G.g.beginPath(); G.g.arc(x0 + 39, sy - 20, 14, 0, Math.PI * 2); G.g.fill();
+        G.a.fillStyle = '#000'; G.a.fillRect(x0 + 24, sy - 36, 32, 36);
+      }
+    }
+  }
+  return finish(G);
+}
+
+// Edificio con franjas de vidrio (años 80-90): bandas vidriadas azul verdoso y antepechos
+function ribbonFacade(R) {
+  const S = 1024, n = 8, cs = S / n;
+  const G = wallBase(S, S, R, 'revoque', 256);
+  const rng = rngOf(512);
+  for (let j = 0; j < n; j++) {
+    const y0 = j * cs;
+    const gy = y0 + cs * 0.12, gh = Math.round(cs * 0.6);
+    const tone = 70 + Math.floor(rng() * 20);
+    const gr = G.g.createLinearGradient(0, gy, 0, gy + gh);
+    gr.addColorStop(0, `rgb(${tone - 20},${tone + 10},${tone + 18})`); gr.addColorStop(1, `rgb(${tone - 35},${tone - 8},${tone})`);
+    G.g.fillStyle = gr; G.g.fillRect(0, gy, S, gh);
+    G.m.fillStyle = ORM(1, 0.05, 0.5); G.m.fillRect(0, gy, S, gh);
+    G.n.fillStyle = N(0, 0); G.n.fillRect(0, gy, S, gh);
+    G.a.fillStyle = '#000'; G.a.fillRect(0, gy, S, gh);
+    // montantes de aluminio
+    for (let x = 0; x < S; x += cs / 2) {
+      G.g.fillStyle = '#9ea2a5'; G.g.fillRect(x, gy, 5, gh);
+      G.m.fillStyle = ORM(1, 0.3, 1); G.m.fillRect(x, gy, 5, gh);
+    }
+    G.g.fillStyle = '#9ea2a5'; G.g.fillRect(0, gy - 4, S, 5); G.g.fillRect(0, gy + gh - 1, S, 5);
+    // luces de noche por módulos
+    for (let x = 0; x < S; x += cs / 2) {
+      if (rng() < 0.4) { G.e.fillStyle = rng() < 0.8 ? 'rgb(255,226,170)' : 'rgb(190,215,255)'; G.e.fillRect(x + 5, gy, cs / 2 - 5, gh); }
+      if (rng() < 0.3) { G.g.fillStyle = 'rgba(220,215,200,0.55)'; G.g.fillRect(x + 5, gy, cs / 2 - 5, gh * (0.3 + rng() * 0.6)); }
+    }
+  }
+  return finish(G);
+}
+
+// Ladrillo visto con ventanas de marco blanco (muy patagónico)
+function brickFacade(R) {
+  const S = 1024, n = 8, cs = S / n;
+  const G = wallBase(S, S, R, 'ladrillo', 128);
+  const rng = rngOf(733);
+  for (let j = 0; j < n; j++) {
+    const y0 = j * cs;
+    // dintel de hormigón por piso
+    tile(G.g, R.hormigon.img, 0, y0 + cs - 10, S, 10, 128);
+    G.n.fillStyle = N(0, -0.6); G.n.fillRect(0, y0 + cs - 10, S, 3);
+    for (let i = 0; i < n; i++) {
+      const x0 = i * cs;
+      drawWindow(G, rng, x0 + cs * 0.2, y0 + cs * 0.16, Math.round(cs * 0.6), Math.round(cs * 0.56), { shutter: 0.5, lit: 0.36 });
+    }
+  }
+  // el ladrillo no se tiñe (ya tiene su color)
+  G.a.fillStyle = '#000'; G.a.fillRect(0, 0, S, S);
   return finish(G);
 }
 
@@ -227,6 +340,122 @@ function houseFacade(R) {
   return finish(G);
 }
 
+// Locales de planta baja (2 filas x 8 frentes de 8 m x 4 m, como en la PS2): revoque de foto,
+// cartel con relieve que se prende de noche, vidrieras espejadas con la mercadería adentro,
+// marcos de aluminio, persiana metálica o toldo a rayas
+function realShopFacade(R) {
+  const cw = 512, ch = 256, W = cw * 8, H = ch * 2, m = 64; // 64 px por metro
+  const G = wallBase(W, H, R, 'revoque', 256);
+  G.a.fillStyle = '#000'; G.a.fillRect(0, 0, W, H); // no se tiñe
+  const rng = rngOf(4321);
+  const walls = ['#d9d2c2', '#c8bca6', '#e4dccb', '#b9b2a6', '#d4c3a4', '#cfc8bb', '#e8e0cc', '#bfae98'];
+  SHOP_NAMES.forEach(([name, sub, bg, fg], i) => {
+    const x0 = (i % 8) * cw, y0 = Math.floor(i / 8) * ch;
+    const { g, n, e } = G, mm = G.m;
+    // color de la pared encima de la foto
+    g.save(); g.globalCompositeOperation = 'multiply'; g.fillStyle = walls[i % walls.length]; g.fillRect(x0, y0, cw, ch); g.restore();
+    // pilares entre locales y zócalo de granito
+    g.fillStyle = 'rgba(0,0,0,0.16)'; g.fillRect(x0, y0, 8, ch); g.fillRect(x0 + cw - 8, y0, 8, ch);
+    tile(g, R.hormigon.img, x0, y0 + ch - 0.28 * m, cw, 0.28 * m, 128);
+    g.fillStyle = 'rgba(40,38,36,0.55)'; g.fillRect(x0, y0 + ch - 0.28 * m, cw, 0.28 * m);
+    mm.fillStyle = ORM(0.9, 0.35, 0); mm.fillRect(x0, y0 + ch - 0.28 * m, cw, 0.28 * m);
+    n.fillStyle = N(0, -0.5); n.fillRect(x0, y0 + ch - 0.28 * m, cw, 3);
+    // cartel: caja de acrílico con relieve, se prende de noche
+    const sy = y0 + 0.3 * m, sh = 0.78 * m, sx = x0 + 0.3 * m, sw = cw - 0.6 * m;
+    const gr = g.createLinearGradient(0, sy, 0, sy + sh);
+    gr.addColorStop(0, bg); gr.addColorStop(1, shade(bg, -0.18));
+    g.fillStyle = gr; g.fillRect(sx, sy, sw, sh);
+    g.fillStyle = 'rgba(255,255,255,0.16)'; g.fillRect(sx, sy, sw, sh * 0.3);
+    n.fillStyle = N(0, -0.7); n.fillRect(sx, sy, sw, 4);
+    n.fillStyle = N(0, 0.7); n.fillRect(sx, sy + sh - 4, sw, 4);
+    n.fillStyle = N(-0.7, 0); n.fillRect(sx, sy, 4, sh);
+    n.fillStyle = N(0.7, 0); n.fillRect(sx + sw - 4, sy, 4, sh);
+    mm.fillStyle = ORM(1, 0.25, 0); mm.fillRect(sx, sy, sw, sh);
+    const text = (c, col) => {
+      c.fillStyle = col; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.font = `bold ${Math.round(sh * 0.5)}px Arial, Helvetica, sans-serif`; c.fillText(name, sx + sw / 2, sy + sh * 0.39, sw - 20);
+      c.font = `bold ${Math.round(sh * 0.24)}px Arial, Helvetica, sans-serif`; c.fillText(sub, sx + sw / 2, sy + sh * 0.8, sw - 20);
+    };
+    text(g, fg);
+    e.fillStyle = shade(bg, -0.35); e.fillRect(sx, sy, sw, sh);
+    text(e, fg);
+    // vidrieras y puerta
+    const top = y0 + 1.3 * m, bot = y0 + ch - 0.3 * m;
+    const doorLeft = rng() < 0.5;
+    const dw = 1.1 * m, dx = doorLeft ? x0 + 0.55 * m : x0 + cw - 0.55 * m - dw;
+    // marco de aluminio
+    g.fillStyle = '#a4a8ab'; g.fillRect(x0 + 0.32 * m, top - 6, cw - 0.64 * m, bot - top + 6);
+    mm.fillStyle = ORM(1, 0.3, 1); mm.fillRect(x0 + 0.32 * m, top - 6, cw - 0.64 * m, bot - top + 6);
+    const glass = (gx, gy, gw, gh) => {
+      // interior en penumbra con góndolas y mercadería
+      const ig = g.createLinearGradient(0, gy, 0, gy + gh);
+      ig.addColorStop(0, '#3a3f44'); ig.addColorStop(1, '#23272b');
+      g.fillStyle = ig; g.fillRect(gx, gy, gw, gh);
+      for (let k = 0; k < 3; k++) {
+        const yy = gy + gh * (0.35 + k * 0.22);
+        g.fillStyle = 'rgba(170,165,150,0.35)'; g.fillRect(gx + 4, yy, gw - 8, 3);
+        for (let q = 0; q < 7; q++) {
+          g.fillStyle = `hsla(${Math.floor(rng() * 360)},35%,${35 + rng() * 25}%,0.55)`;
+          const bw = 6 + rng() * 16, bh = 8 + rng() * 14;
+          g.fillRect(gx + 6 + rng() * (gw - 30), yy - bh, bw, bh);
+        }
+      }
+      mm.fillStyle = ORM(1, 0.05, 0.4); mm.fillRect(gx, gy, gw, gh);
+      n.fillStyle = N(0, 0); n.fillRect(gx, gy, gw, gh);
+      e.fillStyle = 'rgb(255,222,165)'; e.globalAlpha = 0.5; e.fillRect(gx, gy, gw, gh); e.globalAlpha = 1;
+      // estanterías oscuras recortadas contra la luz del local
+      e.fillStyle = 'rgba(0,0,0,0.6)';
+      for (let k = 0; k < 3; k++) e.fillRect(gx + 4, gy + gh * (0.35 + k * 0.22) - 3, gw - 8, 5);
+      e.fillRect(gx + gw * 0.3, gy + gh * 0.5, gw * 0.08, gh * 0.5);
+      // perfil del marco (relieve)
+      n.fillStyle = N(0.6, 0); n.fillRect(gx, gy, 3, gh);
+      n.fillStyle = N(-0.6, 0); n.fillRect(gx + gw - 3, gy, 3, gh);
+    };
+    const wx0 = doorLeft ? dx + dw + 0.12 * m : x0 + 0.45 * m, wx1 = doorLeft ? x0 + cw - 0.45 * m : dx - 0.12 * m;
+    const mid = (wx0 + wx1) / 2;
+    glass(wx0, top, mid - wx0 - 4, bot - top - 0.18 * m);
+    glass(mid + 4, top, wx1 - mid - 4, bot - top - 0.18 * m);
+    glass(dx, top + 0.08 * m, dw, bot - top - 0.08 * m);
+    g.fillStyle = '#8e9295'; g.fillRect(dx + dw * 0.5 - 2, top + 0.08 * m, 4, bot - top - 0.08 * m);
+    g.fillStyle = '#d8d8d0'; g.fillRect(dx + dw * 0.5 + 8, top + (bot - top) * 0.55, 5, 16);
+    mm.fillStyle = ORM(1, 0.25, 1); mm.fillRect(dx + dw * 0.5 + 8, top + (bot - top) * 0.55, 5, 16);
+    // persiana metálica a medio bajar o toldo a rayas
+    const r = rng();
+    if (r < 0.3) {
+      const ph = (bot - top) * (0.25 + rng() * 0.35);
+      for (let yy = top; yy < top + ph; yy += 6) {
+        tile(g, R.chapa.img, wx0, yy, wx1 - wx0, 6, 64);
+        g.fillStyle = (yy / 6) % 2 < 1 ? 'rgba(150,155,160,0.55)' : 'rgba(185,190,195,0.55)'; g.fillRect(wx0, yy, wx1 - wx0, 6);
+        n.fillStyle = N(0, 0.55); n.fillRect(wx0, yy, wx1 - wx0, 2);
+        n.fillStyle = N(0, -0.55); n.fillRect(wx0, yy + 4, wx1 - wx0, 2);
+      }
+      mm.fillStyle = ORM(0.9, 0.4, 0.9); mm.fillRect(wx0, top, wx1 - wx0, ph);
+      e.fillStyle = '#000'; e.fillRect(wx0, top, wx1 - wx0, ph);
+    } else if (r < 0.78) {
+      const stripes = 12, ay = top - 0.1 * m, ah = 0.55 * m;
+      for (let q = 0; q < stripes; q++) {
+        const sx2 = x0 + 0.28 * m + (q * (cw - 0.56 * m)) / stripes;
+        g.fillStyle = q % 2 ? '#efece4' : bg;
+        g.fillRect(sx2, ay, (cw - 0.56 * m) / stripes + 1, ah);
+      }
+      // ondas de la lona y sombra debajo
+      for (let q = 0; q < stripes; q++) { n.fillStyle = N(q % 2 ? 0.25 : -0.25, 0); n.fillRect(x0 + 0.28 * m + (q * (cw - 0.56 * m)) / stripes, ay, (cw - 0.56 * m) / stripes, ah); }
+      n.fillStyle = N(0, 0.8); n.fillRect(x0 + 0.28 * m, ay + ah - 5, cw - 0.56 * m, 5);
+      mm.fillStyle = ORM(0.9, 0.85, 0); mm.fillRect(x0 + 0.28 * m, ay, cw - 0.56 * m, ah);
+      g.fillStyle = 'rgba(0,0,0,0.28)'; g.fillRect(x0 + 0.28 * m, ay + ah, cw - 0.56 * m, 8);
+      e.fillStyle = '#000'; e.fillRect(x0 + 0.28 * m, ay, cw - 0.56 * m, ah);
+    }
+  });
+  return finish(G);
+}
+
+// aclara (+) u oscurece (-) un color #rrggbb
+function shade(hex, k) {
+  const v = parseInt(hex.slice(1), 16);
+  const f = (c) => Math.max(0, Math.min(255, Math.round(k < 0 ? c * (1 + k) : c + (255 - c) * k)));
+  return `rgb(${f(v >> 16)},${f((v >> 8) & 255)},${f(v & 255)})`;
+}
+
 // Texturas y mapas extra por material. T: texturas de la versión PS2 (se reemplazan)
 export function realTextures(T, R) {
   const set = (key, rep, extra = {}) => {
@@ -238,16 +467,22 @@ export function realTextures(T, R) {
   const P = {};
   // fachadas compuestas
   const off = officeFacade(R);
-  T.office = off.map; T.officeE = off.emissive;
-  // locales de planta baja: la misma textura, a doble resolución
-  const shop = shopFacade(2);
+  T.office = off.map; T.officeE = off.emissive; T.officeMask = off.mask;
+  // locales de planta baja con vidrieras espejadas
+  const shop = realShopFacade(R);
   T.shop = shop.map; T.shopE = shop.emissive;
-  P.shop = { roughness: 0.55, metalness: 0 };
+  P.shop = { normalMap: shop.normalMap, roughnessMap: shop.orm, metalnessMap: shop.orm, roughness: 1, metalness: 1 };
   P.office = { normalMap: off.normalMap, roughnessMap: off.orm, metalnessMap: off.orm, roughness: 1, metalness: 1 };
+  // más tipos de edificio del Centro
+  for (const [k, fn] of [['office2', balconFacade], ['office3', ribbonFacade], ['office4', brickFacade]]) {
+    const f = fn(R);
+    T[k] = f.map; T[k + 'E'] = f.emissive; T[k + 'Mask'] = f.mask;
+    P[k] = { normalMap: f.normalMap, roughnessMap: f.orm, metalnessMap: f.orm, roughness: 1, metalness: 1 };
+  }
   const hou = houseFacade(R);
   T.house = hou.map; T.houseE = hou.emissive;
   P.house = { normalMap: hou.normalMap, roughnessMap: hou.orm, metalnessMap: hou.orm, roughness: 1, metalness: 1 };
-  T.houseN = hou.normalMap; T.houseM = hou.orm;
+  T.houseN = hou.normalMap; T.houseM = hou.orm; T.houseMask = hou.mask;
   // paredes y techos (UV del GeoBuilder: una unidad ~ 2,5 a 4 m)
   let s = metal('chapa', 1.5); T.metal = s.map; P.metal = s.pbr;
   s = set('ladrillo', 1); T.brick = s.map; P.brick = s.pbr;

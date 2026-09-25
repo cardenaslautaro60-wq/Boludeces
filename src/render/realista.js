@@ -7,6 +7,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { Lensflare, LensflareElement } from 'three/addons/objects/Lensflare.js';
 import { clamp, lerp, smoothstep } from '../util.js';
 
 // Versión realista: cielo físico con nubes, reflejos del cielo en todos los materiales
@@ -20,13 +21,19 @@ const GradeShader = {
     tDiffuse: { value: null },
     uFlash: { value: 0 }, uGrey: { value: 0 }, uTrail: { value: 0 },
     uVig: { value: 0.28 }, uSat: { value: 1.12 }, uWarm: { value: 0.45 },
+    uTime: { value: 0 }, uGrain: { value: 0.035 }, uCA: { value: 0.0022 },
   },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
   fragmentShader: `
-    uniform sampler2D tDiffuse; uniform float uFlash, uGrey, uVig, uSat, uWarm; varying vec2 vUv;
+    uniform sampler2D tDiffuse; uniform float uFlash, uGrey, uVig, uSat, uWarm, uTime, uGrain, uCA; varying vec2 vUv;
+    float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
     void main(){
       vec4 t = texture2D(tDiffuse, vUv);
       vec3 c = t.rgb;
+      // aberración cromática leve hacia los bordes (lente de cámara)
+      vec2 dd = (vUv - 0.5) * uCA;
+      c.r = texture2D(tDiffuse, vUv + dd).r;
+      c.b = texture2D(tDiffuse, vUv - dd).b;
       float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
       c = max(mix(vec3(l), c, uSat), 0.0);
       c *= mix(vec3(1.0), vec3(1.05, 1.0, 0.93), uWarm);
@@ -34,6 +41,9 @@ const GradeShader = {
       vec2 d = vUv - 0.5;
       c *= 1.0 - dot(d, d) * uVig * 1.8;
       c += uFlash;
+      // grano de película (proporcional a la luz, como en una foto)
+      float n = hash(vUv * 1731.0 + fract(uTime * 13.7)) - 0.5;
+      c *= 1.0 + n * uGrain;
       gl_FragColor = vec4(c, t.a);
     }`,
 };
@@ -89,6 +99,7 @@ export class RealPost {
   }
 
   render(scene, camera) {
+    this.grade.uniforms.uTime.value = performance.now() * 0.001;
     this.renderPass.scene = scene;
     this.renderPass.camera = camera;
     if (this.gtao) { this.gtao.scene = scene; this.gtao.camera = camera; }
@@ -146,6 +157,48 @@ export class RealSky {
     ground.position.y = -8;
     this.envGround = ground;
     this.envScene.add(ground);
+    // silueta de ciudad alrededor (solo en el reflejo): los vidrios y los autos reflejan
+    // edificios cuando se anda por el Centro, y casas bajas en los barrios
+    this.envCity = {};
+    const skyline = (n, h0, h1, r0, r1, seed) => {
+      let sd = seed;
+      const rnd = () => { sd = (sd * 16807) % 2147483647; return sd / 2147483647; };
+      const geo = new THREE.BoxGeometry(1, 1, 1);
+      geo.translate(0, 0.5, 0);
+      const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      const mesh = new THREE.InstancedMesh(geo, mat, n);
+      const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3(), c = new THREE.Color();
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + rnd() * 0.2, r = r0 + rnd() * (r1 - r0);
+        p.set(Math.cos(a) * r, -8, Math.sin(a) * r);
+        q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -a);
+        sc.set(8 + rnd() * 30, h0 + rnd() * rnd() * (h1 - h0) + 8, 10 + rnd() * 25);
+        m4.compose(p, q, sc);
+        mesh.setMatrixAt(i, m4);
+        const k = 0.75 + rnd() * 0.5;
+        mesh.setColorAt(i, c.setRGB(0.55 * k, 0.52 * k, 0.47 * k));
+      }
+      mesh.visible = false;
+      this.envScene.add(mesh);
+      return mesh;
+    };
+    this.envCity.centro = skyline(90, 8, 70, 60, 260, 7);
+    this.envCity.barrio = skyline(120, 2, 9, 30, 200, 13);
+    this.envZone = '';
+    // destello del sol en la lente
+    const flareTex = (draw) => { const c = document.createElement('canvas'); c.width = c.height = 128; draw(c.getContext('2d')); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; };
+    const glow = flareTex((g) => { const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, 'rgba(255,250,235,1)'); gr.addColorStop(0.15, 'rgba(255,235,190,0.55)'); gr.addColorStop(1, 'rgba(255,220,160,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); });
+    const ring = flareTex((g) => { const gr = g.createRadialGradient(64, 64, 34, 64, 64, 60); gr.addColorStop(0, 'rgba(120,200,255,0)'); gr.addColorStop(0.5, 'rgba(160,210,255,0.35)'); gr.addColorStop(1, 'rgba(120,200,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); });
+    const dot = flareTex((g) => { const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, 'rgba(255,255,255,0.5)'); gr.addColorStop(0.7, 'rgba(255,230,200,0.18)'); gr.addColorStop(1, 'rgba(255,230,200,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); });
+    const lf = new Lensflare();
+    lf.addElement(new LensflareElement(glow, 420, 0, new THREE.Color(1, 0.95, 0.85)));
+    lf.addElement(new LensflareElement(dot, 60, 0.35, new THREE.Color(0.7, 0.85, 1)));
+    lf.addElement(new LensflareElement(ring, 140, 0.6, new THREE.Color(0.8, 0.9, 1)));
+    lf.addElement(new LensflareElement(dot, 90, 0.85, new THREE.Color(1, 0.8, 0.6)));
+    lf.addElement(new LensflareElement(ring, 240, 1.0, new THREE.Color(0.6, 0.8, 1)));
+    lf.frustumCulled = false;
+    this.flare = lf;
+    game.scene.add(lf);
     this.pmrem = new THREE.PMREMGenerator(game.renderer);
     this.envRT = null;
     this.lastSun = new THREE.Vector3(0, -2, 0);
@@ -169,8 +222,18 @@ export class RealSky {
     U.cloudDensity.value = 0.35 + clouds * 0.45;
     U.time.value = g.time || 0;
     this.sky.position.copy(g.camera.position);
+    // el destello va lejos, en la dirección del sol (y se apaga con nubes, polvo o de noche)
+    this.flare.position.copy(g.camera.position).addScaledVector(sd, 900);
+    this.flare.visible = elev > 0.02 && clouds < 0.6 && dust < 0.5 && !(g.cameraRig && g.cameraRig.cinematic && g.cameraRig.cinematic.noFlare);
     const gc = this.envGround.material.color;
     gc.setRGB(0.36, 0.32, 0.26).multiplyScalar(Math.max(0.05, env.dayLight));
+    // qué ciudad se refleja según dónde está la cámara
+    const zt = g.city && g.city.zoneTypeAt ? g.city.zoneTypeAt(g.camera.position.x, g.camera.position.z) : null;
+    const zone = zt === 'centro' ? 'centro' : zt ? 'barrio' : '';
+    for (const k in this.envCity) {
+      this.envCity[k].visible = k === zone;
+      this.envCity[k].material.color.setScalar(Math.max(0.04, env.dayLight) * (1 - clouds * 0.3));
+    }
 
     // luz: sol más fuerte y cielo como luz ambiente (la hemisférica queda como relleno)
     // (el cielo físico tiene radiancias altas: exposición baja, como una cámara de día)
@@ -190,9 +253,11 @@ export class RealSky {
 
     // regenerar los reflejos cuando cambia el sol o el clima
     this.envT -= dt;
-    const moved = this.lastSun.distanceToSquared(this.sunV) > 0.0006 || Math.abs(this.lastClouds - clouds) > 0.04;
+    const moved = this.lastSun.distanceToSquared(this.sunV) > 0.0006 || Math.abs(this.lastClouds - clouds) > 0.04 || zone !== this.envZone;
+    if (zone !== this.envZone) this.envT = 0;
     if (!this.envRT || (moved && this.envT <= 0)) {
       this.envT = 1.5;
+      this.envZone = zone;
       this.lastSun.copy(this.sunV);
       this.lastClouds = clouds;
       const old = this.envRT;
