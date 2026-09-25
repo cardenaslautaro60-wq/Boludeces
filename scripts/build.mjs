@@ -3,7 +3,7 @@
 //  - Realista: build/game-realista.js para realista.html y dist/gta-san-jorge-realista.html
 // Opciones: --watch, --solo=ps2|realista, --artifact=ruta.html, --artifact-realista=ruta.html
 import * as esbuild from 'esbuild';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, statSync } from 'node:fs';
 
 const watch = process.argv.includes('--watch');
 const solo = (process.argv.find((a) => a.startsWith('--solo=')) || '').slice(7);
@@ -19,9 +19,16 @@ const base = {
   sourcemap: watch ? 'inline' : false,
   legalComments: 'none',
   logLevel: 'info',
-  loader: { '.webp': 'dataurl', '.bin': 'binary' },
+  loader: { '.webp': 'dataurl', '.bin': 'binary', '.json': 'json' },
 };
 const optsFor = (v) => ({ ...base, entryPoints: [v.entry], outfile: v.out });
+
+// El video de intro (media/intro.mp4) va adentro de la página descargable y de la publicada
+function introScript() {
+  const f = 'media/intro.mp4';
+  if (!existsSync(f) || statSync(f).size > 8 * 1024 * 1024) return '';
+  return `<script>window.INTRO_VIDEO = 'data:video/mp4;base64,${readFileSync(f).toString('base64')}';</script>\n`;
+}
 
 // Genera una sola página HTML con todo adentro.
 //  full = true: documento completo (para descargar y abrir con doble clic)
@@ -34,9 +41,10 @@ function single(v, full, outPath) {
     .replace(/<script src="build\/game(-realista)?\.js"><\/script>/, '').replace(/<script src="media\/medios\.js"><\/script>/, '');
   const fonts = (html.match(/<link[^>]+fonts\.googleapis[^>]+>/g) || []).join('\n');
   const title = (html.match(/<title>[^<]*<\/title>/) || [''])[0];
-  const inner = `${fonts}\n<style>\n${css}\n</style>\n${body}\n<script>\n${js}\n</script>\n`;
+  const intro = introScript();
+  const inner = `${fonts}\n<style>\n${css}\n</style>\n${body}\n${intro}<script>\n${js}\n</script>\n`;
   const out = full
-    ? `<!doctype html>\n<html lang="es">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n${title}\n${inner.split('<style>')[0]}<style>${inner.split('<style>')[1].split('</style>')[0]}</style>\n</head>\n<body>\n${body}\n<script>\n${js}\n</script>\n</body>\n</html>\n`
+    ? `<!doctype html>\n<html lang="es">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n${title}\n${inner.split('<style>')[0]}<style>${inner.split('<style>')[1].split('</style>')[0]}</style>\n</head>\n<body>\n${body}\n${intro}<script>\n${js}\n</script>\n</body>\n</html>\n`
     : `${title}\n${inner}`;
   mkdirSync(outPath.split('/').slice(0, -1).join('/') || '.', { recursive: true });
   writeFileSync(outPath, out);
@@ -56,7 +64,7 @@ async function artifact(v, outPath) {
   const title = (html.match(/<title>[^<]*<\/title>/) || [''])[0];
   // (three/addons/ es un alias del package.json; en el CDN la carpeta real es examples/jsm/)
   const importmap = JSON.stringify({ imports: { three: `${cdn}/build/three.module.min.js`, 'three/addons/': `${cdn}/examples/jsm/`, 'three/': `${cdn}/` } });
-  const out = `${title}\n${fonts}\n<style>\n${css}\n</style>\n${body}\n<script type="importmap">${importmap}</script>\n<script type="module">\n${js}\n</script>\n`;
+  const out = `${title}\n${fonts}\n<style>\n${css}\n</style>\n${body}\n${introScript()}<script type="importmap">${importmap}</script>\n<script type="module">\n${js}\n</script>\n`;
   mkdirSync(outPath.split('/').slice(0, -1).join('/') || '.', { recursive: true });
   writeFileSync(outPath, out);
   console.log(outPath, (out.length / 1024).toFixed(0) + ' KB');

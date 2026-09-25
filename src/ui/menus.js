@@ -268,7 +268,7 @@ export class Menus {
         <label>Volumen de efectos <input type="range" id="o-sfx" min="0" max="1" step="0.05" value="${st.sfx}"></label>
         <label>Sensibilidad del mouse <input type="range" id="o-sens" min="0.3" max="2.5" step="0.1" value="${st.sens}"></label>
         <label>Invertir eje vertical <input type="checkbox" id="o-inv" ${st.invertY ? 'checked' : ''}></label>
-        <label>Voces sintetizadas (radio y diálogos) <input type="checkbox" id="o-tts" ${st.tts ? 'checked' : ''}></label>
+        <label>Voces (radio, diálogos y la calle) <select id="o-voz"><option value="grabadas">Grabadas, con acento de acá</option><option value="navegador">La voz del navegador</option><option value="no">Sin voces</option></select></label>
         <label>Controles táctiles <select id="o-touch"><option value="auto">Automático</option><option value="on">Siempre</option><option value="off">Nunca</option></select></label>
       </div>`;
     } else if (kind === 'stats') {
@@ -313,6 +313,7 @@ export class Menus {
       html = `<h2>Créditos</h2><div class="pane">
         <p><b>GTA: San Jorge</b> es un juego de fans, gratuito, inspirado en <i>Grand Theft Auto: San Andreas</i> (Rockstar Games, 2004). No está afiliado ni respaldado por Rockstar.</p>
         <p>El mapa es <b>Comodoro Rivadavia</b> con sus calles reales, comprimido en los tramos vacíos entre barrios: el Cerro Chenque, el Centro, la Costanera, el Puerto, el Km 3, los barrios, Rada Tilly, Punta del Marqués y la meseta con sus cigüeñas.</p>
+        <p class="note">Voces sintetizadas con Piper (voz rioplatense es_AR-daniela, corpus OpenSLR 61, CC BY-SA 4.0). No imitan a ninguna persona real.</p>
         <p class="note">Datos del mapa © colaboradores de OpenStreetMap (ODbL). Huellas de edificios: Microsoft Global ML Building Footprints (ODbL). Relieve: Terrain Tiles de Mapzen (SRTM y otras fuentes).</p>
         <p><b>El Gordopin</b>: malabarista de semáforo e hincha del Lobo (Club Atlético Jorge Newbery). "A mí no me van a sacar nunca de la calle".</p>
         <p><b>El Petroca</b>: petrolero con guita, anteojos negros, camisa de jean y botas. "¡Buena petroca!"</p>
@@ -326,6 +327,7 @@ export class Menus {
     if (kind === 'options') {
       const st = g.settings;
       const q = s.querySelector('#o-q'); q.value = String(st.quality >= 1 ? 1 : st.quality >= 0.8 ? 0.8 : 0.6);
+      s.querySelector('#o-voz').value = st.voces || (st.tts ? 'navegador' : 'grabadas');
       const t = s.querySelector('#o-touch'); t.value = st.touch;
       const upd = () => {
         st.ps2 = s.querySelector('#o-ps2').checked;
@@ -335,7 +337,7 @@ export class Menus {
         st.sfx = parseFloat(s.querySelector('#o-sfx').value);
         st.sens = parseFloat(s.querySelector('#o-sens').value);
         st.invertY = s.querySelector('#o-inv').checked;
-        st.tts = s.querySelector('#o-tts').checked;
+        st.voces = s.querySelector('#o-voz').value;
         st.touch = t.value;
         g.applySettings();
         g.saveSettings();

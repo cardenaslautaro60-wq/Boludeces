@@ -1,5 +1,9 @@
 // Sonido 100% sintetizado con WebAudio: efectos, motor, viento, sirenas y radios procedurales.
 import { clamp, rand, RNG } from '../util.js';
+import { SANTIAGO, TALK, BUMPERS } from './guion.js';
+import VOZ_BIN from './voces.bin';
+import VOZ_IDX from './voces.json';
+import { voiceKey, SPEAKERS } from './vozkey.js';
 
 const STATIONS = [
   { name: 'Radio Cumbia Villera 104.5', style: 'cumbia', color: '#ff5fd0' },
@@ -7,47 +11,12 @@ const STATIONS = [
   { name: 'Boliche FM 101.1', style: 'electro', color: '#3ae8ff' },
   { name: 'Radio Chacarera Patagónica', style: 'folk', color: '#e8d23a' },
   { name: 'Tango del Viento AM 1210', style: 'tango', color: '#e84a4a' },
+  { name: 'Novishok FM — thrash comodorense', style: 'novishok', color: '#ff3b2a' },
   { name: 'La Ciudad Perdida — con Santiago Sánchez', style: 'talk', color: '#8aff6a' },
   { name: 'Radio apagada', style: 'off', color: '#aaaaaa' },
 ];
 
-// "La Ciudad Perdida" (1992-2016): el programa de Santiago Sánchez, humor para mirar la realidad
-// desde otro lado y criticar al poder. Estos textos son ficción escrita en homenaje.
-export const SANTIAGO = 'Santiago Sánchez';
-const TALK = [
-  'Buenas noches, Comodoro. Esto es La Ciudad Perdida. Una ciudad que se pierde todos los días un poco, sobre todo cuando sopla del Oeste.',
-  'Dicen que Comodoro es la Capital Nacional del Petróleo. Del petróleo, sí. De la capital, ni noticias.',
-  'Sección filosofía cotidiana: si una bolsa de La Anómala vuela del Km 3 a Rada Tilly, ¿cambia de barrio o cambia de clase social?',
-  'Don Crudo anunció que va a perforar donde haya petróleo. O sea, en cualquier lado donde viva alguien que no pueda pagar un abogado.',
-  'El comisario Tenpesos dice que va a limpiar el Centro. Empezó por los bolsillos de los malabaristas. Yo sé de qué me río.',
-  'Informe del tránsito: la Ruta 3 por el Chenque, cortada. Si llegás tarde al laburo, decí que fue el cerro. Es la única excusa que nadie discute.',
-  'El viento de hoy viene con ráfagas de ciento veinte. Técnicamente no es viento: es la Patagonia pidiéndote amablemente que te vayas.',
-  'Llamó un oyente del barrio 9 de Julio: pregunta si es cierto que quieren perforar La Madriguera. Tranquilo: primero tienen que encontrar el arco.',
-  'En Comodoro hay dos estaciones del año: la del viento y la de esperar que pare el viento.',
-  'El boom petrolero trajo chatas nuevas, alquileres imposibles y una pregunta filosófica: ¿se puede ser feliz con sueldo de boca de pozo? Consulten al Petroca.',
-  'Sección "el poder explicado para chicos": el poder es cuando uno decide dónde se perfora y otro tiene que decidir dónde vive. Casi nunca es la misma persona.',
-  'Nos escribe una señora de Rada Tilly: "mi hijo anda con una patota". Señora, eso no es una patota: es un club náutico con remeras violetas.',
-  'Un minuto de silencio por los paraguas de Comodoro, que murieron dignamente en cumplimiento del deber.',
-  'Estás escuchando La Ciudad Perdida: radio para leer, para pensar y para reírse de lo que haya que reírse. Y de lo otro también.',
-  'El humor no es contar chistes. El humor es mirar la realidad desde otro lado. Por ejemplo, desde arriba del Chenque, que es donde te deja la cana.',
-  'Dato científico: el comodorense camina inclinado treinta grados hacia el Oeste. No es mala postura. Es experiencia.',
-  'La Municipalidad informa que las bolsas enganchadas en los alambrados ya son patrimonio cultural. Se ruega no tocarlas.',
-  '¿Por qué los malabaristas trabajan en el semáforo? Porque es el único lugar de la ciudad donde todos, por un minuto, se quedan quietos y miran.',
-  'Pregunta del día: si el Petroca cobra el bono y lo gasta en un fin de semana en Buenos Aires, ¿el bono vuelve alguna vez al Chubut?',
-  'Hoy en el Centro, el comisario Tenpesos declaró que la seguridad está garantizada. La suya, se entiende.',
-  'A los que dicen que en Comodoro no pasa nada: acá pasa todo. Lo que pasa es que pasa volando.',
-  'Parte meteorológico: nublado en el Centro, despejado en Rada Tilly, y en el Km 8 no sabemos porque se voló el anemómetro.',
-  'Se viene el clásico Newbery–Huracán. Recomendación: no discutan en la Costanera, que el viento se lleva los argumentos.',
-  'Llegamos al final del bloque. Gracias por perderse con nosotros. Ya volvemos a perdernos. Yo sé de qué me río.',
-];
-const BUMPERS = {
-  cumbia: ['Acá Santiago Sánchez. Les dejo cumbia, que es lo único que tapa el ruido del viento.', 'Cumbia en Comodoro: ni el temporal la para.'],
-  rock: ['Rock del Golfo. Si el rock nacional es la banda sonora de la bronca, en Comodoro tenemos para rato.', 'Subile el volumen, que afuera sopla fuerte.'],
-  electro: ['Boliche FM: para los que salen a las tres de la mañana y vuelven cuando para el viento. O sea, el martes.'],
-  folk: ['Chacarera. El único ritmo que las cigüeñas de la meseta bailan sin parar.'],
-  tango: ['Tango, porque en Comodoro también hay nostalgia. Y casi toda viene de otra provincia.'],
-  any: ['Te habla Santiago Sánchez. Seguí escuchando la radio, que afuera está peor.', 'La Ciudad Perdida, todas las noches. Perderse también es una forma de llegar.'],
-};
+export { SANTIAGO };
 
 export class Audio {
   constructor() {
@@ -58,6 +27,10 @@ export class Audio {
     this.volSfx = 0.8;
     this.listener = { x: 0, y: 0, z: 0 };
     this.useTTS = false;
+    // voces: 'grabadas' (Piper, rioplatense), 'navegador' (síntesis del navegador) o 'no'
+    this.voiceMode = 'grabadas';
+    this.vch = { dialog: {}, radio: {}, street: {} };
+    this.voiceCache = new Map();
   }
 
   init() {
@@ -312,12 +285,14 @@ export class Audio {
     // cortinas de Santiago Sánchez en las radios de música
     if (this.bus && this.radioIdx >= 0 && !game.paused) {
       const st = STATIONS[this.radioIdx];
-      if (st && st.style !== 'talk' && st.style !== 'off') {
+      if (st && st.style !== 'talk' && st.style !== 'off' && st.style !== 'novishok') {
         this.bumperT -= dt;
         if (this.bumperT <= 0) {
           this.bumperT = 90 + Math.random() * 90;
           const pool = [...(BUMPERS[st.style] || []), ...BUMPERS.any];
-          this.onTalk && this.onTalk(SANTIAGO, pool[Math.floor(Math.random() * pool.length)]);
+          const line = pool[Math.floor(Math.random() * pool.length)];
+          this.onTalk && this.onTalk(SANTIAGO, line);
+          this.say(line, 'santiago', null, 'radio');
         }
       }
     }
@@ -381,7 +356,9 @@ export class Audio {
   setPaused(p) {
     if (this.pausedFlag === p) return;
     this.pausedFlag = p;
+    if (p && this.ctx) { this.stopVoice('dialog'); this.stopVoice('street'); }
     if (this.chaseAudio) { if (p) this.chaseAudio.pause(); else { const q = this.chaseAudio.play(); if (q && q.catch) q.catch(() => {}); } }
+    if (this.radioAudio) { if (p) this.radioAudio.pause(); else { const q = this.radioAudio.play(); if (q && q.catch) q.catch(() => {}); } }
     if (this.chase && this.bus && this.radioIdx === -2) this.bus.gain.setTargetAtTime(p ? 0 : 1, this.ctx.currentTime, 0.05);
   }
 
@@ -412,10 +389,39 @@ export class Audio {
     this.bus = this.ctx.createGain();
     this.bus.gain.value = 1;
     this.bus.connect(this.musicBus);
-    this.newSong(st);
+    // Novishok FM: los temas subidos en "Intro y música" (si no hay, thrash generado)
+    if (st.style === 'novishok' && (this.chaseSongs || []).length) { this.song = null; this.playRadioSong(); return; }
+    this.newSong(st.style === 'novishok' ? { style: 'thrash' } : st);
+    if (st.style === 'novishok') this.onRadioSong && this.onRadioSong(null);
     this.nextNote = this.ctx.currentTime + 0.3;
     this.step = 0;
     if (st.style === 'talk') this.talk();
+  }
+
+  stationCount() { return STATIONS.length; }
+
+  playRadioSong() {
+    const songs = this.chaseSongs || [];
+    if (!songs.length || !this.bus) return;
+    this.radioSongIdx = this.radioSongIdx === undefined ? Math.floor(Math.random() * songs.length) : (this.radioSongIdx + 1) % songs.length;
+    const song = songs[this.radioSongIdx];
+    const el = new window.Audio();
+    el.src = song.url;
+    el.preload = 'auto';
+    const bus = this.bus;
+    try { this.ctx.createMediaElementSource(el).connect(bus); } catch (e) { /* sin ruteo: suena directo */ }
+    this.radioAudio = el;
+    el.onended = () => { if (this.radioAudio === el && this.bus === bus) this.playRadioSong(); };
+    el.onerror = () => { if (this.radioAudio === el) this.radioAudio = null; };
+    if (!this.pausedFlag) { const q = el.play(); if (q && q.catch) q.catch(() => {}); }
+    this.onRadioSong && this.onRadioSong(song.title);
+  }
+
+  releaseRadioAudio() {
+    const el = this.radioAudio;
+    if (!el) return;
+    this.radioAudio = null;
+    setTimeout(() => { try { el.pause(); el.removeAttribute('src'); el.load(); } catch (e) { /* nada */ } }, 150);
   }
 
   stopRadio(keepWanted = false) {
@@ -427,7 +433,9 @@ export class Audio {
     }
     this.bus = null;
     this.radioIdx = -1;
+    this.releaseRadioAudio();
     if (this.talkTimer) { clearTimeout(this.talkTimer); this.talkTimer = null; }
+    if (this.ctx) this.stopVoice('radio');
     if (window.speechSynthesis) try { window.speechSynthesis.cancel(); } catch (e) { /* nada */ }
   }
 
@@ -660,24 +668,117 @@ export class Audio {
     this.talkIdx = ((this.talkIdx === undefined ? Math.floor(Math.random() * TALK.length) : this.talkIdx) + 1) % TALK.length;
     const line = TALK[this.talkIdx];
     this.onTalk && this.onTalk(SANTIAGO, line);
-    if (this.useTTS && window.speechSynthesis) {
-      try {
-        const u = new SpeechSynthesisUtterance(line);
-        u.lang = 'es-AR'; u.rate = 1.05; u.volume = this.volMusic;
-        window.speechSynthesis.speak(u);
-      } catch (e) { /* sin voz */ }
-    }
-    this.talkTimer = setTimeout(() => this.talk(), 12000 + Math.random() * 6000);
+    const dur = this.say(line, 'santiago', null, 'radio');
+    this.talkTimer = setTimeout(() => this.talk(), dur ? (dur + 2.5 + Math.random() * 3) * 1000 : 12000 + Math.random() * 6000);
   }
 
-  speak(text, pitch = 1, rate = 1.05) {
-    if (!this.useTTS || !window.speechSynthesis) return;
+  // ---------- Voces ----------
+  // Frases grabadas (tools/voz): radio, anuncios, gente para hablar, misiones y gritos de la
+  // calle. Lo que no está grabado (textos armados en el momento) usa la voz del navegador si se
+  // eligió esa opción.
+  hasVoice(who, text) { return !!VOZ_IDX[voiceKey(who, text)]; }
+
+  loadVoice(key, e) {
+    let p = this.voiceCache.get(key);
+    if (!p) {
+      const bytes = VOZ_BIN.slice(e[0], e[0] + e[1]);
+      p = this.ctx.decodeAudioData(bytes.buffer).catch(() => null);
+      this.voiceCache.set(key, p);
+      if (this.voiceCache.size > 24) this.voiceCache.delete(this.voiceCache.keys().next().value);
+    }
+    return p;
+  }
+
+  // Devuelve cuántos segundos dura (0 si no se dice nada)
+  say(text, who, pos = null, channel = 'dialog') {
+    if (!this.enabled || this.voiceMode === 'no' || !text) return 0;
+    const key = voiceKey(who, text), e = VOZ_IDX[key];
+    if (e && this.voiceMode === 'grabadas') { this.playVoice(key, e, pos, channel); return e[2]; }
+    if (this.voiceMode === 'navegador' && channel !== 'street') { this.ttsSay(text, who, channel); return 0.4 + text.length / 14; }
+    return 0;
+  }
+
+  // lo que dice alguien en una misión (por el nombre del subtítulo)
+  sayAs(name, text) { return this.say(text, SPEAKERS[name] || 'vecino'); }
+
+  playVoice(key, e, pos, channel) {
+    const ch = this.vch[channel];
+    this.stopVoice(channel);
+    const token = ch.token = (ch.token || 0) + 1;
+    this.loadVoice(key, e).then((buf) => {
+      if (!buf || ch.token !== token || !this.enabled) return;
+      const ctx = this.ctx;
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      const g = ctx.createGain();
+      g.gain.value = channel === 'radio' ? 1.25 : channel === 'street' ? 0.9 * this.posGain(pos, 35) : (pos ? 0.35 + 0.65 * this.posGain(pos, 30) : 1);
+      src.connect(g).connect(channel === 'radio' ? this.music : this.sfx);
+      src.start();
+      ch.src = src;
+      // la música baja mientras alguien habla
+      if (channel !== 'street') this.duck(true);
+      src.onended = () => { if (ch.src === src) { ch.src = null; if (channel !== 'street' && !this.vch.dialog.src && !this.vch.radio.src) this.duck(false); } };
+    });
+  }
+
+  stopVoice(channel) {
+    const ch = this.vch[channel];
+    if (ch && ch.src) { try { ch.src.onended = null; ch.src.stop(); } catch (e) { /* ya terminó */ } ch.src = null; }
+    if (ch) ch.token = (ch.token || 0) + 1;
+    if (!this.vch.dialog.src && !this.vch.radio.src && this.musicBus) this.duck(false);
+  }
+
+  duck(on) {
+    if (!this.musicBus) return;
+    this.musicBus.gain.setTargetAtTime(on ? 0.3 : 1, this.ctx.currentTime, on ? 0.08 : 0.4);
+  }
+
+  // Grito de un peatón (solo frases grabadas y si está cerca)
+  pedSay(ped, text) {
+    if (!this.enabled || this.voiceMode !== 'grabadas' || this.vch.dialog.src) return;
+    const now = performance.now();
+    if (now - (this.lastStreet || 0) < 1500) return;
+    const d = Math.hypot(ped.pos.x - this.listener.x, ped.pos.z - this.listener.z);
+    if (d > 28) return;
+    const who = ped.kind === 'cana' ? 'cana' : ped.kind === 'cheto' ? 'cheto' : 'vecino';
+    const e = VOZ_IDX[voiceKey(who, text)];
+    if (!e) return;
+    this.lastStreet = now;
+    this.playVoice(voiceKey(who, text), e, ped.pos, 'street');
+  }
+
+  // Voz del navegador: la mejor en castellano que haya (primero rioplatense y las "naturales")
+  bestVoice() {
+    if (this._voice !== undefined && this._voiceN === speechSynthesis.getVoices().length) return this._voice;
+    const vs = speechSynthesis.getVoices();
+    this._voiceN = vs.length;
+    let best = null, bs = -1;
+    for (const v of vs) {
+      if (!/^es/i.test(v.lang)) continue;
+      let s = 1;
+      if (/AR/i.test(v.lang)) s += 6; else if (/419|US|MX|CL|UY|CO/i.test(v.lang)) s += 3;
+      if (/natural|neural|online|premium|enhanced/i.test(v.name)) s += 5;
+      if (/google/i.test(v.name)) s += 2;
+      if (s > bs) { bs = s; best = v; }
+    }
+    this._voice = best;
+    return best;
+  }
+
+  ttsSay(text, who, channel) {
+    if (!window.speechSynthesis) return;
     try {
-      window.speechSynthesis.cancel();
+      if (channel !== 'radio') window.speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text);
-      u.lang = 'es-AR'; u.pitch = pitch; u.rate = rate; u.volume = this.volSfx;
+      const v = this.bestVoice();
+      if (v) u.voice = v;
+      u.lang = v ? v.lang : 'es-AR';
+      const P = { santiago: 0.85, tenpesos: 0.6, petroca: 0.8, viejo: 0.7, gordopin: 1.1, rosa: 1.2, locutora: 1.15, narrador: 1 };
+      u.pitch = P[who] !== undefined ? P[who] : 0.95;
+      u.rate = who === 'viejo' || who === 'rosa' ? 0.95 : 1.05;
+      u.volume = channel === 'radio' ? this.volMusic : this.volSfx;
       window.speechSynthesis.speak(u);
-    } catch (e) { /* nada */ }
+    } catch (e) { /* sin voz */ }
   }
 
   setVolumes(music, sfx) {

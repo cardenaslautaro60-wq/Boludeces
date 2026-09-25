@@ -255,7 +255,8 @@ export class PlayerController {
     this.hornWas = horn;
     // radio
     if (!v.type.bike && (input.was('radio') || input.wheel !== 0)) {
-      v.radio = (v.radio + (input.wheel < 0 ? -1 : 1) + 7) % 7;
+      const n = g.audio ? g.audio.stationCount() : 8;
+      v.radio = (v.radio + (input.wheel < 0 ? -1 : 1) + n) % n;
       g.audio && g.audio.startRadio(v.radio);
       g.hud && g.hud.showRadio(g.audio ? g.audio.stationName(v.radio) : '');
     }

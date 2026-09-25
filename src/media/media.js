@@ -57,6 +57,8 @@ export class MediaLibrary {
         const [db, assets] = await Promise.all([C.use('db'), C.use('assets')]);
         if (db) {
           this.mode = 'artifact';
+          // intro que viene adentro de la página (se puede reemplazar desde "Intro y música")
+          if (window.INTRO_VIDEO) this.repo.intro = { url: window.INTRO_VIDEO, name: 'Intro de GTA Comodoro Rivadavia' };
           this.db = db;
           this.assets = assets; // null si quien mira no puede editar
           await new Promise((resolve) => {
@@ -95,7 +97,7 @@ export class MediaLibrary {
     });
     if (location.protocol === 'file:' || location.protocol.startsWith('http')) {
       const iv = window.INTRO_VIDEO;
-      if (iv && await probe(iv)) this.repo.intro = { url: iv, name: iv.split('/').pop() };
+      if (iv && (iv.startsWith('data:') || await probe(iv))) this.repo.intro = { url: iv, name: iv.startsWith('data:') ? 'Intro de GTA Comodoro Rivadavia' : iv.split('/').pop() };
       const list = window.NOVISHOK_TEMAS;
       if (Array.isArray(list)) this.repo.songs = list.map((s) => ({ url: 'media/novishok/' + s.archivo, title: s.titulo || s.archivo }));
     }

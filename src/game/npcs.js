@@ -8,110 +8,86 @@ import { Marker } from './activities.js';
 import { randomLook } from '../entities/humanoid.js';
 import { sayLine } from '../entities/ped.js';
 import { pick, clamp } from '../util.js';
-
-const HEADLINES = [
-  'VIENTO: RÁFAGAS DE 120 KM/H. SE VOLÓ EL TECHO DE UN KIOSCO EN EL KM 5',
-  'EL LOBO GANÓ EN LA MADRIGUERA Y LA CARAVANA LLEGÓ HASTA LA COSTANERA',
-  'SIGUEN LOS CORTES DE LOS PETROLEROS EN LA RUTA 3',
-  'VECINOS DICEN HABER VISTO A UN GORDO HACIENDO MALABARES A LAS 3 DE LA MAÑANA',
-  'EL BARRIL SUPERÓ LOS 40 DÓLARES: EN EL KM 3 NO ALCANZAN LAS CHATAS',
-  'OTRA VEZ SIN LUZ MEDIO COMODORO: "FUE EL VIENTO", DICE LA COOPERATIVA',
-  'RADA TILLY: PIDEN NO DEJAR LAS SOMBRILLAS CLAVADAS CON ESTE VIENTO',
-  'CALETA CÓRDOVA: LOS PESCADORES VOLVIERON CON EL CAJÓN LLENO',
-  'LOBOS MARINOS EN PUNTA DEL MARQUÉS: "HAY MÁS QUE EN LA TRIBUNA DE NEWBERY"',
-  'EL CHENQUE SIGUE AHÍ, DICEN LOS EXPERTOS',
-];
-const TIPS = [
-  'Dicen que si escribís SUPERSALTO saltás como un guanaco.',
-  'Un petrolero me juró que escribiendo PETRODOLARES te llegan las regalías.',
-  'Si escribís CHENQUE aparecés arriba del cerro. No me preguntes cómo.',
-  'En el Centro dicen que escribiendo VIENTAZO se arma un temporal.',
-  'Con BALASINFINITAS dicen que no hace falta recargar nunca.',
-  'Si escribís NEVADA... bueno, en Comodoro nieva poco, pero nieva.',
-];
-const STORIES = [
-  ['¿Sabías que el petróleo lo encontraron en 1907 buscando agua?', 'Querían agua para el pueblo y salió crudo.', 'Así es Comodoro, pibe: pedís una cosa y te sale otra.'],
-  ['Comodoro se fundó en 1901. Era un puerto para sacar la lana.', 'Después vino el petróleo y llegó gente de todos lados.', 'Chilenos, bolivianos, bóers, italianos... acá somos todos de afuera.'],
-  ['Acá el viento te despeina hasta el documento.', 'Yo una vez perdí el sombrero en el Km 3...', '...y lo encontré en Rada Tilly. Tres días después.'],
-  ['Desde acá arriba se ve todo el Golfo San Jorge.', 'A la izquierda, Rada Tilly y Punta del Marqués, con los lobos marinos.', 'A la derecha, el Km 5, el Km 8 y allá lejos Caleta Córdova.'],
-];
+import { HEADLINES, TIPS, STORIES, NPC_LINES as T } from '../audio/guion.js';
 
 // Definición de cada personaje: dónde está, cómo se ve y qué hace al hablarle
 const NPCS = [
   {
     id: 'canillita', name: 'El Canillita', at: ['plazaSanMartin', 'catedral'], off: [6, 4], kind: 'civil',
     look: (L) => { L.hairStyle = 'cap'; L.hat = 0x2a4a8a; L.shirt = 0xd8d0c0; L.shirtHex = '#d8d0c0'; L.fat = 0.2; },
-    greet: ['¡El Patagónnico! ¡Diario, diario!', '¡Salió la edición de hoy!'],
+    greet: T.canillita.greet,
     talk(N, g) {
-      if (g.money < 2) return N.lines(['No te alcanza ni para el diario, maestro.']);
+      if (g.money < 2) return N.lines([T.canillita.broke]);
       g.addMoney(-2, true);
       const h = pick(HEADLINES);
       g.hud.bigText('EL PATAGÓNNICO', h, 6);
-      N.lines(['Dos pesitos. Tomá, fresquito.', pick(TIPS)]);
+      N.lines([T.canillita.sell, pick(TIPS)]);
     },
   },
   {
     id: 'choripanero', name: 'Don Chiche, el choripanero', at: ['plazaSoberania', 'puerto'], off: [8, -6], kind: 'civil', cart: true,
     look: (L) => { L.fat = 0.8; L.shirt = 0xf2f2f2; L.shirtHex = '#f2f2f2'; L.hairStyle = 'bald'; L.mustache = true; },
-    greet: ['¡Chori, bondiola, vacío! ¡Con viento incluido!', '¡El mejor chori de la Costanera!'],
+    greet: T.choripanero.greet,
     talk(N, g) {
-      N.ask('¿Un choripán completo por $15?', () => {
-        if (g.money < 15) return N.lines(['Sin plata no hay chori, hermano.']);
+      N.ask(T.choripanero.ask, () => {
+        if (g.money < 15) return N.lines([T.choripanero.broke]);
         const p = g.player;
         g.addMoney(-15, true);
         p.health = Math.min(p.maxHealth, p.health + 45);
         if (g.stats) { g.stats.fat = clamp(g.stats.fat + 2, 0, 100); g.activities && g.activities.updateBody && g.activities.updateBody(); }
         g.audio && g.audio.pickup && g.audio.pickup();
-        N.lines(['¡Ahí tenés! Con chimichurri de la casa.', 'Cuidá que no se te vuele el pan.']);
-      }, () => N.lines(['Vos te lo perdés. Mirá que se termina.']));
+        N.lines(T.choripanero.yes);
+      }, () => N.lines([T.choripanero.no]));
     },
   },
   {
     id: 'rosa', name: 'Doña Rosa', at: ['terminal'], off: [5, 5], kind: 'abuela',
-    greet: ['Ay, nene, ¿me das una mano?', 'Estos colectivos nunca llegan a horario...'],
+    greet: T.rosa.greet,
     talk(N, g) {
-      if (N.done) return N.lines(['Gracias otra vez, nene. Mi hija te manda saludos.']);
+      if (N.done) return N.lines([T.rosa.done]);
       const dest = LANDMARKS.museoPetroleo || LANDMARKS.ypf;
-      if (!dest) return N.lines(['Ay, me olvidé a dónde iba...']);
-      N.ask('¿Le llevás el bolso a su hija en el Km 3, al lado del Museo del Petróleo?', () => {
-        N.lines(['¡Qué amoroso! Está al lado del Museo del Petróleo, en el Km 3.', 'Apurate que tiene las tortas fritas en el horno.']);
+      if (!dest) return N.lines([T.rosa.lost]);
+      N.ask(T.rosa.ask, () => {
+        N.lines(T.rosa.yes);
         N.errand(dest.x, dest.z, 240, 'Llevale el bolso a la hija de Doña Rosa (Km 3)', () => {
           g.addMoney(200);
           if (g.stats) g.stats.respect = Math.min(100, g.stats.respect + 3);
           g.hud.bigText('¡GRACIAS, NENE!', 'La hija de Doña Rosa te dio $200 y dos tortas fritas', 5);
+          g.audio && g.audio.say && g.audio.say(T.rosa.thanks, 'rosa');
           g.player.health = Math.min(g.player.maxHealth, g.player.health + 20);
           N.done = true;
         });
-      }, () => N.lines(['Bueno, bueno. Ya pasará algún otro buen muchacho.']));
+      }, () => N.lines([T.rosa.no]));
     },
   },
   {
     id: 'petrolero', name: 'Ramírez, el petrolero', at: ['ypf', 'museoPetroleo'], off: [-7, 5], kind: 'petrolero',
-    greet: ['¡Eh, vos! ¿Querés hacerte unos pesos?', 'Se rompió la bomba del pozo y no hay chofer...'],
+    greet: T.petrolero.greet,
     talk(N, g) {
       const dest = LANDMARKS.restinga || LANDMARKS.caleta || LANDMARKS.aeropuerto;
-      if (!dest) return N.lines(['Hoy no hay changa, volvé mañana.']);
-      N.ask('Changa: llevar un repuesto de bomba al yacimiento de Restinga Alí en 3 minutos ($400)', () => {
-        N.lines(['¡Buenísimo! Va en la caja de la chata que tengas.', 'Si llegás tarde, el capataz me mata. ¡Rajá!']);
+      if (!dest) return N.lines([T.petrolero.none]);
+      N.ask(T.petrolero.ask, () => {
+        N.lines(T.petrolero.yes);
         N.errand(dest.x, dest.z, 180, 'Llevá el repuesto de bomba a Restinga Alí', () => {
           g.addMoney(400);
           if (g.stats) g.stats.respect = Math.min(100, g.stats.respect + 2);
           g.hud.bigText('¡CHANGA CUMPLIDA!', '+$400 — "Volvé cuando quieras, hay laburo"', 5);
+          g.audio && g.audio.say && g.audio.say(T.petrolero.thanks, 'petrolero');
         }, true);
-      }, () => N.lines(['Bueno, le digo al Turco que lo lleve él.']));
+      }, () => N.lines([T.petrolero.no]));
     },
   },
   {
     id: 'viejo', name: 'Don Aníbal, el del mirador', at: ['miradorChenque', 'chenque'], off: [4, 3], kind: 'civil',
     look: (L) => { L.hair = 0xd8d8d8; L.hairStyle = 'beanie'; L.hat = 0x5a3a2a; L.beard = true; L.fat = 0.3; L.height = 0.95; },
-    greet: ['Qué vista, ¿eh?', 'Sentate, pibe, que te cuento una.'],
+    greet: T.viejo.greet,
     talk(N) { N.lines(pick(STORIES).concat([pick(TIPS)])); },
   },
   {
     id: 'barra', name: 'El Negro, de la barra del Lobo', at: ['madriguera', 'estadio'], off: [14, 10], kind: 'lobo',
-    greet: ['¡Aguante el Lobo, loco!', '¡Dale, dale, dale Newbery!'],
+    greet: T.barra.greet,
     talk(N, g) {
-      N.lines(['¿Sos del Lobo? ¡Cantá con nosotros!', '¡Y dale, dale, dale Newbery, dale dale Lobo, que esta tarde tenemos que ganar!']);
+      N.lines(T.barra.talk);
       const p = g.player;
       p.dance = true;
       setTimeout(() => { p.dance = false; }, 4500);
@@ -139,7 +115,7 @@ export class NPCs {
       if (!L) continue;
       const N = { def, name: def.name, x0: L.x + def.off[0], z0: L.z + def.off[1], ped: null, respawnT: 0, done: false };
       N.lines = (ls) => this.say(N, ls);
-      N.ask = (text, yes, no) => { this.askQ = { N, text, yes, no }; };
+      N.ask = (text, yes, no) => { this.askQ = { N, text, yes, no }; g.audio && g.audio.say && g.audio.say(text, def.id, N.ped && N.ped.pos); };
       N.errand = (x, z, time, text, onDone, vehicle) => this.startErrand(N, x, z, time, text, onDone, vehicle);
       this.spawn(N);
       g.blips.push({ x: N.x0, z: N.z0, letter: 'i', bg: '#2f7d4a', name: def.name, legend: true, npc: true });
@@ -192,7 +168,7 @@ export class NPCs {
     d.t = dur;
     g.hud.subtitle(`<b>${d.N.name}:</b> ${text}`, dur + 0.2);
     if (d.N.ped) sayLine(d.N.ped, text, dur);
-    g.audio && g.audio.say && g.audio.say(text, d.N.def.id);
+    g.audio && g.audio.say && g.audio.say(text, d.N.def.id, d.N.ped && d.N.ped.pos);
   }
 
   startErrand(N, x, z, time, text, onDone, vehicle) {
@@ -227,7 +203,13 @@ export class NPCs {
         const d = Math.hypot(q.pos.x - p.pos.x, q.pos.z - p.pos.z);
         if (d < 8 && q.brain && q.brain.mode === 'idle') {
           q.heading = Math.atan2(p.pos.x - q.pos.x, p.pos.z - q.pos.z);
-          if (!N.greeted && d < 6 && !p.vehicle) { N.greeted = true; sayLine(q, pick(N.def.greet), 3); q.wave = true; setTimeout(() => { q.wave = false; }, 1500); }
+          if (!N.greeted && d < 6 && !p.vehicle) {
+            N.greeted = true;
+            const line = pick(N.def.greet);
+            sayLine(q, line, 3);
+            g.audio && g.audio.say && g.audio.say(line, N.def.id, q.pos);
+            q.wave = true; setTimeout(() => { q.wave = false; }, 1500);
+          }
         } else if (d > 30) N.greeted = false;
         // volver a su lugar si se asustó
         if (q.brain && q.brain.mode === 'wander') q.brain.setMode('idle');

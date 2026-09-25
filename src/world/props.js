@@ -289,7 +289,7 @@ export class Props {
     const gg = new THREE.BufferGeometry();
     gg.setAttribute('position', new THREE.BufferAttribute(glowPos, 3));
     this.lampGlow = new THREE.Points(gg, new THREE.PointsMaterial({
-      map: T.glow, size: 5, color: 0xffc880, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true, fog: false,
+      map: T.glow, size: 2.6, color: 0xffc880, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true, fog: false,
     }));
     this.lampGlow.frustumCulled = false;
     this.group.add(this.lampGlow);

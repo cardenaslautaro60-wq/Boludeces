@@ -52,8 +52,9 @@ El radar y el mapa de pausa se dibujan con las mismas calles y las huellas reale
 - Nivel de búsqueda de 1 a 6 estrellas, patrulleros que persiguen, arrestos y helicóptero.
 - HUD como el original: reloj, plata en verde, vida, chaleco, arma, estrellas, radar redondo que rota, nombre de la zona y del vehículo.
 - Ciclo de día y noche (1 segundo = 1 minuto), clima y el **viento de Comodoro**: polvo, bolsas volando y temporales que empujan los autos.
-- 7 radios con música procedural: cumbia villera, rock nacional, boliche, chacarera, tango, radio AM de charla y apagada. La AM es un homenaje a **La Ciudad Perdida**, el programa de **Santiago Sánchez** (los textos son ficción escrita en homenaje).
+- 8 radios: cumbia villera, rock nacional, boliche, chacarera y tango con música generada en el momento, **Novishok FM** (los temas de Novishok que se suban), la AM de charla y apagada. La AM es un homenaje a **La Ciudad Perdida**, el programa de **Santiago Sánchez** (los textos son ficción escrita en homenaje).
 - Con 4 estrellas o más suena **Novishok** en la persecución (ver *Intro y música*).
+- **Voces de verdad, con acento de acá**: el locutor de la radio, los anuncios de Radio Comodoro, los diálogos de las misiones, la gente para hablar y los gritos de la calle están grabados con una voz neuronal rioplatense (Piper), cada personaje con su tono. Se puede cambiar por la voz del navegador o apagar en *Opciones*.
 - Actividades: malabares en el semáforo (minijuego de ritmo), remisero (subite a un remís y apretá 2), comida, gimnasio, armería, Chapa y Pintura de Don Tito, 24 bolsitas de La Anómala para juntar y 6 saltos únicos.
 - Guardado en la Casa de la Abuela, estadísticas, mapa con destino marcable y filtro "PS2" con estela.
 
@@ -61,10 +62,19 @@ El radar y el mapa de pausa se dibujan con las mismas calles y las huellas reale
 
 Desde el menú, **Intro y música**:
 
-- **Video de intro**: subí el video (MP4 o WebM, hasta 20 MB), por ejemplo el de "GTA Comodoro Rivadavia", y se reproduce con audio cada vez que abrís el juego.
-- **Novishok**: subí los temas y suenan cuando la cana te persigue con 4 estrellas o más. Si no hay temas cargados, suena un thrash generado por el juego.
+- **Video de intro**: el juego ya trae la intro de *GTA Comodoro Rivadavia* (`media/intro.mp4`, desde la pantalla negra después de "en conjunto con tu vieja en tanga"). Se reproduce con audio al abrir el juego y se puede saltear. Desde este menú se puede reemplazar por otro video (MP4 o WebM, hasta 20 MB).
+- **Novishok**: subí los temas y suenan en **Novishok FM** y cuando la cana te persigue con 4 estrellas o más. Si no hay temas cargados, suena un thrash generado por el juego.
 
-En la versión publicada en claude.ai los archivos quedan guardados en el artifact y los ve todo el que abre el link (solo quien lo edita puede subirlos). Abriendo el juego desde el repo, se usa `media/intro.mp4` si existe, y lo que subas queda guardado en tu navegador.
+En la versión publicada en claude.ai los archivos quedan guardados en el artifact y los ve todo el que abre el link (solo quien lo edita puede subirlos). Abriendo el juego desde el repo, se usan `media/intro.mp4` y los temas de `media/novishok/`, y lo que subas queda guardado en tu navegador.
+
+## Capturas
+
+| | |
+|---|---|
+| ![El Centro con el Chenque](capturas/realista-centro.jpg) | ![La San Martín](capturas/realista-sanmartin.jpg) |
+| ![El Centro de noche](capturas/realista-noche.jpg) | ![Rada Tilly](capturas/realista-rada.jpg) |
+| ![Versión PS2: el Centro](capturas/ps2-centro.jpg) | ![Versión PS2: un barrio con La Madriguera](capturas/ps2-barrio.jpg) |
+| ![Fuegos artificiales del aniversario](capturas/ps2-fuegos.jpg) | ![Corte de ruta de petroleros](capturas/ps2-piquete.jpg) |
 
 ## Rendimiento
 
@@ -145,6 +155,8 @@ Cada tanto, si no hay una misión en curso, pasa algo y lo avisa la radio: un **
 ## Aclaración
 
 Es un juego de fans, gratis y sin fines de lucro, inspirado en *Grand Theft Auto: San Andreas* (Rockstar Games, 2004). No está afiliado a Rockstar. Los personajes, empresas y situaciones son ficticios o paródicos, y el Gordopin y el Petroca aparecen como homenaje cariñoso a dos personajes de la cultura comodorense. Todo el arte y el sonido se generan con código.
+
+Voces: sintetizadas con [Piper](https://github.com/OHF-Voice/piper1-gpl) (voz rioplatense `es_AR-daniela`, corpus OpenSLR 61 de Google, CC BY-SA 4.0) y transformadas para cada personaje; ver `tools/voz/LICENCIA-VOCES.md`.
 
 Datos del mapa © colaboradores de [OpenStreetMap](https://www.openstreetmap.org/copyright), bajo licencia ODbL. Huellas de edificios: [Microsoft Global ML Building Footprints](https://github.com/microsoft/GlobalMLBuildingFootprints), bajo licencia ODbL. Relieve: Terrain Tiles de Mapzen en AWS (SRTM y otras fuentes).
 

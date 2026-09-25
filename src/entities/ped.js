@@ -478,14 +478,9 @@ export class Ped {
 
 export function sayLine(ped, text, dur = 2.5) {
   ped.say = { text, t: dur };
+  // la gente de la calle grita en voz alta (los personajes para hablar tienen su propia voz)
+  const a = ped.game && ped.game.audio;
+  if (a && a.pedSay && !ped.npc && !ped.isPlayer) a.pedSay(ped, text);
 }
 
-export const PED_LINES = {
-  hit: ['¡Eh, qué hacé\', loco!', '¡Ay, la puta madre!', '¡Pará, pará!', '¡Te voy a denunciar!', '¡Salí de acá, gil!'],
-  car: ['¡Mirá por dónde manejás!', '¡Aprendé a manejar, bolú!', '¡Casi me pisás!', '¡Sacaste el registro en una rifa!'],
-  flee: ['¡Socorro!', '¡Llamen a la cana!', '¡Corré, corré!', '¡Está loco este!'],
-  gordopin: ['¡Aguante el Lobo, Gordopin!', '¡Eh, Gordopin! ¡Hacé los malabares!', '¡Vamos Newbery!', '¡Buena, Gordo!'],
-  wind: ['¡Qué viento, la puta!', 'Se me voló la gorra...', 'Hoy sopla fuerte, eh.', 'Ni el perro sale con este viento.'],
-  cheto: ['¿Y vos quién sos, negro?', 'Mi viejo es gerente de la petrolera.', 'Salí de mi playa.', 'Esto es Rada, no el Km 8.'],
-  cana: ['¡Alto, policía!', '¡Al suelo!', '¡Quieto ahí!', '¡Documentos!'],
-};
+export { PED_LINES } from '../audio/guion.js';

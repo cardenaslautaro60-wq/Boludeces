@@ -8,6 +8,7 @@ import { randomLook } from '../entities/humanoid.js';
 import { sayLine, PED_LINES } from '../entities/ped.js';
 import { signTexture } from '../render/textures.js';
 import { LANDMARKS } from '../world/mapdata.js';
+import { EVENT_TEXT as TX } from '../audio/guion.js';
 import { rand, pick, clamp } from '../util.js';
 
 const CHANTS = ['¡Trabajo digno!', '¡Petroleros unidos!', '¡No nos vamos a ir!', '¡Que se vaya la operadora!', '¡Aguante la cuenca!'];
@@ -21,10 +22,10 @@ export class WorldEvents {
     this.last = null;
   }
 
-  announce(title, text) {
+  announce(title, text, extra = '') {
     const g = this.game;
-    g.hud.radioCaption && g.hud.radioCaption('Radio Comodoro · ' + title, text, 8);
-    g.audio && g.audio.say && g.audio.say(text, 'locutor');
+    g.hud.radioCaption && g.hud.radioCaption('Radio Comodoro · ' + title, text + extra, 8);
+    g.audio && g.audio.say && g.audio.say(text, 'locutora');
   }
 
   update(dt) {
@@ -65,7 +66,7 @@ export class WorldEvents {
   // ---------------------------------------------------------------
   ev_vientazo() {
     const g = this.game, env = g.env;
-    this.announce('Alerta', 'Alerta por viento en todo Comodoro: ráfagas de más de cien kilómetros por hora. Agárrense de algo.');
+    this.announce('Alerta', TX.vientazo);
     return {
       dur: 32,
       update: (dt, e) => {
@@ -83,7 +84,7 @@ export class WorldEvents {
 
   ev_tierra() {
     const g = this.game, env = g.env;
-    this.announce('Clima', 'Temporal de tierra: se levantó la meseta entera. Manejen con las luces prendidas.');
+    this.announce('Clima', TX.tierra);
     return {
       dur: 75,
       update: (dt, e) => {
@@ -97,7 +98,7 @@ export class WorldEvents {
 
   ev_nevada() {
     const g = this.game, env = g.env;
-    this.announce('Clima', '¡Está nevando en Comodoro! Sí, leyó bien. Cuidado en la Ruta 3 y en la subida del Chenque.');
+    this.announce('Clima', TX.nevada);
     const prev = env.forcedWeather;
     env.forcedWeather = 'nevada';
     return {
@@ -108,7 +109,7 @@ export class WorldEvents {
 
   ev_apagon() {
     const g = this.game, env = g.env;
-    this.announce('Último momento', 'Se cortó la luz en varios barrios. La cooperativa dice que fue el viento... como siempre.');
+    this.announce('Último momento', TX.apagon);
     env.blackout = true;
     return { dur: 50, end: () => { env.blackout = false; } };
   }
@@ -121,7 +122,7 @@ export class WorldEvents {
     if (L && Math.hypot(L.x - p.pos.x, L.z - p.pos.z) < 500) { cx = L.x; cz = L.z; } else {
       const f = g.cameraRig.forward(); cx += f.x * 160; cz += f.z * 160;
     }
-    this.announce('Aniversario', '¡Feliz aniversario, Comodoro! Fuegos artificiales en la Costanera. ¡Salgan a mirar!');
+    this.announce('Aniversario', TX.aniversario);
     let next = 0;
     this.fwCenter = [cx, cz];
     return {
@@ -154,7 +155,7 @@ export class WorldEvents {
       fans.push(q);
     }
     if (!fans.length) return null;
-    this.announce('Deportes', 'Ganó el Lobo y la caravana de Newbery sale a festejar por las calles. ¡Bocinazo general!');
+    this.announce('Deportes', TX.caravana);
     const honk = [];
     return {
       dur: 60,
@@ -235,7 +236,7 @@ export class WorldEvents {
       people.push(q);
     }
     const name = e.name ? (e.kind === 'ruta' ? 'la ' + e.name : e.name) : 'la avenida';
-    this.announce('Tránsito', `Corte total de petroleros autoconvocados en ${name}. Busquen un camino alternativo.`);
+    this.announce('Tránsito', TX.piquete, ` (en ${name})`);
     const blip = { x: mx, z: mz, color: '#ff8020', size: 7, edge: true };
     g.blips.push(blip);
     return {

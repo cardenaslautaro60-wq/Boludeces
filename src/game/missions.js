@@ -152,8 +152,10 @@ class Ctx {
   async say(who, text, dur) {
     const g = this.game;
     dur = dur || clamp(text.length * 0.06 + 1.2, 2.2, 6);
+    // voz grabada (o del navegador): el subtítulo espera a que termine de hablar
+    const vd = g.audio.sayAs ? g.audio.sayAs(who, text) : 0;
+    if (vd) dur = Math.max(dur, vd + 0.25);
     g.hud.subtitle(who ? `<span class="who">${who}:</span> ${text}` : `<i>${text}</i>`, dur + 1);
-    if (g.settings.tts) g.audio.speak(text, who === 'Petroca' ? 0.8 : who === 'Tenpesos' ? 0.6 : 1.1);
     const end = this.t + dur;
     const t0 = this.t;
     await this.until(() => this.t >= end || (this.t - t0 > 0.35 && this.game.missions.skipPressed));

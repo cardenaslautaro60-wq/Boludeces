@@ -46,7 +46,7 @@ export class Game {
       bags: 0, jumps: 0, timePlayed: 0, cashEarned: 0, juggleBest: 0, fares: 0, deaths: 0, arrests: 0, distance: 0,
     };
     this.settings = {
-      ps2: true, quality: 1, music: 0.55, sfx: 0.8, sens: 1, invertY: false, tts: false, touch: 'auto',
+      ps2: true, quality: 1, music: 0.55, sfx: 0.8, sens: 1, invertY: false, tts: false, voces: 'grabadas', touch: 'auto',
       shadows: !(window.matchMedia && window.matchMedia('(pointer: coarse)').matches),
     };
     // la versión realista guarda sus opciones aparte (calidad, postproceso)
@@ -112,6 +112,10 @@ export class Game {
       this.hud.radio.textContent = title ? `🤘 Novishok — ${title}` : '🤘 Persecución';
       this.hud.radio.classList.remove('show'); void this.hud.radio.offsetWidth; this.hud.radio.classList.add('show');
     };
+    this.audio.onRadioSong = (title) => {
+      if (!this.player || !this.player.vehicle) return;
+      this.hud.showRadio(title ? `🤘 Novishok FM — ${title}` : 'Novishok FM — subí los temas en "Intro y música"');
+    };
     this.media.onChange(() => this.audio.setChaseSongs(this.media.songs()));
     this.audio.setChaseSongs(this.media.songs());
     this.applySettings();
@@ -137,7 +141,7 @@ export class Game {
     this.renderScale = s.quality;
     this.onResize();
     this.audio.setVolumes(s.music, s.sfx);
-    this.audio.useTTS = !!s.tts;
+    this.audio.voiceMode = s.voces || (s.tts ? 'navegador' : 'grabadas');
     this.input.sensitivity = s.sens;
     this.input.invertY = !!s.invertY;
     if (this.touch) this.touch.setMode(s.touch);
