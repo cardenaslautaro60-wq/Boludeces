@@ -19,7 +19,7 @@ const base = {
   sourcemap: watch ? 'inline' : false,
   legalComments: 'none',
   logLevel: 'info',
-  loader: { '.webp': 'dataurl' },
+  loader: { '.webp': 'dataurl', '.bin': 'binary' },
 };
 const optsFor = (v) => ({ ...base, entryPoints: [v.entry], outfile: v.out });
 

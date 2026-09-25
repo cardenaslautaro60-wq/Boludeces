@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { STYLE } from '../style.js';
 import { RealPost, RealSky, setupRealRenderer } from '../realista.js';
 import { realTextures, worldUV, tintMask, terrainMaterial, waterMaterial, GROUND_SCALE } from './materials.js';
+import { loadHuman, poseSkeleton, humanGeometry, humanMaterials } from './humano.js';
 import asfalto_c from './asfalto_c.webp';
 import asfalto_n from './asfalto_n.webp';
 import asfalto_m from './asfalto_m.webp';
@@ -109,6 +110,7 @@ async function loadRealTextures(renderer) {
     const [ic, inn, im] = await Promise.all([image(c), image(n), image(m)]);
     STYLE.tex[k] = { map: mk(ic, true), normalMap: mk(inn, false), arm: mk(im, false), img: ic, nimg: inn, mimg: im };
   }));
+  await loadHuman();
   STYLE.loaded = true;
   return STYLE.tex;
 }
@@ -123,4 +125,5 @@ STYLE.worldUV = worldUV;
 STYLE.tintMask = tintMask;
 STYLE.terrainMaterial = terrainMaterial;
 STYLE.waterMaterial = waterMaterial;
+STYLE.human = { loadHuman, poseSkeleton, humanGeometry, humanMaterials };
 STYLE.GROUND_SCALE = GROUND_SCALE;

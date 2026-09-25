@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { lam } from '../render/style.js';
+import { lam, STYLE } from '../render/style.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { clamp, lerp, RNG } from '../util.js';
 
@@ -71,12 +71,138 @@ function shade(c, k) {
   return '#' + col.getHexString();
 }
 
+// Cara de la versión realista: rasgos con proporciones reales, piel con poros y
+// degradés en lugar de dibujo plano
+function paintFaceReal(g, L, rng) {
+  const [x, y, w, h] = REG.head;
+  const skin = new THREE.Color(L.skin);
+  const sk = (k, a = 1) => { const c = skin.clone().multiplyScalar(k); return `rgba(${Math.min(255, c.r * 255) | 0},${Math.min(255, c.g * 255) | 0},${Math.min(255, c.b * 255) | 0},${a})`; };
+  g.fillStyle = sk(1); g.fillRect(x, y, w, h);
+  const cx = x + w * 0.25;
+  const eyeY = y + h * 0.5, mouthY = y + h * 0.69;
+  // modelado suave: frente y pómulos más claros, sienes y mandíbula más oscuras
+  const rad = (px, py, r, col0, col1) => { const gr = g.createRadialGradient(px, py, 0, px, py, r); gr.addColorStop(0, col0); gr.addColorStop(1, col1); g.fillStyle = gr; g.fillRect(px - r, py - r, r * 2, r * 2); };
+  rad(cx, y + h * 0.38, 46, sk(1.08, 0.5), sk(1, 0));
+  for (const s of [-1, 1]) rad(cx + s * 24, y + h * 0.6, 20, 'rgba(200,90,80,0.12)', 'rgba(200,90,80,0)');
+  rad(cx, y + h * 0.8, 50, sk(0.9, 0), sk(0.82, 0.35));
+  // poros / textura de piel
+  for (let i = 0; i < 2600; i++) {
+    const v = (rng.next() - 0.5) * 0.07;
+    g.fillStyle = v > 0 ? `rgba(255,235,220,${v})` : `rgba(60,30,20,${-v})`;
+    g.fillRect(x + rng.next() * w, y + rng.next() * h, 1, 1);
+  }
+  const hairC = hex(L.hair || 0x2a1d14);
+  // barba de días / barba
+  if (L.beard || L.stubble || L.fat > 0.3) {
+    const a = L.beard ? 0.85 : 0.22;
+    for (let i = 0; i < (L.beard ? 2600 : 1400); i++) {
+      const ang = rng.next() * Math.PI, r = 20 + rng.next() * 22;
+      const px = cx + Math.cos(ang) * r * 1.15, py = y + h * 0.63 + Math.sin(ang) * r * 0.9;
+      g.fillStyle = L.beard ? (L.beardColor || hairC) : `rgba(40,28,22,${a})`;
+      g.globalAlpha = L.beard ? 0.5 : 1;
+      g.fillRect(px, py, 1, 1.5);
+    }
+    g.globalAlpha = 1;
+  }
+  // cejas: pelitos
+  for (const s of [-1, 1]) {
+    for (let i = 0; i < 70; i++) {
+      const t = rng.next();
+      const bx = cx + s * (8 + t * 17), by = eyeY - 10 - Math.sin(t * Math.PI) * 3 + (rng.next() - 0.5) * 2.5;
+      g.strokeStyle = hairC; g.globalAlpha = 0.55; g.lineWidth = 0.8;
+      g.beginPath(); g.moveTo(bx, by); g.lineTo(bx + s * 2.2, by - 0.8); g.stroke();
+    }
+    g.globalAlpha = 1;
+  }
+  if (!L.glasses) {
+    for (const s of [-1, 1]) {
+      const ex = cx + s * 15;
+      // cuenca y párpado
+      rad(ex, eyeY, 11, 'rgba(70,40,30,0.18)', 'rgba(70,40,30,0)');
+      g.fillStyle = '#e9e2da'; g.beginPath(); g.ellipse(ex, eyeY, 6.2, 2.9, 0, 0, Math.PI * 2); g.fill();
+      g.fillStyle = L.eyes || '#4a3220'; g.beginPath(); g.arc(ex + s * 0.4, eyeY + 0.2, 2.5, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#0c0a09'; g.beginPath(); g.arc(ex + s * 0.4, eyeY + 0.2, 1.1, 0, Math.PI * 2); g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.8)'; g.fillRect(ex + s * 0.4 - 1.4, eyeY - 1.2, 1, 1);
+      g.strokeStyle = 'rgba(35,20,15,0.85)'; g.lineWidth = 1.1;
+      g.beginPath(); g.ellipse(ex, eyeY - 0.2, 6.6, 3.2, 0, Math.PI * 1.05, Math.PI * 1.95); g.stroke();
+      g.strokeStyle = sk(0.78, 0.6); g.lineWidth = 1;
+      g.beginPath(); g.ellipse(ex, eyeY - 2.5, 7, 3.4, 0, Math.PI * 1.1, Math.PI * 1.9); g.stroke();
+    }
+  }
+  // nariz: sombra lateral y aletas
+  const ng = g.createLinearGradient(cx - 8, 0, cx + 8, 0);
+  ng.addColorStop(0, sk(0.8, 0.35)); ng.addColorStop(0.5, sk(1.06, 0.2)); ng.addColorStop(1, sk(0.8, 0.35));
+  g.fillStyle = ng; g.beginPath(); g.moveTo(cx - 3, eyeY + 1); g.lineTo(cx - 7, y + h * 0.6); g.lineTo(cx + 7, y + h * 0.6); g.lineTo(cx + 3, eyeY + 1); g.closePath(); g.fill();
+  g.fillStyle = 'rgba(60,25,20,0.45)'; g.beginPath(); g.ellipse(cx - 4, y + h * 0.603, 2, 1.2, 0, 0, 7); g.fill(); g.beginPath(); g.ellipse(cx + 4, y + h * 0.603, 2, 1.2, 0, 0, 7); g.fill();
+  if (L.mustache) {
+    for (let i = 0; i < 500; i++) { const t = rng.next() * 2 - 1; g.fillStyle = hairC; g.fillRect(cx + t * 15, mouthY - 7 + Math.abs(t) * 3 + (rng.next() - 0.5) * 5, 1, 1.6); }
+  }
+  // labios
+  const lip = skin.clone().lerp(new THREE.Color(0.62, 0.3, 0.28), 0.45);
+  g.fillStyle = `rgb(${lip.r * 255 | 0},${lip.g * 255 | 0},${lip.b * 255 | 0})`;
+  g.beginPath(); g.ellipse(cx, mouthY - 1, 10, 2.2, 0, Math.PI, Math.PI * 2); g.fill();
+  g.beginPath(); g.ellipse(cx, mouthY + 0.2, 9, 3, 0, 0, Math.PI); g.fill();
+  g.strokeStyle = 'rgba(60,25,20,0.6)'; g.lineWidth = 0.9; g.beginPath(); g.moveTo(cx - 10, mouthY - 0.5); g.quadraticCurveTo(cx, mouthY + (L.smile ? 2 : 0.4), cx + 10, mouthY - 0.5); g.stroke();
+  // orejas y nuca
+  g.fillStyle = sk(0.86);
+  g.beginPath(); g.ellipse(x + 3, y + h * 0.52, 6, 12, 0, 0, Math.PI * 2); g.fill();
+  g.beginPath(); g.ellipse(x + w * 0.5, y + h * 0.52, 6, 12, 0, 0, Math.PI * 2); g.fill();
+  if (L.hairStyle !== 'bald') {
+    // pelo con mechones y línea de nacimiento irregular
+    g.fillStyle = hairC;
+    g.fillRect(x + w * 0.4, y, w * 0.6, h * 0.44);
+    g.fillRect(x, y, w, h * 0.18);
+    for (let i = 0; i < 900; i++) {
+      const px = x + rng.next() * w, py = y + h * 0.16 + rng.next() * h * 0.08;
+      if (Math.abs(px - cx) < 40 || px > x + w * 0.4) { g.globalAlpha = 0.6; g.fillRect(px, py, 1, 2 + rng.next() * 3); }
+    }
+    g.globalAlpha = 1;
+    g.fillRect(cx - 44, y, 7, h * 0.5); g.fillRect(cx + 37, y, 7, h * 0.5);
+  }
+}
+
+// Mapas compartidos de relieve y rugosidad para el atlas de personaje (misma grilla REG)
+let BODY_MAPS = null;
+function bodyMaps() {
+  if (BODY_MAPS) return BODY_MAPS;
+  const S = ATLAS * 2;
+  const mk = () => { const c = document.createElement('canvas'); c.width = c.height = S; const g = c.getContext('2d'); g.scale(2, 2); return [c, g]; };
+  const [cn, n] = mk(), [cr, r] = mk();
+  n.fillStyle = 'rgb(128,128,255)'; n.fillRect(0, 0, ATLAS, ATLAS);
+  const rnd = new RNG(4242);
+  const fill = (reg, rough) => { const [x, y, w, h] = REG[reg]; r.fillStyle = `rgb(255,${Math.round(rough * 255)},0)`; r.fillRect(x, y, w, h); };
+  fill('shirt', 0.92); fill('pants', 0.9); fill('sleeve', 0.92); fill('skin', 0.55); fill('head', 0.55);
+  fill('shoes', 0.5); fill('hair', 0.62); fill('hat', 0.8); fill('dark', 0.25); fill('metal', 0.35);
+  // tela: trama fina (líneas que alteran la normal)
+  for (const reg of ['shirt', 'pants', 'sleeve', 'hat']) {
+    const [x, y, w, h] = REG[reg];
+    for (let yy = y; yy < y + h; yy += 1) { n.fillStyle = yy % 2 ? 'rgb(128,150,240)' : 'rgb(128,106,240)'; n.fillRect(x, yy, w, 0.5); }
+    for (let i = 0; i < 900; i++) { n.fillStyle = `rgb(${110 + rnd.next() * 36 | 0},${110 + rnd.next() * 36 | 0},245)`; n.fillRect(x + rnd.next() * w, y + rnd.next() * h, 2, 1); }
+    // arrugas grandes
+    for (let i = 0; i < 18; i++) {
+      const px = x + rnd.next() * w, py = y + rnd.next() * h, L = 14 + rnd.next() * 30;
+      n.strokeStyle = 'rgba(160,128,230,0.5)'; n.lineWidth = 2; n.beginPath(); n.moveTo(px, py); n.lineTo(px + (rnd.next() - 0.5) * 8, py + L); n.stroke();
+      n.strokeStyle = 'rgba(96,128,230,0.5)'; n.beginPath(); n.moveTo(px + 2, py); n.lineTo(px + 2 + (rnd.next() - 0.5) * 8, py + L); n.stroke();
+    }
+  }
+  // pelo: mechones
+  { const [x, y, w, h] = REG.hair; for (let i = 0; i < 1400; i++) { n.fillStyle = rnd.chance(0.5) ? 'rgb(150,128,236)' : 'rgb(106,128,236)'; n.fillRect(x + rnd.next() * w, y + rnd.next() * h, 1, 4); } }
+  // piel: poros
+  for (const reg of ['skin', 'head']) { const [x, y, w, h] = REG[reg]; for (let i = 0; i < 1500; i++) { n.fillStyle = `rgb(${120 + rnd.next() * 16 | 0},${120 + rnd.next() * 16 | 0},252)`; n.fillRect(x + rnd.next() * w, y + rnd.next() * h, 1, 1); } }
+  const t = (c) => { const k = new THREE.CanvasTexture(c); k.anisotropy = 4; return k; };
+  BODY_MAPS = { normalMap: t(cn), roughnessMap: t(cr) };
+  return BODY_MAPS;
+}
+
 function paintAtlas(L) {
   const key = JSON.stringify(L);
   if (texCache.has(key)) return texCache.get(key);
   const c = document.createElement('canvas');
-  c.width = c.height = ATLAS;
+  // versión realista: el doble de resolución (se dibuja con las mismas coordenadas)
+  const RS = STYLE.realista ? 2 : 1;
+  c.width = c.height = ATLAS * RS;
   const g = c.getContext('2d');
+  g.scale(RS, RS);
   const rng = new RNG(key.length * 7919 + (L.skin || 0));
   const noise = (x, y, w, h, amp, n = 600, size = 2) => {
     for (let i = 0; i < n; i++) {
@@ -207,7 +333,8 @@ function paintAtlas(L) {
   { const [x, y, w, h] = REG.dark; g.fillStyle = '#0c0c0e'; g.fillRect(x, y, w, h); g.fillStyle = 'rgba(120,160,210,0.35)'; g.fillRect(x + 6, y + 6, 20, 8); }
   { const [x, y, w, h] = REG.metal; g.fillStyle = '#9a9ea2'; g.fillRect(x, y, w, h); }
   // --- cabeza (la cara centrada en u = 0.25)
-  {
+  if (STYLE.realista) paintFaceReal(g, L, rng);
+  else {
     const [x, y, w, h] = REG.head;
     g.fillStyle = hex(L.skin); g.fillRect(x, y, w, h);
     const cx = x + w * 0.25;
@@ -262,10 +389,15 @@ function paintAtlas(L) {
 // ---------- Geometría del cuerpo ----------
 const geoCache = new Map();
 
-function buildBody(L, bones, B) {
+// onlyAcc: solo gorras, cascos y anteojos (la versión realista usa otro cuerpo)
+function buildBody(L, bones, B, onlyAcc = false) {
   const fat = clamp(L.fat || 0, 0, 1.2), mus = clamp(L.muscle || 0, 0, 1), H = L.height || 1;
+  // versión realista: el doble de caras (siluetas suaves) y formas más anatómicas
+  const R = STYLE.realista, Q = R ? 2 : 1;
   const parts = [];
+  let acc = false;
   const add = (geo, region, bone, mat = null) => {
+    if (onlyAcc && !acc) return;
     remapUV(geo, region);
     if (mat) geo.applyMatrix4(mat);
     geo.applyMatrix4(bone.matrixWorld);
@@ -282,7 +414,7 @@ function buildBody(L, bones, B) {
 
   // pelvis
   {
-    const g = lathe([[0.1, -0.14], [0.155, -0.08], [0.165, 0.02], [0.15, 0.12]], 12);
+    const g = lathe([[0.1, -0.14], [0.155, -0.08], [0.165, 0.02], [0.15, 0.12]], 12 * Q);
     g.scale(1.12 + fat * 0.25, 1, 0.78 + fat * 0.3);
     add(g, 'pants', B.hips);
   }
@@ -292,24 +424,40 @@ function buildBody(L, bones, B) {
       [0.15, -0.14], [0.152 + fat * 0.07, -0.02], [0.16 + fat * 0.13, 0.1], [0.165 + fat * 0.12 + mus * 0.02, 0.22],
       [0.172 + fat * 0.07 + mus * 0.04, 0.33], [0.18 + fat * 0.04 + mus * 0.05, 0.42], [0.15, 0.49], [0.07, 0.53],
     ];
-    const g = lathe(prof, 14);
+    const g = lathe(R ? prof.flatMap((p0, i) => (i < prof.length - 1 ? [p0, [(p0[0] + prof[i + 1][0]) / 2, (p0[1] + prof[i + 1][1]) / 2]] : [p0])) : prof, 14 * Q);
     g.rotateY(-Math.PI / 2); // el pecho de la textura (u = 0.25) mira hacia +z
     const p = g.attributes.position;
     for (let i = 0; i < p.count; i++) {
       let x = p.getX(i), y = p.getY(i), z = p.getZ(i);
       x *= 1.16 + mus * 0.12 + fat * 0.05;
       z *= 0.74 + fat * 0.22;
-      if (z > 0) z *= 1 + fat * 0.45 * Math.exp(-((y - 0.12) ** 2) / 0.012);
+      // panza: en la realista cae más abajo y es más ancha (no una pelota)
+      if (z > 0) z *= R ? 1 + fat * 0.36 * Math.exp(-((y - 0.05) ** 2) / 0.022) : 1 + fat * 0.45 * Math.exp(-((y - 0.12) ** 2) / 0.012);
+      // pecho y omóplatos marcados
+      if (R && y > 0.26) { if (z > 0) z *= 1 + 0.08 * Math.exp(-((y - 0.36) ** 2) / 0.004); else z *= 1 + 0.05 * Math.exp(-((y - 0.4) ** 2) / 0.004); }
       p.setXYZ(i, x, y, z);
     }
     g.computeVertexNormals();
     add(g, 'shirt', B.spine);
   }
   // cuello
-  { const g = new THREE.CylinderGeometry(0.052 + fat * 0.02, 0.058 + fat * 0.025, 0.12, 10); g.translate(0, 0.03, 0); add(g, 'skin', B.neck); }
+  { const g = new THREE.CylinderGeometry(0.052 + fat * 0.02, 0.058 + fat * 0.025, 0.12, 10 * Q); g.translate(0, 0.03, 0); add(g, 'skin', B.neck); }
   // cabeza
   {
-    const g = new THREE.SphereGeometry(1, 18, 14);
+    const g = new THREE.SphereGeometry(1, 18 * Q, 14 * Q);
+    if (R) {
+      // mandíbula más angosta, mentón y pómulos
+      const p = g.attributes.position;
+      for (let i = 0; i < p.count; i++) {
+        let x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+        const low = clamp(-y, 0, 1);
+        x *= 1 - low * 0.22;
+        if (z > 0) z *= 1 - low * 0.08 + Math.exp(-((y + 0.75) ** 2) / 0.02) * 0.06;
+        if (z > 0.2 && Math.abs(y + 0.05) < 0.3) x *= 1 + 0.04 * (1 - Math.abs(y + 0.05) / 0.3);
+        p.setXYZ(i, x, y, z);
+      }
+      g.computeVertexNormals();
+    }
     g.scale(0.108 + fat * 0.012, 0.128, 0.118);
     g.translate(0, 0.13, 0.005);
     add(g, 'head', B.head);
@@ -326,6 +474,7 @@ function buildBody(L, bones, B) {
     };
     if (hs === 'short') cap(0.122, 1.35, 'hair', 0.145, -0.01, 0.92 * W, 1.07, 1.02);
     if (hs === 'long') { cap(0.126, 1.55, 'hair', 0.14, -0.012, 0.93 * W, 1.08, 1.04); const b = lathe([[0.07, -0.16], [0.1, -0.05], [0.105, 0.05]], 10); b.scale(1, 1, 0.55); add(b, 'hair', B.head, M(0, 0.12, -0.06)); }
+    acc = hs === 'cap' || hs === 'beanie' || hs === 'helmet' || hs === 'police';
     if (hs === 'cap') {
       cap(0.126, 1.3, 'hat', 0.15, -0.005, 0.95 * W, 1.0, 1.04);
       const v = new THREE.CylinderGeometry(0.1, 0.1, 0.012, 12, 1, false, -Math.PI / 2, Math.PI);
@@ -343,26 +492,29 @@ function buildBody(L, bones, B) {
       add(new THREE.CylinderGeometry(0.135 * W, 0.12 * W, 0.07, 14), 'hat', B.head, M(0, 0.24, -0.005, -0.08));
       add(new THREE.CylinderGeometry(0.1, 0.1, 0.012, 12, 1, false, -Math.PI / 2, Math.PI), 'dark', B.head, M(0, 0.205, 0.07, 0.25));
     }
+    acc = true;
     if (L.glasses) {
       add(new THREE.BoxGeometry(0.2, 0.042, 0.02), 'dark', B.head, M(0, 0.148, 0.115));
       for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.008, 0.012, 0.12), 'dark', B.head, M(s * 0.1 * W, 0.155, 0.055));
     }
   }
+  acc = false;
+  if (onlyAcc) return parts.length ? mergeGeometries(parts, false) : null;
   // brazos
   for (const s of [1, -1]) {
     const sh = s > 0 ? B.shL : B.shR, el = s > 0 ? B.elL : B.elR, ha = s > 0 ? B.haL : B.haR;
-    const ua = limb(0.058 + mus * 0.022 + fat * 0.024, 0.047 + mus * 0.01 + fat * 0.012, 0.27 * H, 10);
+    const ua = limb(0.058 + mus * 0.022 + fat * 0.024, 0.047 + mus * 0.01 + fat * 0.012, 0.27 * H, 10 * Q);
     ua.scale(1, 1, 0.92);
     add(ua, 'sleeve', sh);
-    add(limb(0.046 + mus * 0.012 + fat * 0.012, 0.037, 0.25 * H, 10), L.longSleeves ? 'sleeve' : 'skin', el);
+    add(limb(0.046 + mus * 0.012 + fat * 0.012, 0.037, 0.25 * H, 10 * Q), L.longSleeves ? 'sleeve' : 'skin', el);
     add(ellipsoid(0.036, 0.058, 0.027, 8, 6), 'skin', ha, M(0, -0.05, 0.005));
     add(ellipsoid(0.013, 0.028, 0.013, 5, 4), 'skin', ha, M(-s * 0.03, -0.03, 0.02, 0, 0, s * 0.4));
   }
   // piernas
   for (const s of [1, -1]) {
     const th = s > 0 ? B.thL : B.thR, kn = s > 0 ? B.knL : B.knR, ft = s > 0 ? B.ftL : B.ftR;
-    add(limb(0.09 + fat * 0.035 + mus * 0.01, 0.062 + fat * 0.01, 0.42 * H, 11), 'pants', th);
-    add(limb(0.062 + fat * 0.012, 0.047, 0.41 * H, 10), 'pants', kn);
+    add(limb(0.09 + fat * 0.035 + mus * 0.01, 0.062 + fat * 0.01, 0.42 * H, 11 * Q), 'pants', th);
+    add(limb(0.062 + fat * 0.012, 0.047, 0.41 * H, 10 * Q), 'pants', kn);
     const boot = L.shoeKind === 'bota';
     add(ellipsoid(0.056, boot ? 0.07 : 0.045, 0.125, 10, 6), 'shoes', ft, M(0, boot ? -0.02 : -0.035, 0.05));
   }
@@ -400,7 +552,11 @@ const matCache = new Map();
 function materialFor(L) {
   const tex = paintAtlas(L);
   let m = matCache.get(tex);
-  if (!m) { m = lam({ map: tex }); matCache.set(tex, m); }
+  if (!m) {
+    const bm = STYLE.realista ? bodyMaps() : null;
+    m = lam({ map: tex }, bm ? { normalMap: bm.normalMap, roughnessMap: bm.roughnessMap, roughness: 1, normalScale: new THREE.Vector2(0.6, 0.6) } : {});
+    matCache.set(tex, m);
+  }
   return m;
 }
 
@@ -425,15 +581,33 @@ export class Humanoid {
   build() {
     const L = this.look;
     if (this.mesh) this.body.remove(this.mesh);
+    if (this.accMesh) { this.body.remove(this.accMesh); this.accMesh = null; }
     const { B, list } = makeSkeleton(L);
     this.B = B;
+    const HM = STYLE.realista && STYLE.human;
+    // versión realista: cuerpo humano de verdad, con el esqueleto puesto en su pose de enlace
+    const s = (L.height || 1) * 1.03;
+    if (HM) HM.poseSkeleton(B, s);
     B.root.updateMatrixWorld(true);
     const key = JSON.stringify(L);
     let geo = geoCache.get(key);
-    if (!geo) { geo = buildBody(L, list, B); geoCache.set(key, geo); }
-    const mesh = new THREE.SkinnedMesh(geo, materialFor(L));
+    if (!geo) { geo = HM ? HM.humanGeometry(L, s) : buildBody(L, list, B); geoCache.set(key, geo); }
+    const mesh = new THREE.SkinnedMesh(geo, HM ? HM.humanMaterials(L) : materialFor(L));
     mesh.add(B.root);
-    mesh.bind(new THREE.Skeleton(list));
+    const skeleton = new THREE.Skeleton(list);
+    mesh.bind(skeleton);
+    if (HM) {
+      // gorras, cascos y anteojos: las piezas de siempre, sobre el mismo esqueleto
+      let ag = geoCache.get(key + '|acc');
+      if (ag === undefined) { ag = buildBody(L, list, B, true); geoCache.set(key + '|acc', ag); }
+      if (ag) {
+        const am = new THREE.SkinnedMesh(ag, materialFor(L));
+        am.bind(skeleton, mesh.bindMatrix);
+        am.frustumCulled = false; am.castShadow = true;
+        this.accMesh = am;
+        this.body.add(am);
+      }
+    }
     mesh.frustumCulled = false;
     mesh.castShadow = true;
     mesh.receiveShadow = true;
