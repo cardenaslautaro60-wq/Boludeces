@@ -39,7 +39,7 @@ function single(full, outPath) {
 
 // Versión para publicar como Artifact: Three.js se carga desde jsDelivr con un importmap
 async function artifact(outPath) {
-  const res = await esbuild.build({ ...opts, format: 'esm', external: ['three', 'three/*'], write: false, outfile: 'build/game.esm.js' });
+  const res = await esbuild.build({ ...opts, format: 'esm', external: ['three'], write: false, outfile: 'build/game.esm.js' });
   const js = res.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
   const pkg = JSON.parse(readFileSync('node_modules/three/package.json', 'utf8'));
   const cdn = `https://cdn.jsdelivr.net/npm/three@${pkg.version}`;
