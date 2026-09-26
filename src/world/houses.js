@@ -224,11 +224,11 @@ export class HouseInstances {
     const dishG = new THREE.SphereGeometry(0.42, 12, 6, 0, Math.PI * 2, 0, 0.9);
     dishG.scale(1, 0.35, 1); dishG.rotateX(-Math.PI / 2 + 0.6); dishG.translate(0, 0.6, 0);
     const dishGeo = mergeGeos([dishG, box(0.05, 0.6, 0.05)]);
-    const tanks = new InstChunks(tankGeo, lam({ color: 0xffffff, roughness: 0.55 }), 300);
+    const tanks = new InstChunks(tankGeo, lam({ color: 0xffffff }, { roughness: 0.55 }), 300);
     const bases = new InstChunks(baseGeo, lam({ color: 0x8e8a82 }), 300);
     const towers = new InstChunks(towerGeo, lam({ color: 0xa25a3e }), 300);
-    const ants = new InstChunks(antGeo, lam({ color: 0x9a9ea2, metalness: STYLE.realista ? 0.8 : 0, roughness: 0.45 }), 300);
-    const dishes = new InstChunks(dishGeo, lam({ color: 0xd8d8d4, roughness: 0.5 }), 300);
+    const ants = new InstChunks(antGeo, lam({ color: 0x9a9ea2 }, { metalness: 0.8, roughness: 0.45 }), 300);
+    const dishes = new InstChunks(dishGeo, lam({ color: 0xd8d8d4 }, { roughness: 0.5 }), 300);
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3(1, 1, 1), up = new THREE.Vector3(0, 1, 0);
     const col = new THREE.Color();
     const TANK = [0x1c1c1e, 0x1c1c1e, 0x2a2a2c, 0x8fc3dd, 0xe8e4d8];
