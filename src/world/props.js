@@ -368,14 +368,17 @@ export class Props {
     const al = spots.filter((s) => s[2] === 'alamo'), pi = spots.filter((s) => s[2] !== 'alamo');
     const trunks = new InstChunks(trunk.toGeometry(), mat);
     // realista: racimos de hojas + núcleo; PS2: planos cruzados
-    const RT = STYLE.realista;
-    const alMesh = new InstChunks(RT ? realTreeGeometry('alamo').clusters : treeGeometry('alamo'), RT ? clusterMaterial().material : fol);
-    const piMesh = new InstChunks(RT ? realTreeGeometry('pino').clusters : treeGeometry('pino'), RT ? clusterMaterial().material : fol);
-    const alCore = RT ? new InstChunks(realTreeGeometry('alamo').core, fol) : null;
-    const piCore = RT ? new InstChunks(realTreeGeometry('pino').core, fol) : null;
+    // (con los racimos, de lejos se dibuja la versión liviana: se cambia por sectores de 200 m)
+    const RT = STYLE.realista, TS = RT ? 200 : 360;
+    const alMesh = new InstChunks(treeGeometry('alamo'), fol, TS);
+    const piMesh = new InstChunks(treeGeometry('pino'), fol, TS);
+    const alNear = RT ? new InstChunks(realTreeGeometry('alamo').clusters, clusterMaterial().material, TS) : null;
+    const piNear = RT ? new InstChunks(realTreeGeometry('pino').clusters, clusterMaterial().material, TS) : null;
+    const alCore = RT ? new InstChunks(realTreeGeometry('alamo').core, fol, TS) : null;
+    const piCore = RT ? new InstChunks(realTreeGeometry('pino').core, fol, TS) : null;
     const tint = new THREE.Color();
     let ti = 0;
-    const place = (arr, mesh, coreMesh) => arr.forEach(([x, z], i) => {
+    const place = (arr, mesh, nearMesh, coreMesh) => arr.forEach(([x, z], i) => {
       const y = terrain.heightAt(x, z) + (city.curbAt(x, z) || 0) - 0.1;
       const s = 0.8 + ((i * 7919) % 100) / 200;
       tmpE.set(0, i, 0); tmpQ.setFromEuler(tmpE);
@@ -384,16 +387,22 @@ export class Props {
       const k = ((i * 2654435761) >>> 0) / 4294967296;
       tint.setRGB(0.85 + k * 0.3, 0.9 + ((k * 7) % 1) * 0.2, 0.8 + ((k * 13) % 1) * 0.25);
       mesh.add(x, z, tmpM, tint);
+      if (nearMesh) nearMesh.add(x, z, tmpM, tint);
       if (coreMesh) coreMesh.add(x, z, tmpM, tint);
       trunks.add(x, z, tmpM);
       ti++;
       colliders.addCircle(x, z, 0.3, y - 1, y + 10, 'arbol');
     });
-    place(al, alMesh, alCore);
-    place(pi, piMesh, piCore);
+    place(al, alMesh, alNear, alCore);
+    place(pi, piMesh, piNear, piCore);
     trunks.build(this.group, { castShadow: true, cullDist: 520 });
-    this.treeMeshes = [...alMesh.build(this.group, { castShadow: true }), ...piMesh.build(this.group, { castShadow: true })];
-    if (alCore) this.treeMeshes.push(...alCore.build(this.group, { castShadow: false }), ...piCore.build(this.group, { castShadow: false }));
+    const NEAR = 170;
+    const far = RT ? { castShadow: true, minDist: NEAR - 6 } : { castShadow: true };
+    this.treeMeshes = [...alMesh.build(this.group, far), ...piMesh.build(this.group, far)];
+    if (RT) {
+      this.treeMeshes.push(...alNear.build(this.group, { castShadow: true, cullDist: NEAR }), ...piNear.build(this.group, { castShadow: true, cullDist: NEAR }));
+      this.treeMeshes.push(...alCore.build(this.group, { castShadow: false, cullDist: NEAR }), ...piCore.build(this.group, { castShadow: false, cullDist: NEAR }));
+    }
   }
 
   // ---- Matas de la estepa (coirón, neneo) ----

@@ -81,6 +81,17 @@ export class RealPost {
       this.gtao.blendIntensity = 0.85;
       this.gtao.updateGtaoMaterial({ radius: 1.6, distanceExponent: 1.4, thickness: 1.5, scale: 1, samples: 12 });
       this.gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 12 });
+      // el follaje recortado (alphaTest) y lo transparente no entran en la oclusión: el pase
+      // los dibujaría como planos enteros y oscurecería el cielo alrededor de los árboles
+      const gt = this.gtao;
+      gt._overrideVisibility = function () {
+        const cache = this._visibilityCache;
+        this.scene.traverse((o) => {
+          if (!o.visible) return;
+          const m = o.material;
+          if (o.isPoints || o.isLine || o.isLine2 || o.isSprite || (m && !Array.isArray(m) && (m.alphaTest > 0 || m.transparent))) { o.visible = false; cache.push(o); }
+        });
+      };
       this.composer.insertPass(this.gtao, 1);
       if (this.size) this.setSize(...this.size);
     } else if (this.gtao) {
@@ -120,7 +131,7 @@ export class RealSky {
     // pared al sol se vea más clara que el cielo, como en una foto
     const addGain = (m) => {
       m.fragmentShader = m.fragmentShader.replace('void main() {', 'uniform float skyGain;\nvoid main() {')
-        .replace('#include <tonemapping_fragment>', 'gl_FragColor.rgb *= skyGain;\n#include <tonemapping_fragment>');
+        .replace('#include <tonemapping_fragment>', 'gl_FragColor.rgb *= skyGain;\nif (any(isnan(gl_FragColor.rgb)) || any(isinf(gl_FragColor.rgb))) gl_FragColor.rgb = vec3(0.12, 0.2, 0.34);\n#include <tonemapping_fragment>');
     };
     addGain(this.sky.material);
     const U = this.U = this.sky.material.uniforms;
@@ -224,7 +235,7 @@ export class RealSky {
     this.sky.position.copy(g.camera.position);
     // el destello va lejos, en la dirección del sol (y se apaga con nubes, polvo o de noche)
     this.flare.position.copy(g.camera.position).addScaledVector(sd, 900);
-    this.flare.visible = elev > 0.02 && clouds < 0.6 && dust < 0.5 && !(g.cameraRig && g.cameraRig.cinematic && g.cameraRig.cinematic.noFlare);
+    this.flare.visible = !this.noFlare && elev > 0.02 && clouds < 0.6 && dust < 0.5;
     const gc = this.envGround.material.color;
     gc.setRGB(0.36, 0.32, 0.26).multiplyScalar(Math.max(0.05, env.dayLight));
     // qué ciudad se refleja según dónde está la cámara

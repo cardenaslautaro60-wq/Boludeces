@@ -160,6 +160,7 @@ export class City {
     // edificios reales donde hay datos; si no, lotes inventados a lo largo de las calles
     if (MAP.bldPos && MAP.bldPos.length) { this.placeRealBuildings(chunks, rng); this.placePOIs(chunks); }
     else this.placeLots(chunks, rng);
+    this.placeStreetSigns(chunks);
     this.streetFurniture(rng);
 
     const mats = this.materials(T);
@@ -1270,6 +1271,76 @@ export class City {
     }
   }
 
+  // Carteles de nomenclatura en las esquinas (placa azul, letras blancas), con los nombres
+  // reales de las calles: en el Centro y donde cruza una avenida
+  placeStreetSigns(chunks) {
+    const CW = 256, CH = 48, COLS = 8, ROWS = 42;
+    const cv = document.createElement('canvas'); cv.width = CW * COLS; cv.height = CH * ROWS;
+    const g = cv.getContext('2d');
+    const cells = new Map();
+    let next = 0;
+    const cell = (name) => {
+      if (cells.has(name)) return cells.get(name);
+      if (next >= COLS * ROWS) return null;
+      const i = next++, x = (i % COLS) * CW, y = Math.floor(i / COLS) * CH;
+      g.fillStyle = '#1d4f9c'; g.fillRect(x, y, CW, CH);
+      g.strokeStyle = '#f2f2f2'; g.lineWidth = 3; g.strokeRect(x + 4, y + 4, CW - 8, CH - 8);
+      g.fillStyle = '#ffffff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.font = `bold ${name.length > 18 ? 19 : 24}px Arial, Helvetica, sans-serif`;
+      g.fillText(name, x + CW / 2, y + CH / 2 + 1, CW - 18);
+      const uv = [x / cv.width, 1 - (y + CH) / cv.height, (x + CW) / cv.width, 1 - y / cv.height];
+      cells.set(name, uv);
+      return uv;
+    };
+    const label = (n) => (n || '').replace(/^Avenida /i, 'AV. ').replace(/^Calle /i, '').toUpperCase().slice(0, 28);
+    const pos = [], uvs = [];
+    const quad = (x, y, z, ux, uz, hw, hh, uv, flip) => {
+      const P = [[x - ux * hw, y - hh, z - uz * hw], [x + ux * hw, y - hh, z + uz * hw], [x + ux * hw, y + hh, z + uz * hw], [x - ux * hw, y + hh, z - uz * hw]];
+      const U = flip ? [[uv[2], uv[1]], [uv[0], uv[1]], [uv[0], uv[3]], [uv[2], uv[3]]] : [[uv[0], uv[1]], [uv[2], uv[1]], [uv[2], uv[3]], [uv[0], uv[3]]];
+      const order = flip ? [0, 2, 1, 0, 3, 2] : [0, 1, 2, 0, 2, 3];
+      for (const k of order) { pos.push(...P[k]); uvs.push(...U[k]); }
+    };
+    const done = new Set();
+    let count = 0;
+    for (const C of this.corners) {
+      if (done.has(C.n.id)) continue;
+      const a = C.P.e, b = C.Q.e;
+      if (!a.name || !b.name || a.name === b.name) continue;
+      const zt = this.zoneTypeAt(C.n.x, C.n.z);
+      if (zt !== 'centro' && a.kind !== 'avenida' && b.kind !== 'avenida') continue;
+      const ua = cell(label(a.name)), ub = cell(label(b.name));
+      if (!ua || !ub) break;
+      done.add(C.n.id);
+      const x = C.c.x + (C.p.x - C.c.x) * 0.3, z = C.c.z + (C.p.z - C.c.z) * 0.3;
+      const y = this.terrain.heightAt(x, z) + CURB;
+      const pg = chunks.get(x, z, 'plain'); pg.clearFrame();
+      pg.cylinder(x, z, 0.035, y, y + 3.05, hexColor(0x3a3d40), 6);
+      this.colliders.addCircle(x, z, 0.08, y - 1, y + 3.05, 'poste');
+      // cada placa a lo largo de su calle, legible de los dos lados
+      const w = 0.95, h = 0.18;
+      for (const [E, uv, hy] of [[C.P, ua, 2.85], [C.Q, ub, 2.6]]) {
+        const ux = E.ox, uz = E.oz, nx = -uz * 0.012, nz = ux * 0.012;
+        const cx = x + ux * (w / 2 + 0.05), cz = z + uz * (w / 2 + 0.05);
+        quad(cx + nx, y + hy, cz + nz, ux, uz, w / 2, h / 2, uv, false);
+        quad(cx - nx, y + hy, cz - nz, ux, uz, w / 2, h / 2, uv, true);
+      }
+      count++;
+    }
+    if (!pos.length) return;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geo.computeBoundingSphere();
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+    const mat = new THREE.MeshBasicMaterial({ map: tex, fog: true, side: THREE.FrontSide });
+    mat.userData.sign = true;
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.matrixAutoUpdate = false;
+    this.signs.push(mesh);
+    this.streetSignCount = count;
+  }
+
   placePOIs(chunks) {
     if (!this.footprints) return;
     const STY = {
@@ -1459,7 +1530,7 @@ export class City {
         this.colliders.addOBB(x, z, ax, az, len / 2, 0.12, y, y + H + 0.2 + (f.kind === 0 ? 0.85 : 0), 'reja');
       }
     }
-    walls.build(group, { castShadow: true, receiveShadow: true, cullDist: 360 });
+    walls.build(group, { castShadow: false, receiveShadow: true, cullDist: 300 });
     bars.build(group, { castShadow: false, receiveShadow: false, cullDist: 220 });
     this.fenceCount = list.length;
   }

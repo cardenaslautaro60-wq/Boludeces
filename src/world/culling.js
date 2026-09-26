@@ -33,6 +33,7 @@ export class InstChunks {
       mesh.receiveShadow = !!opts.receiveShadow;
       if (opts.noShadow) mesh.userData.noShadow = true;
       if (opts.cullDist) mesh.userData.cullDist = opts.cullDist;
+      if (opts.minDist) mesh.userData.minDist = opts.minDist;
       b.mesh = mesh;
       for (const r of b.refs) r.mesh = mesh;
       parent.add(mesh);
@@ -52,7 +53,7 @@ export class DistanceCuller {
     if (obj.isInstancedMesh) { if (!obj.boundingSphere) obj.computeBoundingSphere(); sphere = obj.boundingSphere; }
     else if (obj.geometry) { if (!obj.geometry.boundingSphere) obj.geometry.computeBoundingSphere(); sphere = obj.geometry.boundingSphere.clone().applyMatrix4(obj.matrixWorld); }
     if (!sphere) return;
-    this.items.push({ obj, x: sphere.center.x, z: sphere.center.z, r: sphere.radius, cd: cullDist || obj.userData.cullDist || null });
+    this.items.push({ obj, x: sphere.center.x, z: sphere.center.z, r: sphere.radius, cd: cullDist || obj.userData.cullDist || null, md: obj.userData.minDist || 0 });
   }
 
   addTree(root, cullDist = null) {
@@ -69,7 +70,8 @@ export class DistanceCuller {
     this.t = 0.25;
     for (const it of this.items) {
       const d = Math.hypot(it.x - cam.x, it.z - cam.z) - it.r;
-      it.obj.visible = d < (it.cd ? Math.min(it.cd, maxDist) : maxDist);
+      // minDist: versión lejana de algo que de cerca se dibuja con más detalle (árboles)
+      it.obj.visible = (!it.md || d >= it.md) && d < (it.cd ? Math.min(it.cd, maxDist) : maxDist);
     }
   }
 }

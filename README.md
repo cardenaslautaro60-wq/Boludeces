@@ -44,6 +44,20 @@ Están el Centro con la Catedral, la plaza San Martín, la Terminal y los edific
 
 El radar y el mapa de pausa se dibujan con las mismas calles y las huellas reales de los edificios, y muestran el nombre del barrio en el que estás.
 
+## Versión realista
+
+El mismo juego con otra cara: `realista.html` (o `dist/gta-san-jorge-realista.html`, un solo archivo). Pide una placa de video decente.
+
+- **Luz de verdad**: cielo físico con nubes, el sol de Comodoro (45° Sur, por el norte), exposición de cámara, reflejos del cielo en todos los materiales, oclusión ambiental, resplandor, destello del sol en la lente y un grano de película muy leve.
+- **Texturas fotográficas** (Poly Haven, CC0) en calles, veredas, terreno, revoques, ladrillo, chapa y hormigón, con relieve y rugosidad.
+- **Vidrios que reflejan** el cielo y la ciudad (en el Centro se reflejan edificios; en los barrios, casas bajas), con marcos de aluminio o madera, cortinas y persianas de enrollar.
+- **El Centro con cuatro tipos de edificio**: revoque con ventanas, departamentos con balcones corridos (con ropa tendida y macetas), franjas vidriadas y ladrillo visto; en planta baja, **locales con vidrieras de verdad**, estantes, persianas metálicas, toldos a rayas y carteles que se prenden de noche.
+- **Barrios**: casas con **tanques de agua**, antenas de TV y alguna antena satelital en el techo, y en el frente pared baja con reja, murito o tapia, con pasto en el jardín (las rejas se pueden trepar).
+- **Gente con cuerpo humano real** (Quaternius, CC0) sobre el mismo esqueleto del juego, con ropa; **autos con barniz** y cromados.
+- **Árboles de racimos de hojas** que se mueven con el viento del juego (y se inclinan en los temporales); de lejos, una versión más liviana.
+- **La noche**: estrellas, luz cálida de los faroles en la vereda, ventanas con interiores, vidrieras prendidas y los faros de los autos iluminando el asfalto.
+- Las calles del Centro y las avenidas tienen **carteles con el nombre de la calle** en las esquinas.
+
 ## Lo que tiene de San Andreas
 
 - Caminar, correr, saltar, nadar, pelear y disparar (puños, clavas de malabar, bate, pistola, escopeta, Uzi), con apuntado libre y autoapuntado.
