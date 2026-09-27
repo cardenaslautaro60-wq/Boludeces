@@ -19,7 +19,7 @@ export class InstChunks {
     return ref;
   }
 
-  get count() { let n = 0; for (const b of this.buckets.values()) n += b.mats.length; return n; }
+  get count() { let n = 0; for (const b of this.buckets.values()) n += b.mats ? b.mats.length : b.n; return n; }
 
   build(parent, opts = {}) {
     for (const b of this.buckets.values()) {
@@ -38,6 +38,8 @@ export class InstChunks {
       for (const r of b.refs) r.mesh = mesh;
       parent.add(mesh);
       this.meshes.push(mesh);
+      // las matrices ya están en la malla: no hace falta guardar las copias
+      b.n = b.mats.length; b.mats = null; b.cols = null;
     }
     return this.meshes;
   }
@@ -74,4 +76,18 @@ export class DistanceCuller {
       it.obj.visible = (!it.md || d >= it.md) && d < (it.cd ? Math.min(it.cd, maxDist) : maxDist);
     }
   }
+}
+
+// Geometría fija del mundo: una vez que la placa de video la tiene, se suelta la copia en
+// memoria de JavaScript (las matrices de instancias no, porque algunas se mueven)
+function dropArray() { this.array = null; }
+export function releaseAfterUpload(root) {
+  root.traverse((o) => {
+    const geo = o.geometry;
+    if (!geo || geo.userData.keepArrays) return;
+    if (!geo.boundingSphere) geo.computeBoundingSphere();
+    if (!geo.boundingBox) geo.computeBoundingBox();
+    for (const k in geo.attributes) geo.attributes[k].onUpload(dropArray);
+    if (geo.index) geo.index.onUpload(dropArray);
+  });
 }

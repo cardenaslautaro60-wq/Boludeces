@@ -36,13 +36,13 @@ Funciona en Chrome, Firefox, Edge y Safari con WebGL. En el celular aparecen con
 
 ## El mapa
 
-Comodoro Rivadavia de verdad: **las calles, la costa, los barrios, las plazas, las canchas y los lugares conocidos salen de OpenStreetMap**, y el relieve (el Chenque, las lomas de los barrios, la meseta) sale de un modelo de elevación real. Para que se pueda recorrer, el mapa está comprimido en los tramos vacíos entre barrios (sobre todo por la Ruta 3), pero dentro de cada barrio las cuadras mantienen su forma y sus nombres.
+Comodoro Rivadavia de verdad y **a escala real**: 1 metro del juego es 1 metro de Comodoro, igual que en Google Maps. **Las calles, la costa, los barrios, las plazas, las canchas y los lugares conocidos salen de OpenStreetMap**, el relieve (el Chenque, las lomas de los barrios, la meseta) sale de un modelo de elevación real y **el color del suelo sale de una foto satelital** (Sentinel-2): las manchas de mata, los salitrales, las picadas y las locaciones petroleras están donde están. Toda la ciudad construida está a tamaño real, desde Punta del Marqués y Rada Tilly hasta Restinga Alí y Caleta Córdova; solo se comprimen el tramo casi vacío antes de Caleta, el mar abierto y el fondo de la meseta.
 
 Están el Centro con la Catedral, la plaza San Martín, la Terminal y los edificios altos; la Costanera y el Puerto con el Muelle; el Cerro Chenque con las antenas; Km 3 con el Museo del Petróleo; Km 5, Km 8 y Caleta Córdova hacia el norte; Pietrobelli, Jorge Newbery con **La Madriguera** (en 2004 todavía de tierra), Juan XXIII, 9 de Julio y los demás barrios; Rada Tilly con la playa; Punta del Marqués con la lobería; el Aeropuerto, el parque eólico y los yacimientos de la meseta.
 
-**Cada casa y cada edificio está en su lugar real**: son unas 40.000 huellas de edificios (el relevamiento satelital de Microsoft, más los edificios cargados en OpenStreetMap), cada una orientada con el frente a su calle. En los barrios son casas de una o dos plantas con techo de chapa o losa (y las casas blancas de techo rojo de los kilómetros de YPF); en el Centro, edificación entre medianeras con locales en planta baja (kioscos, farmacias, locutorios, videoclubs...) y torres de hasta 19 pisos; en los parques industriales, galpones. Donde OSM tiene cargados los pisos o el tipo de edificio (escuelas, iglesias, depósitos), se respetan.
+**Cada casa y cada edificio está en su lugar real**: son unas 60.000 huellas de edificios (el relevamiento satelital de Microsoft, más los edificios cargados en OpenStreetMap), cada una orientada con el frente a su calle. En los barrios son casas de una o dos plantas con techo de chapa o losa (y las casas blancas de techo rojo de los kilómetros de YPF); en el Centro, edificación entre medianeras con locales en planta baja (kioscos, farmacias, locutorios, videoclubs...) y torres de hasta 19 pisos; en los parques industriales, galpones. Donde OSM tiene cargados los pisos o el tipo de edificio (escuelas, iglesias, depósitos), se respetan.
 
-El radar y el mapa de pausa se dibujan con las mismas calles y las huellas reales de los edificios, y muestran el nombre del barrio en el que estás.
+El radar y el mapa de pausa se dibujan con las mismas calles, las huellas reales de los edificios y el color real del suelo, y muestran el nombre del barrio en el que estás. Al acercar el mapa se ven casa por casa.
 
 ## Versión realista
 
@@ -124,7 +124,9 @@ También anda con joystick y con pantalla táctil.
 
 ## Trucos
 
-Se escriben durante el juego: `HESOYAM`, `AEZAKMI`, `ASNAEB`, `OSRBLHH`, `LXGIWYL`, `BTCDBCB` (Gordopin XXL), `KVGYZQK`, `JYSDSOD`, `XJVSNAJ`, `CPKTNWT`, y los locales `BUENAPETROCA`, `VIENTOBLANCO`, `AGUANTENEWBERY`, `CHORIPAN`, `REMISERO`, `PATRULLERO`, `CISTERNA`, `ENDURO` y `FITITO`.
+En la pausa (<kbd>Esc</kbd>, o el botón de pausa en el celular) está el menú **Trucos**: con un toque aparece al lado tuyo cualquier auto (Jilux, Falcón, Renó 12, Pijó 504, Gool, Duna, Fitito, F-100, chata de empresa, remís, patrullero, colectivo, cisterna, enduro o BMX), te dan armas, salud, plata, te sacan las estrellas o te llevan a un lugar. No hace falta teclado.
+
+También se escriben durante el juego: `HESOYAM`, `AEZAKMI`, `ASNAEB`, `OSRBLHH`, `LXGIWYL`, `BTCDBCB` (Gordopin XXL), `KVGYZQK`, `JYSDSOD`, `XJVSNAJ`, `CPKTNWT`, y los locales `BUENAPETROCA`, `VIENTOBLANCO`, `AGUANTENEWBERY`, `CHORIPAN`, `REMISERO`, `PATRULLERO`, `CISTERNA`, `ENDURO` y `FITITO`.
 
 Y los de Comodoro:
 
@@ -172,7 +174,7 @@ Es un juego de fans, gratis y sin fines de lucro, inspirado en *Grand Theft Auto
 
 Voces: sintetizadas con [Piper](https://github.com/OHF-Voice/piper1-gpl) (voz rioplatense `es_AR-daniela`, corpus OpenSLR 61 de Google, CC BY-SA 4.0) y transformadas para cada personaje; ver `tools/voz/LICENCIA-VOCES.md`.
 
-Datos del mapa © colaboradores de [OpenStreetMap](https://www.openstreetmap.org/copyright), bajo licencia ODbL. Huellas de edificios: [Microsoft Global ML Building Footprints](https://github.com/microsoft/GlobalMLBuildingFootprints), bajo licencia ODbL. Relieve: Terrain Tiles de Mapzen en AWS (SRTM y otras fuentes).
+Datos del mapa © colaboradores de [OpenStreetMap](https://www.openstreetmap.org/copyright), bajo licencia ODbL. Huellas de edificios: [Microsoft Global ML Building Footprints](https://github.com/microsoft/GlobalMLBuildingFootprints), bajo licencia ODbL. Relieve: Terrain Tiles de Mapzen en AWS (SRTM y otras fuentes). Colores del suelo: [Sentinel-2 cloudless](https://s2maps.eu) by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2016 & 2017), bajo licencia CC BY 4.0.
 
 ## Estructura del código
 
@@ -186,7 +188,7 @@ src/
   audio/             efectos y radios sintetizadas con WebAudio
   ui/                HUD, menús, controles táctiles y entrada
 scripts/build.mjs    compilación con esbuild
-tools/mapa/          descarga de OpenStreetMap y del relieve, y armado de src/world/comodoro-data.js
+tools/mapa/          descarga de OpenStreetMap, el relieve y la foto satelital; arma src/world/comodoro-data.js y comodoro-sat.js
 ```
 
 ## Regenerar el mapa
@@ -194,10 +196,11 @@ tools/mapa/          descarga de OpenStreetMap y del relieve, y armado de src/wo
 Hace falta Python 3 con `shapely`, `numpy` y `pillow`.
 
 ```bash
-bash tools/mapa/descargar.sh                      # baja OSM (Overpass) y el relieve a tools/mapa/cache/
+bash tools/mapa/descargar.sh                      # baja OSM (Overpass), el relieve y la foto satelital a tools/mapa/cache/
 python3 tools/mapa/build_map.py tools/mapa/cache src/world/comodoro-data.js
+python3 tools/mapa/satelite.py tools/mapa/cache   # colores del suelo (src/world/comodoro-sat.js)
 python3 tools/mapa/preview.py src/world/comodoro-data.js mapa.png   # vista previa en PNG
 npm run build
 ```
 
-`build_map.py` endereza la costa, comprime los tramos vacíos, une las avenidas de doble mano, simplifica las rotondas, arma los barrios y guarda todo comprimido (unos 420 KB).
+`build_map.py` pone la ciudad a escala real (y comprime solo los tramos vacíos), une las avenidas de doble mano, simplifica las rotondas, arma los barrios y guarda todo comprimido (unos 1,8 MB con las 60.000 casas). `satelite.py` reproyecta la foto satelital al marco del juego (un píxel cada 20 m, unos 150 KB en JPEG).

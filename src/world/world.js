@@ -5,7 +5,7 @@ import { City, findPortPier } from './city.js';
 import { Props } from './props.js';
 import { Zones } from './zones.js';
 import { StaticColliders } from './collision.js';
-import { DistanceCuller } from './culling.js';
+import { DistanceCuller, releaseAfterUpload } from './culling.js';
 import { makeTextures } from '../render/textures.js';
 import { STYLE } from '../render/style.js';
 import { META, MAP, FRAME, LANDMARKS, POI, SPAWNS, RAMPS, BAGS, DECKS, loadMapData } from './mapdata.js';
@@ -29,7 +29,8 @@ export class World {
     // tiempos de cada etapa de la carga (para medir: __game.world.timings)
     const t0 = performance.now();
     this.timings = [];
-    const progress = (f, msg) => { this.timings.push([msg, Math.round(performance.now() - t0)]); report(f, msg); };
+    const mem = () => { if (window.gc) window.gc(); return performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1e6) : 0; };
+    const progress = (f, msg) => { this.timings.push([msg, Math.round(performance.now() - t0), mem()]); report(f, msg); };
     const g = this.game;
     progress(0.04, 'Bajando el mapa de Comodoro...');
     await nextFrame();
@@ -96,8 +97,12 @@ export class World {
     this.culler.addTree(city.group);
     this.culler.addTree(this.roadMesh);
     this.culler.addTree(props.group);
+    // memoria: los acumuladores de la ciudad ya no hacen falta, y la geometría fija se
+    // queda solo en la placa de video
+    city.chunks = null; city.lean = null;
+    for (const r of [this.terrainMesh, this.roadMesh, city.group, props.group, this.water]) releaseAfterUpload(r);
     this.zoneCache = { x: 1e9, z: 1e9, name: '' };
-    this.timings.push(['fin', Math.round(performance.now() - t0)]);
+    this.timings.push(['fin', Math.round(performance.now() - t0), mem()]);
   }
 
   // Muelles reales (OSM) como plataformas elevadas

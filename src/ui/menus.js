@@ -156,6 +156,7 @@ export class Menus {
     s.innerHTML = `<h2>Pausa</h2><div class="panel">
       <button data-a="resume">Seguir jugando</button>
       <button data-a="map">Mapa</button>
+      <button data-a="cheats">Trucos</button>
       <button data-a="stats">Estadísticas</button>
       <button data-a="brief">Última misión</button>
       <button data-a="options">Opciones</button>
@@ -193,6 +194,7 @@ export class Menus {
     const g = this.game;
     if (a === 'resume') this.resume();
     if (a === 'map') this.openMap();
+    if (a === 'cheats') this.openPane('cheats', this.pause);
     if (a === 'stats') this.openPane('stats', this.pause);
     if (a === 'brief') this.openPane('brief', this.pause);
     if (a === 'options') this.openPane('options', this.pause);
@@ -309,12 +311,30 @@ export class Menus {
         <div class="mrow"><label class="mbtn up" id="m-song-up">Agregar temas<input type="file" id="m-song-file" accept="audio/*,video/mp4,video/webm" multiple hidden></label></div>
         <p class="mstatus" id="m-status" role="status"></p>
       </div>`;
+    } else if (kind === 'cheats') {
+      // lo mismo que escribir el código, para jugar en el celular (o sin acordarse)
+      const btn = (code, label) => `<button class="cheat" data-c="${code}">${label}<small>${code}</small></button>`;
+      const car = (key, label) => `<button class="cheat" data-v="${key}">${label}</button>`;
+      html = `<h2>Trucos</h2><div class="pane cheatpane">
+        <p class="note">Tocá uno y volvés al juego. En la computadora también se pueden escribir los códigos mientras jugás.</p>
+        <h4>Autos</h4><div class="cheats">
+          ${car('jilux', 'Jilux')}${car('falcon', 'Falcón')}${car('reno12', 'Renó 12')}${car('pijo504', 'Pijó 504')}${car('gool', 'Gool')}${car('duna', 'Fiaz Duna')}${car('fitito', 'Fitito 600')}
+          ${car('f100', 'F-100')}${car('empresa', 'Chata de empresa')}${car('remis', 'Remís')}${car('patrullero', 'Patrullero')}${car('colectivo', 'Colectivo')}${car('cisterna', 'Cisterna')}${car('enduro', 'Moto enduro')}${car('bmx', 'BMX')}</div>
+        <h4>Armas y salud</h4><div class="cheats">
+          ${btn('LXGIWYL', 'Armas del barrio')}${btn('BALASINFINITAS', 'Balas infinitas')}${btn('HESOYAM', 'Salud, chaleco y plata')}${btn('CHORIPAN', 'Salud completa')}${btn('PETRODOLARES', '$500.000')}${btn('AGUANTENEWBERY', 'La barra del Lobo')}</div>
+        <h4>Policía</h4><div class="cheats">
+          ${btn('ASNAEB', 'Sacar las estrellas')}${btn('AEZAKMI', 'Nunca buscado')}${btn('OSRBLHH', '+2 estrellas')}</div>
+        <h4>Ir a...</h4><div class="cheats">
+          ${btn('CHENQUE', 'Cerro Chenque')}${btn('MADRIGUERA', 'La Madriguera')}${btn('RADATILLY', 'Rada Tilly')}${btn('LOBERIA', 'Lobería')}</div>
+        <h4>Otros</h4><div class="cheats">
+          ${btn('SUPERSALTO', 'Supersalto')}${btn('JYSDSOD', 'Músculo')}${btn('BTCDBCB', 'Gordopin XXL')}${btn('KVGYZQK', 'Gordopin flaco')}${btn('VIENTAZO', 'Vientazo')}${btn('NEVADA', 'Nevada')}${btn('ANIVERSARIO', 'Fuegos artificiales')}${btn('XJVSNAJ', 'Medianoche')}</div>
+      </div>`;
     } else if (kind === 'credits') {
       html = `<h2>Créditos</h2><div class="pane">
         <p><b>GTA: San Jorge</b> es un juego de fans, gratuito, inspirado en <i>Grand Theft Auto: San Andreas</i> (Rockstar Games, 2004). No está afiliado ni respaldado por Rockstar.</p>
-        <p>El mapa es <b>Comodoro Rivadavia</b> con sus calles reales, comprimido en los tramos vacíos entre barrios: el Cerro Chenque, el Centro, la Costanera, el Puerto, el Km 3, los barrios, Rada Tilly, Punta del Marqués y la meseta con sus cigüeñas.</p>
+        <p>El mapa es <b>Comodoro Rivadavia a escala real</b>, con sus calles y sus casas en su lugar: el Cerro Chenque, el Centro, la Costanera, el Puerto, el Km 3, los barrios, Rada Tilly, Punta del Marqués y la meseta con sus cigüeñas. Solo está comprimido el tramo casi vacío antes de Caleta Córdova.</p>
         <p class="note">Voces sintetizadas con Piper (voz rioplatense es_AR-daniela, corpus OpenSLR 61, CC BY-SA 4.0). No imitan a ninguna persona real.</p>
-        <p class="note">Datos del mapa © colaboradores de OpenStreetMap (ODbL). Huellas de edificios: Microsoft Global ML Building Footprints (ODbL). Relieve: Terrain Tiles de Mapzen (SRTM y otras fuentes).</p>
+        <p class="note">Datos del mapa © colaboradores de OpenStreetMap (ODbL). Huellas de edificios: Microsoft Global ML Building Footprints (ODbL). Relieve: Terrain Tiles de Mapzen (SRTM y otras fuentes). Colores del suelo: Sentinel-2 cloudless - https://s2maps.eu by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2016 &amp; 2017), CC BY 4.0.</p>
         <p><b>El Gordopin</b>: malabarista de semáforo e hincha del Lobo (Club Atlético Jorge Newbery). "A mí no me van a sacar nunca de la calle".</p>
         <p><b>El Petroca</b>: petrolero con guita, anteojos negros, camisa de jean y botas. "¡Buena petroca!"</p>
         <p><b>La radio</b>: homenaje a <b>La Ciudad Perdida</b> (1992–2016), el programa creado y conducido por <b>Santiago Sánchez</b> en la radio de Comodoro. Los textos que dice en el juego son ficción escrita en homenaje, en el espíritu del programa: humor para mirar la realidad desde otro lado. "Yo sé de qué me río".</p>
@@ -345,6 +365,19 @@ export class Menus {
       s.querySelectorAll('input,select').forEach((e) => e.addEventListener('change', upd));
     }
     if (kind === 'media') this.bindMedia(s);
+    if (kind === 'cheats') {
+      s.querySelectorAll('.cheat').forEach((b) => b.addEventListener('click', () => {
+        this.closePane();
+        this.resume();
+        if (b.dataset.v) {
+          const p = g.player;
+          if (p.vehicle) p.exitVehicle();
+          const v = g.cheats.spawnNear(b.dataset.v);
+          g.hud.showToast(`Apareció: <b>${v.type.name}</b>`, 2.5);
+          g.audio.pickup();
+        } else g.cheats.apply(b.dataset.c);
+      }));
+    }
     this.paneEl = s;
     this.paneBack = back;
     setTimeout(() => s.querySelector('[data-a=back]').focus(), 30);
@@ -545,8 +578,15 @@ export class Menus {
     ctx.save();
     ctx.translate(W / 2, H / 2);
     ctx.scale(v.zoom, v.zoom);
+    ctx.save();
     g.hud.mapTransform(ctx, v.cx, v.cz);
     ctx.drawImage(g.hud.mapImg, 0, 0);
+    ctx.restore();
+    // de cerca, los mosaicos nítidos (calles y casas dibujadas a 2 m por píxel)
+    if (v.zoom > 1 / g.hud.mapScale) {
+      const r = Math.hypot(W, H) / 2 / v.zoom;
+      if (r < 2600) g.hud.drawDetail(ctx, v.cx, v.cz, r, 2);
+    }
     ctx.restore();
     // nombres de zonas
     ctx.font = `${Math.round(clamp(v.zoom * 40, 10, 22))}px 'Pirata One', Georgia, serif`;

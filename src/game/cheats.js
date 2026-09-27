@@ -49,15 +49,21 @@ export class Cheats {
   check(typed) {
     for (const code of Object.keys(this.list)) {
       if (typed.endsWith(code)) {
-        const [name, fn] = this.list[code];
-        fn(this.game);
-        this.game.hud && this.game.hud.showToast(`Truco activado<br><small>${name}</small>`, 2.5);
-        this.game.audio && this.game.audio.pickup();
+        this.apply(code);
         this.game.input.typed = '';
         return true;
       }
     }
     return false;
+  }
+
+  // Activa un truco (desde el teclado o desde el menú de trucos)
+  apply(code) {
+    const t = this.list[code];
+    if (!t) return;
+    t[1](this.game);
+    this.game.hud && this.game.hud.showToast(`Truco activado<br><small>${t[0]}</small>`, 2.5);
+    this.game.audio && this.game.audio.pickup();
   }
 
   // Teletransporte a un lugar de Comodoro (con el auto, si está manejando)
@@ -75,7 +81,8 @@ export class Cheats {
     const g = this.game;
     const p = g.player;
     const f = { x: Math.sin(p.heading), z: Math.cos(p.heading) };
-    const x = p.pos.x + f.x * 6, z = p.pos.z + f.z * 6;
+    // adelante del jugador, sin quedar adentro de una pared
+    const { x, z } = g.safeSpot(p.pos.x + f.x * 6, p.pos.z + f.z * 6, 2.2, true);
     const v = g.spawnVehicle(key, x, z, p.heading + Math.PI / 2, color !== undefined ? { color } : {});
     g.lastPlayerVehicle = v;
     return v;

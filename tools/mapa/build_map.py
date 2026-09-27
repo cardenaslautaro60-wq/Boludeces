@@ -50,14 +50,17 @@ _n = math.hypot(0.59, -0.807)
 UX, UZ = 0.59 / _n, -0.807 / _n       # a lo largo de la costa (de Rada Tilly a Caleta)
 VX, VZ = UZ, -UX                       # tierra adentro (hacia el Oeste)
 
+# Escala: toda la ciudad construida va a tamaño real (1 m del juego = 1 m de Comodoro), desde
+# Punta del Marqués y Rada Tilly hasta Restinga Alí, y Caleta Córdova. Solo se comprimen el
+# tramo casi vacío antes de Caleta, el mar abierto y el fondo de la meseta.
 # Tramos a lo largo de la costa: (desde a, pendiente)
-A_BP = [-12300, -12000, -10300, -8000, -5300, 2900, 4300, 5800, 7300, 9700, 13500, 15000, 15300]
-A_SL = [0.3, 0.45, 0.55, 0.2, 0.55, 0.3, 0.55, 0.3, 0.55, 0.15, 0.55, 0.3]
-B_BP = [-3200, 5200, 9200]
-B_SL = [0.55, 0.25]
-VS = 0.55          # escala vertical
-CORE_MIN = 0.5     # pendiente mínima para considerar "zona urbana"
-CORE_BMAX = 5200
+A_BP = [-12300, 10000, 13800, 15300]
+A_SL = [1.0, 0.35, 1.0]
+# Tramos tierra adentro: mar abierto, ciudad (hasta los barrios altos del oeste), meseta
+B_BP = [-3200, -1600, 7600, 9200]
+B_SL = [0.4, 1.0, 0.4]
+VS = 1.0           # escala vertical (el Chenque con su altura real)
+CORE_MIN = 0.9     # pendiente mínima (en los dos ejes) para considerar "zona urbana"
 
 
 def _cum(bp, sl):
@@ -100,6 +103,17 @@ def slope_a(a):
     return 0.1
 
 
+def slope_b(b):
+    for i in range(len(B_SL)):
+        if B_BP[i] <= b < B_BP[i + 1]:
+            return B_SL[i]
+    return 0.1
+
+
+def core_ab(a, b):
+    return slope_a(a) >= CORE_MIN and slope_b(b) >= CORE_MIN
+
+
 def ab(x, z):
     return x * UX + z * UZ, x * VX + z * VZ
 
@@ -120,8 +134,7 @@ def inside_world(x, z, margin=0):
 
 
 def is_core(x, z):
-    a, b = ab(x, z)
-    return slope_a(a) >= CORE_MIN and b <= CORE_BMAX
+    return core_ab(*ab(x, z))
 
 
 def warp_geom_coords(coords):
@@ -395,11 +408,11 @@ def allowed(hw, x, z, total_len, unpaved):
         return False
     a, b = ab(x, z)
     s = slope_a(a)
-    core = s >= CORE_MIN and b <= CORE_BMAX
+    core = core_ab(a, b)
     if hw in ('trunk', 'motorway', 'primary', 'secondary'):
         return True
     if hw == 'tertiary':
-        return core or (s >= 0.3 and b <= 7000)
+        return core or s >= 0.3
     if hw in ('residential', 'living_street', 'pedestrian'):
         return core
     if hw == 'unclassified':
@@ -418,8 +431,7 @@ for w in ways:
     pts = [nodes_real[i] for i in w['ids']]
     total = sum(math.hypot(pts[k + 1][0] - pts[k][0], pts[k + 1][1] - pts[k][1]) for k in range(len(pts) - 1))
     if hw == 'unclassified':
-        a, b = ab(*pts[len(pts) // 2])
-        if not (slope_a(a) >= CORE_MIN and b <= CORE_BMAX):
+        if not core_ab(*ab(*pts[len(pts) // 2])):
             kind, width, unpaved = 'tierra', 8, True
     if unpaved and kind in ('calle', 'avenida'):
         kind = 'tierra' if hw in ('residential', 'unclassified', 'living_street', 'tertiary') else kind
@@ -975,23 +987,23 @@ for e in feat:
     if t.get('aeroway') == 'runway' and e.get('geometry'):
         pts = geom_xy(e)
         if all(inside_world(x, z) for x, z in pts):
-            runways.append({'w': float(t.get('width', 45)) * 0.55, 'pts': [[round(a, 1), round(b, 1)] for a, b in (warp(x, z) for x, z in pts)]})
+            a0, b0 = ab(*pts[0])
+            runways.append({'w': float(t.get('width', 45)) * math.sqrt(slope_a(a0) * slope_b(b0)), 'pts': [[round(a, 1), round(b, 1)] for a, b in (warp(x, z) for x, z in pts)]})
 print('  pistas', len(runways))
 
 # ---------------------------------------------------------------------------
 # Edificios reales: huellas de Microsoft Global ML Building Footprints (ODbL) y OSM
 # ---------------------------------------------------------------------------
-# Cada edificio va en su lugar real. Se agranda un poco respecto de la escala del mapa (0,55)
-# para que la gente y los autos del juego (a tamaño real) no queden gigantes; se recorta donde
-# pisaría calles o veredas y se orienta con el frente hacia la calle más cercana.
+# Cada edificio va en su lugar real y con su tamaño real (en los tramos comprimidos, con la
+# escala del tramo); se recorta donde pisaría calles o veredas y se orienta con el frente
+# hacia la calle más cercana.
 print('edificios...')
 import glob
 import gzip
 from shapely.affinity import rotate as sh_rotate, scale as sh_scale, translate as sh_translate
 from shapely.strtree import STRtree
 
-K_BLD = 1.15      # barrios: casas un poco más grandes que la escala del mapa
-K_BLD_CENTRO = 1.0  # Centro: edificación continua entre medianeras, a escala del mapa
+K_BLD = 1.0
 SW_GAME = 2.6 + 0.35       # vereda + margen (city.js: SW)
 bld_files = sorted(glob.glob(os.path.join(CACHE, 'ms_*.csv.gz')))
 
@@ -1019,7 +1031,6 @@ open_areas = [Polygon(ar['poly']) if not hasattr(ar['poly'], 'geom_type') else a
 open_areas = [g.buffer(0) for g in open_areas if g.is_valid or g.buffer(0).is_valid]
 area_tree = STRtree(open_areas) if open_areas else None
 from shapely.prepared import prep
-centro_zone = prep(unary_union([z['poly'] for z in zones if z['type'] == 'centro']).buffer(20))
 
 # tipo y pisos de OSM (los pocos edificios cargados con datos)
 osm_b = []
@@ -1119,10 +1130,8 @@ for pg in raw:
     ang = math.atan2(e1[1], e1[0])
     c = rect.centroid
     a, b = ab(c.x, c.y)
-    sA = slope_a(a)
-    sB = B_SL[0] if b < B_BP[1] else B_SL[1]
     X, Z = warp(c.x, c.y)
-    sc = min(0.55, math.sqrt(sA * sB)) * (K_BLD_CENTRO if centro_zone.contains(Point(X, Z)) else K_BLD)
+    sc = min(1.0, math.sqrt(slope_a(a) * slope_b(b))) * K_BLD
     if h_game(X, Z) < 0.9:
         dropped['agua'] += 1
         continue

@@ -245,3 +245,10 @@ body.is-touch .lanes { height: 200px; }
 .mediapane .msongs li.empty { display: list-item; color: #888; border: 0; }
 .mediapane .mstatus { min-height: 20px; margin: 10px 0 0; color: #8aff6a; font-weight: bold; }
 .mediapane .mstatus.bad { color: #ff7a6a; }
+
+/* menú de trucos */
+.cheatpane h4 { margin: 12px 0 6px; font: 22px var(--gothic); font-weight: normal; color: #f2c230; }
+.cheats { display: flex; flex-wrap: wrap; gap: 6px; }
+.cheats .cheat { flex: 1 1 140px; min-height: 44px; padding: 6px 10px; background: #1b1d22; border: 1px solid #3a3d44; color: #eee; font: bold 14px var(--body); text-align: left; cursor: pointer; border-radius: 4px; letter-spacing: 0; line-height: 1.25; -webkit-text-stroke: 0; text-shadow: none; }
+.cheats .cheat:hover, .cheats .cheat:focus { background: #2a3a55; border-color: #5a7ab0; outline: none; }
+.cheats .cheat small { display: block; font: 11px var(--body); color: #8aa0bc; letter-spacing: 0.04em; margin-top: 2px; }

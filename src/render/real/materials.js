@@ -544,14 +544,19 @@ export function terrainMaterial(R) {
         // variación grande (manchas de la estepa) para que no se note la repetición
         float big = texture2D(tDirt, vWPos.xz * 0.013).g;
         alb *= mix(0.82, 1.12, big);
+        // las fotos de arena son muy claras y amarillas para la estepa de Comodoro (tierra
+        // gris parda): menos saturación y brillo; el tono lo pone el color satelital de abajo
+        float la = dot(alb, vec3(0.3333));
+        alb = mix(vec3(la), alb, 0.6) * 0.6;
         diffuseColor.rgb *= alb;`)
       .replace('#include <color_fragment>', `
         #ifdef USE_COLOR
-          // el color por vértice (bandas de las bardas, meseta más gris) tiñe un poco:
-          // tono normalizado y brillo relativo al típico de la estepa
+          // el color por vértice (color real del suelo según la foto satelital, bandas de las
+          // bardas, meseta más gris) tiñe la textura: tono normalizado y brillo relativo al
+          // típico de la estepa
           float lum = dot(vColor.rgb, vec3(0.3333));
-          vec3 vc = vColor.rgb / max(0.02, lum) * clamp(lum / 0.26, 0.7, 1.35);
-          diffuseColor.rgb *= mix(vec3(1.0), vc, 0.3);
+          vec3 vc = vColor.rgb / max(0.02, lum) * clamp(pow(lum / 0.26, 2.0), 0.35, 1.4);
+          diffuseColor.rgb *= mix(vec3(1.0), vc, 0.8);
         #endif`)
       .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = roughness * mix(1.0, 0.35, wetK);')
       .replace('#include <normal_fragment_maps>', `

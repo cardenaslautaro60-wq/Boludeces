@@ -124,6 +124,13 @@ class Ctx {
     return { stop: () => { this.removeFail(f); this.game.hud.removeCounter(id); } };
   }
 
+  // Tiempo según la distancia del recorrido (en línea recta x 1,4 por las vueltas, a 16 m/s)
+  timerTo(x, z, label, speed = 16, min = 100) {
+    const p = this.game.player, pos = p.vehicle ? p.vehicle.pos : p.pos;
+    const d = Math.hypot(x - pos.x, z - pos.z) * 1.4;
+    return this.timer(Math.max(min, Math.round((d / speed + 30) / 10) * 10), label);
+  }
+
   // ---- cinemáticas ----
   async cutscene(fn) {
     const g = this.game;
@@ -609,7 +616,7 @@ export class Missions {
           await c.until(() => G.vehicle === chata && P.vehicle === chata);
           chata.blip = null;
           c.help('Con el temporal, el viento empuja los autos hacia el <b>Este</b>. Contravolanteá.', 6);
-          const tm = c.timer(240, 'CAMBIO DE TURNO');
+          const tm = c.timerTo(POI.yacimiento.x + 20, POI.yacimiento.z + 20, 'CAMBIO DE TURNO', 15);
           await c.goTo(POI.yacimiento.x + 20, POI.yacimiento.z + 20, { text: 'Llevá al Petroca al <b>campamento de Pampa del Castillo</b>.', vehicle: chata, radius: 8 });
           tm.stop();
           await c.cutscene(async () => {
@@ -688,7 +695,7 @@ export class Missions {
           chase.ai.ram = false;
           g.traffic.cars.push(chase);
           chase.blip = '#ff3030';
-          c.timer(210, 'CLÁSICO');
+          c.timerTo(mx, mz, 'CLÁSICO', 16);
           await c.goTo(mx, mz, { text: 'Llevá el trapo a <b>La Madriguera</b> antes del clásico.', radius: 3 });
           // colgar el trapo
           const banner = new THREE.Mesh(new THREE.PlaneGeometry(22, 3.2), new THREE.MeshBasicMaterial({ map: signTexture(['LA BANDA DEL LOBO'], { w: 1024, h: 150, bg: '#f4f4f4', fg: '#1c2f6b', borderColor: '#1c2f6b' }), side: THREE.DoubleSide }));

@@ -40,7 +40,7 @@ export function findPortPier(terrain) {
   if (!port) return null;
   let best = null, bl = 0;
   for (const p of META.piers || []) {
-    if (Math.min(...p.map((q) => Math.hypot(q[0] - port.x, q[1] - port.z))) > 1500) continue;
+    if (Math.min(...p.map((q) => Math.hypot(q[0] - port.x, q[1] - port.z))) > 3000) continue;
     const e0 = p[0], e1 = p[p.length - 1];
     if (Math.min(terrain.heightAt(e0[0], e0[1]), terrain.heightAt(e1[0], e1[1])) > -1) continue;
     let L = 0;

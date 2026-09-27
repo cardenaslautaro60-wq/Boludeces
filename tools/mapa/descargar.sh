@@ -4,10 +4,11 @@
 #   - relieve (tiles "terrarium" públicos de AWS, zoom 13)
 #   - huellas de edificios de Microsoft Global ML Building Footprints (ODbL), tiles 212013113 y 212102002
 #   - edificios y comercios cargados en OpenStreetMap (tipo, pisos, nombres)
+#   - imagen satelital Sentinel-2 cloudless 2016 de EOX (CC BY 4.0), zoom 13, para satelite.py
 # Uso: tools/mapa/descargar.sh [carpeta]   (por defecto tools/mapa/cache)
 set -euo pipefail
 DIR="${1:-$(dirname "$0")/cache}"
-mkdir -p "$DIR/dem"
+mkdir -p "$DIR/dem" "$DIR/sat"
 OVERPASS="${OVERPASS:-https://overpass.kumi.systems/api/interpreter}"
 BBOX="-45.99,-67.72,-45.69,-67.33"
 WIDE="-46.00,-67.75,-45.68,-67.30"
@@ -51,6 +52,12 @@ with open(os.path.join(d, 'dem', 'list.txt'), 'w') as f:
             f.write(f'url = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"\noutput = "{d}/dem/{x}_{y}.png"\n')
 with open(os.path.join(d, 'dem', 'tiles.txt'), 'w') as f:
     f.write(f'{z} {x0} {x1} {y0} {y1}\n')
+# la foto satelital cubre un tile más para cada lado (el borde del terreno)
+with open(os.path.join(d, 'sat', 'list.txt'), 'w') as f:
+    for x in range(x0 - 1, x1 + 2):
+        for y in range(y0 - 1, y1 + 2):
+            f.write(f'url = "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless_3857/default/g/{z}/{y}/{x}.jpg"\noutput = "{d}/sat/{x}_{y}.jpg"\n')
 EOF
 curl -sS -m 600 -K "$DIR/dem/list.txt" --parallel --parallel-max 8
+curl -sS -m 600 -K "$DIR/sat/list.txt" --parallel --parallel-max 4
 echo "Listo: $DIR"

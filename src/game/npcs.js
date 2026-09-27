@@ -174,6 +174,9 @@ export class NPCs {
   startErrand(N, x, z, time, text, onDone, vehicle) {
     const g = this.game;
     this.cancelErrand();
+    // tiempo según la distancia (las del mapa a escala real son largas)
+    const p = g.player.vehicle ? g.player.vehicle.pos : g.player.pos;
+    time = Math.max(time * 0.5, Math.round((Math.hypot(x - p.x, z - p.z) * 1.4 / 15 + 40) / 10) * 10);
     const m = new Marker(g, x, z, 0x40c0ff, { r: vehicle ? 3.2 : 1.6, h: 1.4 });
     const blip = { x, z, color: '#40c0ff', size: 8, edge: true };
     g.blips.push(blip);

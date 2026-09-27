@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { WORLD, POI, FRAME, fromAB } from '../world/mapdata.js';
+import { WORLD, POI, FRAME, fromAB, satColor } from '../world/mapdata.js';
 import { formatMoney, clamp } from '../util.js';
 import { WEAPONS } from '../game/weapons.js';
 
@@ -98,37 +98,29 @@ export class HUD {
     this.buildMapImage();
   }
 
-  // Imagen del mapa completo en el marco rotado (A a lo largo de la costa, B tierra adentro)
-  buildMapImage() {
-    const g = this.game;
-    const S = 4;
-    const F = FRAME;
-    const W = Math.ceil((F.a1 - F.a0) / S), H = Math.ceil((F.b1 - F.b0) / S);
-    const c = document.createElement('canvas');
-    c.width = W; c.height = H;
-    const ctx = c.getContext('2d');
-    const img = ctx.createImageData(W, H);
-    const t = g.terrain;
-    for (let j = 0; j < H; j++) {
-      const b = F.b0 + j * S;
-      for (let i = 0; i < W; i++) {
-        const a = F.a0 + i * S;
-        const [x, z] = fromAB(a, b);
-        const h = t.heightAt(x, z);
-        let r, gg, bl;
-        if (h < -0.3) { const d = clamp(-h / 12, 0, 1); r = 70 - d * 25; gg = 104 - d * 30; bl = 140 - d * 25; }
-        else if (h < 4 && t.seaDist(x, z) < 50) { r = 196; gg = 186; bl = 150; }
-        else {
-          const k = clamp(h / 160, 0, 1);
-          r = 158 - k * 30; gg = 150 - k * 24; bl = 118 - k * 26;
-        }
-        const o = (j * W + i) * 4;
-        img.data[o] = r; img.data[o + 1] = gg; img.data[o + 2] = bl; img.data[o + 3] = 255;
-      }
-    }
-    ctx.putImageData(img, 0, 0);
-    // de mundo a imagen
-    const tp = (x, z) => [((x * F.ux + z * F.uz) - F.a0) / S, ((x * F.vx + z * F.vz) - F.b0) / S];
+  // Color del mapa según la altura (mar, costa, estepa y meseta)
+  mapColor(x, z) {
+    const t = this.game.terrain;
+    const h = t.heightAt(x, z);
+    if (h < -0.3) { const d = clamp(-h / 12, 0, 1); return [70 - d * 25, 104 - d * 30, 140 - d * 25]; }
+    if (h < 4 && t.seaDist(x, z) < 50) return [196, 186, 150];
+    const k = clamp(h / 160, 0, 1);
+    const c = [158 - k * 30, 150 - k * 24, 118 - k * 26];
+    // el color real del suelo (foto satelital), un poco apagado para que se lean calles y casas
+    const s = satColor(x, z, this._satC || (this._satC = [0, 0, 0]));
+    if (s) for (let i = 0; i < 3; i++) c[i] = c[i] * 0.45 + s[i] * 0.55 * 235;
+    return c;
+  }
+
+  // Plazas, edificios y calles sobre un mapa. tp: mundo -> píxel; mpp: metros por píxel;
+  // box: [a0, a1, b0, b1] para dibujar solo esa parte (null = todo)
+  paintMap(ctx, tp, mpp, box) {
+    const g = this.game, F = FRAME;
+    const inBox = (x, z, pad) => {
+      if (!box) return true;
+      const a = x * F.ux + z * F.uz, b = x * F.vx + z * F.vz;
+      return a > box[0] - pad && a < box[1] + pad && b > box[2] - pad && b < box[3] + pad;
+    };
     const poly = (pts, fill) => {
       ctx.fillStyle = fill;
       ctx.beginPath();
@@ -136,41 +128,157 @@ export class HUD {
       ctx.closePath(); ctx.fill();
     };
     for (const ar of g.zones.areas) {
+      if (box && !inBox(ar.centroid[0], ar.centroid[1], 600)) continue;
       if (ar.kind === 'plaza' || ar.kind === 'cancha') poly(ar.pts, 'rgba(80,120,60,0.9)');
       else if (ar.kind === 'industrial') poly(ar.pts, 'rgba(120,112,120,0.45)');
     }
-    // casas y edificios
-    ctx.fillStyle = 'rgba(95,92,84,0.7)';
-    if (g.city.footprints) {
-      // huellas reales, con su forma y orientación
-      for (const o of g.city.footprints) {
+    // casas y edificios, con su forma y orientación
+    ctx.fillStyle = mpp < 3 ? 'rgba(120,114,104,0.95)' : 'rgba(95,92,84,0.7)';
+    const list = box ? this.footprintsIn(box) : g.city.footprints || [];
+    for (const o of list) {
+      const bx = -o.az, bz = o.ax;
+      ctx.beginPath();
+      for (const [s1, t1] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+        const [u, v] = tp(o.cx + o.ax * o.hw * s1 + bx * o.hd * t1, o.cz + o.az * o.hw * s1 + bz * o.hd * t1);
+        if (s1 === -1 && t1 === -1) ctx.moveTo(u, v); else ctx.lineTo(u, v);
+      }
+      ctx.closePath(); ctx.fill();
+    }
+    if (mpp < 3) {
+      ctx.strokeStyle = 'rgba(60,56,50,0.8)'; ctx.lineWidth = 1;
+      for (const o of list) {
         const bx = -o.az, bz = o.ax;
         ctx.beginPath();
         for (const [s1, t1] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
           const [u, v] = tp(o.cx + o.ax * o.hw * s1 + bx * o.hd * t1, o.cz + o.az * o.hw * s1 + bz * o.hd * t1);
           if (s1 === -1 && t1 === -1) ctx.moveTo(u, v); else ctx.lineTo(u, v);
         }
-        ctx.closePath(); ctx.fill();
+        ctx.closePath(); ctx.stroke();
       }
-    } else for (const it of g.city.houses.items) {
-      const [u, v] = tp(it.cx, it.cz);
-      const s = Math.max(1.2, (it.hw + it.hd) / S);
-      ctx.fillRect(u - s / 2, v - s / 2, s, s);
     }
     // calles
+    const edges = box ? this.edgesIn(box) : g.roads.edges;
     ctx.lineCap = 'round';
     for (const pass of [0, 1]) {
-      for (const e of g.roads.edges) {
+      for (const e of edges) {
         const A = g.roads.nodes[e.a], B = g.roads.nodes[e.b];
         const dirt = e.kind === 'tierra';
         ctx.strokeStyle = pass === 0 ? 'rgba(40,40,40,0.7)' : dirt ? '#b8a07a' : e.kind === 'ruta' ? '#f0e6c0' : e.kind === 'avenida' ? '#ece6d2' : '#dcd8cc';
-        ctx.lineWidth = (e.width / S) * (pass === 0 ? 1.5 : 1) + (pass === 0 ? 1 : 0);
+        ctx.lineWidth = (e.width / mpp) * (pass === 0 ? 1.4 : 1) + (pass === 0 ? 1 : 0);
         const [u0, v0] = tp(A.x, A.z), [u1, v1] = tp(B.x, B.z);
         ctx.beginPath(); ctx.moveTo(u0, v0); ctx.lineTo(u1, v1); ctx.stroke();
       }
     }
+  }
+
+  // Imagen del mapa completo en el marco rotado (A a lo largo de la costa, B tierra adentro).
+  // El mapa a escala real es grande: la imagen general va a unos 7 m por píxel y de cerca se
+  // dibujan mosaicos nítidos (ver drawDetail)
+  buildMapImage() {
+    const F = FRAME;
+    const S = Math.max(4, Math.ceil(Math.max(F.a1 - F.a0, F.b1 - F.b0) / 3600));
+    const W = Math.ceil((F.a1 - F.a0) / S), H = Math.ceil((F.b1 - F.b0) / S);
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const ctx = c.getContext('2d');
+    const img = ctx.createImageData(W, H);
+    for (let j = 0; j < H; j++) {
+      const b = F.b0 + j * S;
+      for (let i = 0; i < W; i++) {
+        const [x, z] = fromAB(F.a0 + i * S, b);
+        const col = this.mapColor(x, z);
+        const o = (j * W + i) * 4;
+        img.data[o] = col[0]; img.data[o + 1] = col[1]; img.data[o + 2] = col[2]; img.data[o + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    const tp = (x, z) => [((x * F.ux + z * F.uz) - F.a0) / S, ((x * F.vx + z * F.vz) - F.b0) / S];
+    this.paintMap(ctx, tp, S, null);
     this.mapImg = c;
     this.mapScale = S;
+    this.detail = new Map();
+  }
+
+  // Huellas de edificios y calles de una zona del marco (con grilla para buscar rápido)
+  footprintsIn(box) {
+    const F = FRAME, G = 256;
+    if (!this.fpGrid) {
+      this.fpGrid = new Map();
+      for (const o of this.game.city.footprints || []) {
+        const a = o.cx * F.ux + o.cz * F.uz, b = o.cx * F.vx + o.cz * F.vz;
+        const k = Math.floor(a / G) * 100000 + Math.floor(b / G);
+        let l = this.fpGrid.get(k); if (!l) this.fpGrid.set(k, (l = [])); l.push(o);
+      }
+    }
+    const out = [];
+    for (let i = Math.floor((box[0] - 40) / G); i <= Math.floor((box[1] + 40) / G); i++) for (let j = Math.floor((box[2] - 40) / G); j <= Math.floor((box[3] + 40) / G); j++) {
+      const l = this.fpGrid.get(i * 100000 + j); if (l) out.push(...l);
+    }
+    return out;
+  }
+
+  edgesIn(box) {
+    const g = this.game, R = g.roads, G = 64;
+    const cs = [[box[0], box[2]], [box[1], box[2]], [box[0], box[3]], [box[1], box[3]]].map(([a, b]) => fromAB(a, b));
+    const xs = cs.map((c) => c[0]), zs = cs.map((c) => c[1]);
+    const seen = new Set(), out = [];
+    for (let gi = Math.floor((Math.min(...xs) - 30) / G); gi <= Math.floor((Math.max(...xs) + 30) / G); gi++) {
+      for (let gj = Math.floor((Math.min(...zs) - 30) / G); gj <= Math.floor((Math.max(...zs) + 30) / G); gj++) {
+        const arr = R.edgeGrid.get(gi * 100000 + gj);
+        if (!arr) continue;
+        for (const e of arr) if (!seen.has(e)) { seen.add(e); out.push(e); }
+      }
+    }
+    return out;
+  }
+
+  // Mosaico nítido del mapa (1024 m a 2 m por píxel), armado cuando se necesita
+  detailTile(ti, tj) {
+    const key = ti * 1000 + tj;
+    let t = this.detail.get(key);
+    if (t) { this.detail.delete(key); this.detail.set(key, t); return t; }
+    const F = FRAME, TM = 1024, MPP = 2, PX = TM / MPP;
+    const a0 = F.a0 + ti * TM, b0 = F.b0 + tj * TM;
+    const c = document.createElement('canvas'); c.width = c.height = PX;
+    const ctx = c.getContext('2d');
+    // fondo: colores del terreno a 8 m por píxel, suavizados
+    const sm = document.createElement('canvas'); sm.width = sm.height = TM / 8;
+    const sctx = sm.getContext('2d'), img = sctx.createImageData(TM / 8, TM / 8);
+    for (let j = 0; j < TM / 8; j++) for (let i = 0; i < TM / 8; i++) {
+      const [x, z] = fromAB(a0 + (i + 0.5) * 8, b0 + (j + 0.5) * 8);
+      const col = this.mapColor(x, z), o = (j * (TM / 8) + i) * 4;
+      img.data[o] = col[0]; img.data[o + 1] = col[1]; img.data[o + 2] = col[2]; img.data[o + 3] = 255;
+    }
+    sctx.putImageData(img, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(sm, 0, 0, PX, PX);
+    const tp = (x, z) => [((x * F.ux + z * F.uz) - a0) / MPP, ((x * F.vx + z * F.vz) - b0) / MPP];
+    this.paintMap(ctx, tp, MPP, [a0, a0 + TM, b0, b0 + TM]);
+    t = { c, a0, b0, MPP };
+    this.detail.set(key, t);
+    // se guardan los 12 últimos
+    while (this.detail.size > 12) this.detail.delete(this.detail.keys().next().value);
+    return t;
+  }
+
+  // Dibuja los mosaicos nítidos alrededor de (cx, cz) en un radio (m). El contexto ya está en
+  // metros relativos a (cx, cz). Arma como mucho `budget` mosaicos nuevos por llamada.
+  drawDetail(ctx, cx, cz, radius, budget = 1) {
+    const F = FRAME, TM = 1024;
+    const a = cx * F.ux + cz * F.uz, b = cx * F.vx + cz * F.vz;
+    for (let ti = Math.floor((a - radius - F.a0) / TM); ti <= Math.floor((a + radius - F.a0) / TM); ti++) {
+      for (let tj = Math.floor((b - radius - F.b0) / TM); tj <= Math.floor((b + radius - F.b0) / TM); tj++) {
+        if (ti < 0 || tj < 0 || F.a0 + ti * TM > F.a1 || F.b0 + tj * TM > F.b1) continue;
+        const key = ti * 1000 + tj;
+        if (!this.detail.has(key)) { if (budget <= 0) continue; budget--; }
+        const t = this.detailTile(ti, tj);
+        const [x0, z0] = fromAB(t.a0, t.b0);
+        ctx.save();
+        ctx.transform(t.MPP * F.ux, t.MPP * F.uz, t.MPP * F.vx, t.MPP * F.vz, x0 - cx, z0 - cz);
+        ctx.drawImage(t.c, 0, 0);
+        ctx.restore();
+      }
+    }
   }
 
   // Transformación de la imagen del mapa a coordenadas del mundo relativas a (cx, cz)
@@ -325,8 +433,11 @@ export class HUD {
     // Rotar para que "adelante" de la cámara quede arriba
     ctx.rotate(Math.PI + yaw);
     ctx.scale(scale, scale);
+    ctx.save();
     this.mapTransform(ctx, px, pz);
     ctx.drawImage(this.mapImg, 0, 0);
+    ctx.restore();
+    this.drawDetail(ctx, px, pz, range * 1.45, 1);
     ctx.restore();
     // blips
     const toRadar = (x, z) => {

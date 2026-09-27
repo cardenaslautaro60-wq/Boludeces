@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { World } from '../world/world.js';
 import { Environment } from '../world/sky.js';
-import { WORLD, POI, SPAWNS } from '../world/mapdata.js';
+import { WORLD, POI, SPAWNS, META, FRAME } from '../world/mapdata.js';
 import { Effects } from '../render/effects.js';
 import { Post } from '../render/post.js';
 import { STYLE } from '../render/style.js';
@@ -243,6 +243,8 @@ export class Game {
       mission(id) { const d = g.missions.list.find((m) => m.id === id); if (d) g.missions.start(d); },
       car(key) { return g.cheats.spawnNear(key); },
       poi: POI,
+      bands: META.bands,
+      frame: FRAME,
       // Auditoría de colisiones: rayos hacia abajo en una grilla alrededor de (cx, cz); donde
       // hay algo sólido de más de 1 m sobre el piso y ningún colisionador, lo informa
       collisionAudit(cx, cz, R = 250, step = 3) {

@@ -1,8 +1,9 @@
 // Datos del mapa de Comodoro Rivadavia (año 2004), generados desde OpenStreetMap y el relieve real
 // con tools/mapa/build_map.py. Coordenadas en metros: +X = Este, +Z = Sur (el Norte está hacia -Z).
-// Las zonas urbanas conservan su forma real a escala 0,55; los tramos vacíos de ruta entre ellas
-// están comprimidos, como hizo Rockstar con Los Santos.
+// Toda la ciudad construida está a tamaño real (1 m del juego = 1 m de Comodoro); solo se
+// comprimen el tramo casi vacío antes de Caleta, el mar abierto y el fondo de la meseta.
 import { MAP_META, MAP_BLOB } from './comodoro-data.js';
+import { SAT_META, SAT_JPG } from './comodoro-sat.js';
 
 export const META = MAP_META;
 export const SEA_LEVEL = 0;
@@ -57,8 +58,41 @@ export async function loadMapData() {
   const buf = await new Response(stream).arrayBuffer();
   const T = { i2: Int16Array, u2: Uint16Array, u4: Uint32Array, i4: Int32Array, u1: Uint8Array, i1: Int8Array };
   for (const [name, s] of Object.entries(MAP_META.sections)) MAP[name] = new T[s.t](buf, s.off, s.n);
+  MAP.sat = await decodeSat();
   MAP.ready = true;
   return MAP;
+}
+
+// Colores reales del suelo (Sentinel-2 cloudless 2016 de EOX, CC BY 4.0) en el marco del juego,
+// un píxel cada 20 m: manchas de mata, salitrales, picadas y locaciones petroleras
+async function decodeSat() {
+  try {
+    const bmp = await createImageBitmap(new Blob([b64ToBytes(SAT_JPG)], { type: 'image/jpeg' }), { colorSpaceConversion: 'none', premultiplyAlpha: 'none' });
+    const c = document.createElement('canvas');
+    c.width = bmp.width; c.height = bmp.height;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.drawImage(bmp, 0, 0);
+    if (bmp.close) bmp.close();
+    return g.getImageData(0, 0, c.width, c.height).data;
+  } catch (e) {
+    console.warn('sin colores satelitales', e);
+    return null;
+  }
+}
+
+// Color satelital (sRGB 0..1) en un punto del mundo; null si no hay imagen
+export function satColor(x, z, out = [0, 0, 0]) {
+  const d = MAP.sat;
+  if (!d) return null;
+  const S = SAT_META;
+  const fi = Math.min(S.w - 1.001, Math.max(0, (x * F.ux + z * F.uz - S.a0) / S.cell));
+  const fj = Math.min(S.h - 1.001, Math.max(0, (x * F.vx + z * F.vz - S.b0) / S.cell));
+  const i = Math.floor(fi), j = Math.floor(fj), u = fi - i, v = fj - j;
+  const k00 = (j * S.w + i) * 4, k10 = k00 + 4, k01 = k00 + S.w * 4, k11 = k01 + 4;
+  for (let c = 0; c < 3; c++) {
+    out[c] = ((d[k00 + c] * (1 - u) + d[k10 + c] * u) * (1 - v) + (d[k01 + c] * (1 - u) + d[k11 + c] * u) * v) / 255;
+  }
+  return out;
 }
 
 // Puntos de interés. Los reales salen de OSM; los ficticios (La Tuerca, Don Tito, la Torre Crudo...)

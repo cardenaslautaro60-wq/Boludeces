@@ -3,7 +3,7 @@ import * as THREE from 'three';
 // Acumulador de geometría: agrega cajas, prismas, etc. con color por vértice y UV en metros.
 export class GeoBuilder {
   constructor() {
-    this.cap = 1024;
+    this.cap = 64;
     this.n = 0;
     this.pos = new Float32Array(this.cap * 3);
     this.nrm = new Float32Array(this.cap * 3);
@@ -125,16 +125,26 @@ export class GeoBuilder {
     }
   }
 
-  toGeometry() {
+  // compacta: normales en 8 bits y colores en 16 bits (lineales), la mitad de memoria
+  toGeometry(compact = false) {
     const g = new THREE.BufferGeometry();
     const n = this.n;
     g.setAttribute('position', new THREE.BufferAttribute(this.pos.slice(0, n * 3), 3));
-    g.setAttribute('normal', new THREE.BufferAttribute(this.nrm.slice(0, n * 3), 3));
     g.setAttribute('uv', new THREE.BufferAttribute(this.uv.slice(0, n * 2), 2));
-    g.setAttribute('color', new THREE.BufferAttribute(this.col.slice(0, n * 3), 3));
+    if (compact) {
+      const N = new Int8Array(n * 3), C = new Uint16Array(n * 3);
+      for (let i = 0; i < n * 3; i++) { N[i] = Math.round(this.nrm[i] * 127); C[i] = Math.round(Math.min(1, Math.max(0, this.col[i])) * 65535); }
+      g.setAttribute('normal', new THREE.BufferAttribute(N, 3, true));
+      g.setAttribute('color', new THREE.BufferAttribute(C, 3, true));
+    } else {
+      g.setAttribute('normal', new THREE.BufferAttribute(this.nrm.slice(0, n * 3), 3));
+      g.setAttribute('color', new THREE.BufferAttribute(this.col.slice(0, n * 3), 3));
+    }
     g.computeBoundingSphere();
     return g;
   }
+
+  free() { this.pos = this.nrm = this.uv = this.col = null; this.cap = 0; }
 }
 
 // Agrupa GeoBuilders por "chunk" espacial y material
@@ -150,21 +160,24 @@ export class ChunkedGeo {
     return b.gb;
   }
   build(materials, parent) {
-    for (const { mat, gb } of this.map.values()) {
+    for (const b of this.map.values()) {
+      const { mat, gb } = b;
       if (!gb.count) continue;
-      const m = new THREE.Mesh(gb.toGeometry(), materials[mat]);
+      const m = new THREE.Mesh(gb.toGeometry(true), materials[mat]);
+      gb.free();
       m.matrixAutoUpdate = false;
       m.castShadow = true;
       m.receiveShadow = true;
       parent.add(m);
     }
+    this.map.clear();
   }
 }
 
 // Geometría liviana para el piso (calles, veredas): posición, UV y normal en 8 bits
 export class LeanBuilder {
   constructor() {
-    this.cap = 1024; this.n = 0;
+    this.cap = 64; this.n = 0;
     this.pos = new Float32Array(this.cap * 3);
     this.uv = new Float32Array(this.cap * 2);
     this.nrm = new Int8Array(this.cap * 3);
@@ -222,6 +235,7 @@ export class LeanChunks {
     for (const { mat, lb } of this.map.values()) {
       if (!lb.count) continue;
       const m = new THREE.Mesh(lb.toGeometry(), materials[mat]);
+      lb.pos = lb.uv = lb.nrm = null;
       m.matrixAutoUpdate = false;
       m.receiveShadow = true;
       if (opts.order && opts.order[mat] !== undefined) m.renderOrder = opts.order[mat];
