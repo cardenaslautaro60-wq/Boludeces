@@ -242,8 +242,9 @@ export class Missions {
     const next = this.list.find((d) => !this.done.includes(d.id) && d.start);
     if (!next) return;
     const pos = next.start();
-    const marker = new Marker(g, pos.x, pos.z, 0xffd21a, { r: 1.3 });
-    const blip = { x: pos.x, z: pos.z, letter: next.giver, bg: next.giver === 'N' ? '#1c2f6b' : '#c89a10', name: next.giver === 'N' ? 'Misión de Newbery' : 'Misión del Petroca', legend: true };
+    const marker = new Marker(g, pos.x, pos.z, 0xffd21a, { r: 1.5 });
+    // como en el San Andreas, el ícono de la próxima misión queda en el borde del radar aunque esté lejos
+    const blip = { x: pos.x, z: pos.z, letter: next.giver, bg: next.giver === 'N' ? '#1c2f6b' : '#c89a10', name: `Misión: ${next.title}`, legend: true, edge: true };
     g.blips.push(blip);
     this.starters.push({ def: next, marker, blip });
   }
@@ -261,6 +262,7 @@ export class Missions {
     for (const s of this.starters) {
       s.marker.update(dt);
       const p = g.player;
+      if (p.vehicle && s.marker.contains(p.pos, 2.5)) { g.hud.showHelp('Bajate del vehículo y pisá el círculo amarillo para empezar la misión.', 2); continue; }
       if (!p.vehicle && s.marker.contains(p.pos) && !g.respawning) {
         if (g.police.level > 0) { g.hud.showHelp('Perdé a la cana antes de empezar la misión.', 3); continue; }
         if (s.def.needGordopin && p !== g.gordopin) { g.hud.showHelp('Esta misión la arranca el <b>Gordopin</b>. Apretá TAB para cambiar.', 3); continue; }
@@ -280,7 +282,11 @@ export class Missions {
     g.hud.missionTitle(def.title, 4);
     g.activities.remis && g.activities.stopRemis('Arrancó una misión.');
     // fallas comunes
-    if (def.needPetroca) ctx.failIf(() => g.petroca.dead, '¡Mataron al Petroca!');
+    if (def.needPetroca) {
+      // el Petroca se suma en la intro; si por algo no está (partida vieja), aparece al lado
+      if (!g.companionActive) g.setCompanionActive(true, g.player.pos.x + 2, g.player.pos.z + 2);
+      ctx.failIf(() => g.petroca.dead, '¡Mataron al Petroca!');
+    }
     try {
       await def.run(ctx, g);
       this.pass(ctx, def);
@@ -318,6 +324,7 @@ export class Missions {
     if (g.respawning) { setTimeout(() => this.showFail(reason), 5200); return; }
     g.hud.bigText('¡MISIÓN FALLIDA!', reason, 4.5, 'red');
     g.audio.missionFailed();
+    setTimeout(() => { if (!this.active) g.hud.showHelp('Para intentarlo de nuevo, volvé al <b>círculo amarillo</b> de la misión (su ícono queda en el borde del radar).', 7); }, 4800);
   }
 
   fail(reason, silent = false) {
@@ -450,7 +457,8 @@ export class Missions {
           P.brain = new Brain(g, P, 'follow');
           c.help(`El <b>Petroca</b> ahora te acompaña: ${g.key('switchChar')} para jugar con él. Las misiones con la <b>P</b> amarilla te las da el Petroca.`, 8);
         },
-        start: null,
+        // si la intro sale mal, se vuelve a empezar desde el semáforo de San Martín
+        start: () => { const S = POI.semaforo; const c = (S && (S.corner || S)) || M().casaAbuela; return { x: c.x, z: c.z }; },
       },
       // ------------------------------------------------------------------
       {

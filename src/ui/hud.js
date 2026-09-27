@@ -301,7 +301,7 @@ export class HUD {
     this.radio.style.color = g.audio ? g.audio.stationColor(g.player.vehicle ? g.player.vehicle.radio : 0) : '#fff';
     this.radio.classList.remove('show'); void this.radio.offsetWidth; this.radio.classList.add('show');
   }
-  showHelp(text, dur = 6) { this.help.innerHTML = text; this.help.classList.add('show'); this.helpT = dur; }
+  showHelp(text, dur = 6) { if (this.helpText !== text || !this.help.classList.contains('show')) { this.help.innerHTML = text; this.helpText = text; } this.help.classList.add('show'); this.helpT = dur; }
   hideHelp() { this.help.classList.remove('show'); this.helpT = 0; }
   subtitle(text, dur = 4) { this.sub.innerHTML = text; this.sub.classList.add('show'); this.subT = dur; }
   clearSubtitle() { this.sub.classList.remove('show'); this.subT = 0; }
