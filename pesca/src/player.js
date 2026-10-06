@@ -350,7 +350,11 @@ function abrirCofre(id) {
   const plata = randi(c.premio[0], c.premio[1]);
   G.plata += plata;
   let extra = '';
-  if (chance(0.35)) { const it = pick([['dinamita', 3], ['botiquin', 1], ['carnada', 1], ['vendas', 3], ['empanada', 3]]); darItem(it[0], it[1]); extra = ` y ${it[1]} ${ITEMS[it[0]].nombre}`; }
+  const arsenal = c.isla === 'arsenal';
+  if (chance(arsenal ? 0.7 : 0.35)) {
+    const it = pick(arsenal ? [['balas', 30], ['cartuchos', 12], ['cohetes', 2], ['botiquin', 2], ['dinamita', 4], ['elixir', 1]] : [['dinamita', 3], ['botiquin', 1], ['carnada', 1], ['vendas', 3], ['empanada', 3]]);
+    darItem(it[0], it[1]); extra = ` y ${it[1]} ${ITEMS[it[0]].nombre}`;
+  }
   mostrarHallazgo({ titulo: '¡Cofre enterrado!', icono: 'cofre', texto: 'Estaba bajo la arena. Vuelve a llenarse mañana.' + (extra ? ' Había' + extra + '.' : ''), plata, oro: true });
   sfx('tesoro');
   const p = pecho();

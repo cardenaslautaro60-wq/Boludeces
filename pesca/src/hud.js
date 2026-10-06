@@ -42,13 +42,14 @@ function crearHUD() {
     <button class="t-btn" id="t-inter">E</button>
     <button class="t-btn" id="t-arpon">🔱</button>
     <button class="t-btn" id="t-dina">🧨</button>
+    <button class="t-btn" id="t-arma" hidden>🔫</button>
   </div>
   `;
   HUD.el = {
     vida: $('#b-vida'), tVida: $('#t-vida'), ham: $('#b-ham'), tHam: $('#t-ham'), mochila: $('#t-mochila'), buffs: $('#buffs'), mision: $('#mision'),
     plata: $('#t-plata'), reloj: $('#reloj'), jefe: $('#jefe'), jNombre: $('#j-nombre'), jFill: $('#j-fill'), jFase: $('#j-fase'),
     tension: $('#tension'), tNombre: $('#t-nombre'), tDist: $('#t-dist-fill'), tPez: $('#t-pez'), tAguja: $('#t-aguja'), tCans: $('#t-cans'), tAviso: $('#t-aviso'),
-    aviso: $('#aviso-int'), hotbar: $('#hotbar'), toasts: $('#toasts'), zona: $('#t-zona'), chipBote: $('#chip-bote'), tBote: $('#t-bote'), touch: $('#touch'), tAccion: $('#t-accion'),
+    aviso: $('#aviso-int'), hotbar: $('#hotbar'), toasts: $('#toasts'), zona: $('#t-zona'), chipBote: $('#chip-bote'), tBote: $('#t-bote'), touch: $('#touch'), tAccion: $('#t-accion'), tArma: $('#t-arma'),
   };
   HUD.miniCv = $('#mini');
   r.addEventListener('click', (e) => {
@@ -104,6 +105,7 @@ function construirTactil() {
   pres('#t-inter', () => { IN.interTactil = true; });
   pres('#t-arpon', () => { elegirHerramienta('arpon'); IN.arponTactil = true; });
   pres('#t-dina', () => { elegirHerramienta('dinamita'); IN.dinaTactil = true; });
+  pres('#t-arma', () => { elegirHerramienta('arma'); });
   const tac = (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches) || 'ontouchstart' in window;
   if (tac) IN.tactil = true;
 }
@@ -180,7 +182,8 @@ function actualizarHUD(dt) {
   if (C.av !== av) { C.av = av; e.aviso.innerHTML = av; e.aviso.hidden = !av; }
   // zona y bote
   const zid = zonaDe(distCosta(P.pos.x, P.pos.z));
-  const ztxt = P.pos.y > 0.4 && H(P.pos.x, P.pos.z) > 0 ? 'Isla Anzuelo' : ZONA[zid].nombre;
+  const isla = islaDe(P.pos.x, P.pos.z, 36);
+  const ztxt = isla && isla.nivel === 2 ? 'Nivel 2 · ' + isla.nombre : P.pos.y > 0.4 && H(P.pos.x, P.pos.z) > 0 ? 'Isla Anzuelo' : ZONA[zid].nombre;
   if (C.zona !== ztxt) { C.zona = ztxt; e.zona.textContent = ztxt; }
   const enBote = P.modo === 'bote' && BOTE.act;
   if (e.chipBote.hidden === enBote) e.chipBote.hidden = !enBote;
@@ -192,8 +195,10 @@ function actualizarHUD(dt) {
   const tacil = IN.tactil && J.modo === 'jugando' && !J.panel;
   if (e.touch.hidden === tacil) e.touch.hidden = !tacil;
   if (tacil) {
-    const ic = LINEA.estado === 'picada' ? '❗' : LINEA.estado === 'pelea' || LINEA.estado === 'espera' || LINEA.estado === 'mordisqueo' ? '🌀' : P.tool === 'cana' ? '🎣' : P.tool === 'arpon' ? '🔱' : P.tool === 'red' ? '🕸️' : '🧨';
+    const ic = LINEA.estado === 'picada' ? '❗' : LINEA.estado === 'pelea' || LINEA.estado === 'espera' || LINEA.estado === 'mordisqueo' ? '🌀' : P.tool === 'cana' ? '🎣' : P.tool === 'arpon' ? '🔱' : P.tool === 'red' ? '🕸️' : P.tool === 'arma' ? '🔫' : '🧨';
     if (C.ta !== ic) { C.ta = ic; e.tAccion.textContent = ic; }
+    const conArma = ARMAS.some((q) => G.armas[q.id]);
+    if (e.tArma.hidden === conArma) e.tArma.hidden = !conArma;
   }
   // hotbar
   actualizarHotbar();
@@ -244,6 +249,7 @@ const MAPA = { cv: null, ext: 1400, px: 512 };
 const LUGARES_MAPA = [
   { id: 'mercado', ico: '🐟', n: 'Pescadería' }, { id: 'tienda', ico: '🛒', n: 'Almacén' }, { id: 'casino', ico: '🎰', n: 'Casino' },
   { id: 'cabana', ico: '🏠', n: 'Tu cabaña' }, { id: 'faro', ico: '🗼', n: 'Faro' }, { id: 'fogata', ico: '🔥', n: 'Fogata' },
+  { id: 'armeria', ico: '🔫', n: 'Armería (Nivel 2)' },
 ];
 function construirMapaBase() {
   if (MAPA.cv || !MAR.tex) return;
@@ -398,6 +404,11 @@ function mostrarDesmayo() {
   });
 }
 
+function bannerNivel(titulo, sub, texto) {
+  const v = h('div', 'banner-jefe nivel', `<b>${esc(titulo)}</b><span>${esc(sub)}</span><em>${esc(texto)}</em>`, $('#app'));
+  setTimeout(() => v.classList.add('sale'), 4200);
+  setTimeout(() => v.remove(), 4700);
+}
 function bannerJefe(d) {
   const v = h('div', 'banner-jefe', `<b>${esc(d.nombre)}</b><span>${esc(d.apodo)}</span><em>${esc(d.consejo)}</em>`, $('#app'));
   setTimeout(() => v.classList.add('sale'), 3000);

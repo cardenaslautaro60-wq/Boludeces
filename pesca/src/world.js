@@ -33,6 +33,14 @@ function radioPolar(is, th) {
   const f = (th / TAU) * POLAR_N, i = Math.floor(f);
   return is.tab[i] + (is.tab[i + 1] - is.tab[i]) * (f - i);
 }
+// Isla en la que está (o junto a la que está, con margen) un punto del mundo; null si es mar abierto
+function islaDe(x, z, margen = 0) {
+  for (const is of ISLAS) {
+    const dx = x - is.x, dz = z - is.z, r = radioPolar(is, Math.atan2(dz, dx)) + margen;
+    if (dx * dx + dz * dz < r * r) return is;
+  }
+  return null;
+}
 // Punto de la costa de la isla principal en el ángulo th (más un desplazamiento hacia adentro/afuera)
 function puntoCosta(th, d = 0, is = PRINCIPAL) {
   const r = radioPolar(is, th) + d;

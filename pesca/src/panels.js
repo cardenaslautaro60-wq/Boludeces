@@ -6,7 +6,7 @@ const PANELES = {};
 const ACC = {}; // acciones de los botones (data-act)
 
 function abrirLugar(id) {
-  const mapa = { mercado: 'mercado', tienda: 'tienda', casino: 'casino', cabana: 'cabana', faro: 'capitan', fogata: 'fogata', barco: 'barco' };
+  const mapa = { mercado: 'mercado', tienda: 'tienda', casino: 'casino', cabana: 'cabana', faro: 'capitan', fogata: 'fogata', barco: 'barco', armeria: 'armeria' };
   if (mapa[id]) abrirPanel(mapa[id]);
   else if (id === 'cartel') abrirPanel('mapa');
 }
@@ -256,6 +256,62 @@ ACC.comprarMochila = (d) => { const m = MOCHILAS[+d.i]; if (+d.i > G.mochila && 
 ACC.comprarChaleco = (d) => { const m = CHALECOS[+d.i]; if (+d.i > G.chaleco && gasto(m.precio)) { G.chaleco = +d.i; P.hpMax = hpMaxActual(); P.hp = P.hpMax; toast(`${m.nombre}: ${m.hp} de vida`, '#9bffb0'); } };
 
 // ---------------------------------------------------------------------------
+// Armería del Sargento Roca (Nivel 2): armas y munición
+// ---------------------------------------------------------------------------
+const packsFaltan = (m) => Math.max(0, Math.floor((m.max - (G.municion[m.id] || 0)) / m.pack));
+PANELES.armeria = {
+  titulo: 'Armería del Sargento Roca', tabs: [['armas', 'Armas'], ['municion', 'Munición'], ['charla', 'Charla']], tab0: 'armas', clase: 'ancha',
+  render(tab) {
+    if (tab === 'armas') {
+      return '<p class="nota">«Todo lo que ves está probado en el gorila. Bueno, casi todo.» Sacá el arma con <b>5</b>, apuntá con el mouse, disparás con clic y recargás con <b>R</b>.</p>' + ARMAS.map((a) => {
+        const mia = !!G.armas[a.id], mu = MUN_ID[a.mun];
+        let acc;
+        if (mia) acc = G.armaSel === a.id ? '<span class="badge on">En mano</span>' : btn('equiparArma', 'Equipar', { chico: true, d: { id: a.id } });
+        else if (a.jefe) acc = `<span class="badge">Se gana venciendo a ${esc(JEFE[a.jefe].nombre)}</span>`;
+        else acc = btn('comprarArma', `Comprar ${precioTxt(a.precio)}`, { off: G.plata < a.precio, d: { id: a.id } });
+        const stats = `${statBar('Daño', a.dano * a.perdigones, 700)}${statBar('Cadencia', 1 / a.cadencia, 10)}${statBar('Alcance', a.alcance, 180)}${statBar('Cargador', a.cargador, 30)}`;
+        return fila(emo(a.icono, a.color), a.nombre, `${a.desc}<div class="stats">${stats}</div><small>Usa ${mu.icono} ${mu.nombre.toLowerCase()}${mia ? ` · tenés ${G.municion[a.mun] || 0} de reserva` : ''}</small>`, '', acc, G.armaSel === a.id && mia ? 'actual' : '');
+      }).join('');
+    }
+    if (tab === 'municion') {
+      return '<p class="nota">«Cada bala tiene dueño... y precio.» Las armas recargan solas desde tu reserva.</p>' + MUNICION.map((m) => {
+        const n = G.municion[m.id] || 0, lleno = n + m.pack > m.max;
+        const usa = ARMAS.filter((a) => a.mun === m.id).map((a) => a.nombre).join(', ');
+        const llenar = packsFaltan(m);
+        const acc = lleno ? '<span class="badge on">Reserva llena</span>' : btn('comprarMun', `Comprar ${precioTxt(m.precio)}`, { off: G.plata < m.precio, d: { id: m.id } })
+          + (llenar > 1 ? btn('llenarMun', `Llenar (${fmtMoney(llenar * m.precio)})`, { chico: true, cls: 'verde', off: G.plata < m.precio, d: { id: m.id } }) : '');
+        return fila(emo(m.icono), `${m.nombre} ×${m.pack}`, `Para: ${usa}`, `<small>Tenés: ${n}/${m.max}</small>`, acc);
+      }).join('');
+    }
+    const lista = JEFES.filter((j) => j.tierra);
+    const ven = lista.filter((j) => jefeKills(j.id) > 0).length;
+    const frase = ven >= lista.length ? 'Los tres. Ni mis veteranos lo lograron. Te debo una ronda... y unas cuantas balas gratis, que no te pienso dar.'
+      : ven > 0 ? 'Ya probaste sangre de jefe. Ahora venís por más, ¿no? Cuidá la munición: el arma sin balas es un palo.'
+      : Object.keys(G.armas).length ? 'Ya tenés fierro. El gorila duerme al noroeste, entre las ruinas. Esperá a que se canse y pegale con todo cuando quede aturdido.'
+      : 'Recién llegás, ¿eh? Con la caña no vas a ningún lado en esta isla. Elegí un arma y practicá con los peces desde el muelle.';
+    return `<div class="dialogo"><div class="d-cara">${emo('🪖')}</div><div><b>Sargento Roca</b><p>«${esc(frase)}»</p>
+      <p class="chico">Jefes de tierra vencidos: ${ven} de ${lista.length}. Don Gorila vive en la selva, la Reina Escorpión en el pedregal y Draco en la cumbre del volcán. Cada uno suelta mucho dinero... y los dos últimos, su arma.</p></div></div>`
+      + lista.map((j) => fila(emo('☠️', j.color), `${j.nombre} — ${j.apodo}`, `${esc(j.consejo)}`, `${precioTxt(j.precio)}<small>${jefeKills(j.id) > 0 ? 'Vencido ×' + jefeKills(j.id) : 'Sin vencer'}</small>`, '', 'jefe')).join('');
+  },
+};
+ACC.comprarArma = (d) => {
+  const a = ARMA[d.id];
+  if (!a || G.armas[a.id] || a.jefe || !gasto(a.precio)) return;
+  G.armas[a.id] = true; G.cargador[a.id] = a.cargador; G.armaSel = a.id;
+  darItem(a.mun, MUN_ID[a.mun].pack);
+  toast(`¡Compraste ${a.nombre}! Viene con ${MUN_ID[a.mun].pack} ${MUN_ID[a.mun].nombre.toLowerCase()}. Tecla 5 para sacarla.`, '#9bffb0');
+  revisarMisiones();
+};
+ACC.equiparArma = (d) => { if (G.armas[d.id]) { G.armaSel = d.id; P.recarga = null; sfx('click'); } };
+ACC.comprarMun = (d) => { const m = MUN_ID[d.id]; if (m && (G.municion[m.id] || 0) + m.pack <= m.max && gasto(m.precio)) darItem(m.id, m.pack); };
+ACC.llenarMun = (d) => {
+  const m = MUN_ID[d.id];
+  if (!m) return;
+  const n = Math.min(packsFaltan(m), Math.floor(G.plata / m.precio));
+  if (n > 0 && gasto(n * m.precio)) darItem(m.id, n * m.pack);
+};
+
+// ---------------------------------------------------------------------------
 // Cabaña: dormir, guardar, resumen y ajustes
 // ---------------------------------------------------------------------------
 function tiempoJugado() {
@@ -390,13 +446,16 @@ PANELES.bitacora = {
       return html + '</div>';
     }
     if (tab === 'jefes') {
-      return '<p class="nota">Los jefes patrullan el mar alrededor de la isla. Comprá carnada de jefe, armala con B y lanzá cerca de su sombra.</p>' + JEFES.map((j) => {
+      const fj = (j) => {
         const k = jefeKills(j.id);
         const b = BOSSES.find((x) => x.def === j);
         const estado = k > 0 ? `Vencido ×${k}` : G.jefes[j.id] && G.jefes[j.id].visto ? 'Visto' : 'Sin ver';
         const resp = b && b.estado === 'muerto' ? ` · reaparece en ${Math.max(0, Math.ceil(b.respawn))} s` : '';
-        return fila(emo('☠️', j.color), `${j.nombre} — ${j.apodo}`, `${esc(j.intro)}<br><em>${esc(j.consejo)}</em><br>Patrulla a ~${j.d} m de la costa${j.cuando === 'noche' ? ' · solo de noche' : ''} · vida ${fmtNum(j.hp)}`, `${precioTxt(j.precio)}<small>${estado}${resp}</small>`, '', 'jefe');
-      }).join('');
+        const donde = j.tierra ? `Vive en ${esc(j.lugar)}${j.arma ? ` · suelta ${esc(ARMA[j.arma].nombre)}` : ''}` : `Patrulla a ~${j.d} m de la costa${j.cuando === 'noche' ? ' · solo de noche' : ''}`;
+        return fila(emo('☠️', j.color), `${j.nombre} — ${j.apodo}`, `${esc(j.intro)}<br><em>${esc(j.consejo)}</em><br>${donde} · vida ${fmtNum(j.hp)}`, `${precioTxt(j.precio)}<small>${estado}${resp}</small>`, '', 'jefe');
+      };
+      return '<p class="nota">Los jefes del mar patrullan alrededor de la isla: comprá carnada de jefe, armala con B y lanzá cerca de su sombra.</p>' + JEFES.filter((j) => !j.tierra).map(fj).join('')
+        + '<h3>Nivel 2 · Isla Arsenal</h3><p class="nota">Se llega en lancha o pesquero. Duermen hasta que te acercás: peleales con armas, arpón y dinamita.</p>' + JEFES.filter((j) => j.tierra).map(fj).join('');
     }
     return '<p class="nota">El mar se divide en cuatro zonas según qué tan lejos de la costa estés. Cuanto más hondo, más valen los peces... y más fuertes tiran.</p>' + ZONAS.map((z) => {
       const n = ESPECIES.filter((s) => !s.tipo && s.z[z.id]).length;
@@ -480,13 +539,14 @@ PANELES.ayuda = {
       <li><b>Mejorar:</b> en el almacén de Don Anselmo: cañas, partes, arpones, redes, mochilas, ropa y <b>botes</b>.</li>
       <li><b>Mundo abierto:</b> el mar se divide en zonas por distancia a la costa. Con un bote llegás a islotes, naufragios y cofres; cada bote aguanta el mar hasta cierta distancia.</li>
       <li><b>Jefes:</b> comprá carnada de jefe, armala, lanzá cerca de su sombra y pelealos. Esquivá las zonas rojas y pegales con arpón o dinamita cuando queden aturdidos.</li>
+      <li><b>Nivel 2:</b> la Isla Arsenal está más allá del mar abierto: se llega en <b>lancha</b> o <b>pesquero</b>. Ahí hay una armería (rifle, escopeta), jefes de tierra y un volcán. Con <b>5</b> sacás el arma, clic dispara y <b>R</b> recarga.</li>
       <li><b>Casino:</b> el Turco te espera. Apostá con cabeza.</li>
     </ul>
     <h3>Controles</h3>
     <div class="teclas">${t ? `<div><b>Joystick</b> moverse / navegar</div><div><b>Arrastrar a la derecha</b> mirar</div><div><b>Botón grande</b> lanzar · clavar · recoger</div><div><b>E</b> entrar / subir / bajar</div><div><b>⤒</b> saltar · <b>↻</b> rodar</div><div><b>🔱 🧨</b> arpón y dinamita</div>` : `
       <div><kbd>W A S D</kbd> moverse / navegar</div><div><kbd>Mouse</kbd> mirar</div><div><kbd>Clic</kbd> usar herramienta</div><div><kbd>Espacio</kbd> saltar · mantener para recoger</div>
       <div><kbd>Clic der.</kbd> arpón</div><div><kbd>Q</kbd> dinamita</div><div><kbd>Shift</kbd> correr</div><div><kbd>V</kbd> rodar (esquivar)</div>
-      <div><kbd>E</kbd> entrar · subir · bajar</div><div><kbd>1</kbd>-<kbd>4</kbd> herramienta</div><div><kbd>F</kbd> comer</div><div><kbd>H</kbd> curarse</div>
+      <div><kbd>E</kbd> entrar · subir · bajar</div><div><kbd>1</kbd>-<kbd>5</kbd> herramienta (5 = arma)</div><div><kbd>R</kbd> recargar</div><div><kbd>F</kbd> comer</div><div><kbd>H</kbd> curarse</div>
       <div><kbd>B</kbd> armar carnada</div><div><kbd>I</kbd> mochila</div><div><kbd>C</kbd> bitácora</div><div><kbd>M</kbd> mapa</div><div><kbd>Rueda</kbd> zoom</div><div><kbd>Esc</kbd> menú</div>`}</div></div>`;
   },
 };
@@ -532,7 +592,7 @@ function dibujarMapaGrande(cv) {
   }
   for (const is of ISLAS.slice(1)) {
     const [px, py] = mapaPx(is.x, is.z - is.base - 12);
-    g.font = 'italic bold 12px sans-serif'; g.lineWidth = 3; g.strokeStyle = 'rgba(8,24,48,.85)'; g.strokeText(is.nombre, px * k, py * k); g.fillStyle = '#d6f1ff'; g.fillText(is.nombre, px * k, py * k);
+    g.font = 'italic bold 12px sans-serif'; g.lineWidth = 3; g.strokeStyle = 'rgba(8,24,48,.85)'; const rot = is.nivel === 2 ? 'NIVEL 2 · ' + is.nombre : is.nombre; g.strokeText(rot, px * k, py * k); g.fillStyle = is.nivel === 2 ? '#ffe39a' : '#d6f1ff'; g.fillText(rot, px * k, py * k);
   }
   // jugador
   const [qx, qy] = mapaPx(P.pos.x, P.pos.z);

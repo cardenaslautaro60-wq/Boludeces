@@ -222,6 +222,7 @@ function actualizar(dt) {
   actualizarProps(dt);
   actualizarEdificios(dt);
   actualizarArsenal(dt);
+  actualizarVisitas(dt);
   actualizarFX(dt);
   actualizarHUD(dt);
   ambienteFrame(dt);

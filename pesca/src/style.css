@@ -164,6 +164,8 @@ kbd { display: inline-block; min-width: 1.5em; padding: 0 .4em; border-radius: 6
 .banner-jefe b { display: block; font: 64px var(--f-tit); color: #fff; letter-spacing: .06em; text-shadow: 0 5px 0 #8a1208, 0 0 24px rgba(0,0,0,.8); }
 .banner-jefe span { display: block; font: 26px var(--f-tit); color: #ffd0c8; letter-spacing: .1em; text-shadow: 0 3px 0 #5a0d06; }
 .banner-jefe em { display: block; margin-top: 8px; font: 600 16px var(--f-ui); font-style: normal; color: #fff6dc; text-shadow: 0 2px 4px #000; }
+.banner-jefe.nivel b { color: #ffe36b; font-size: 54px; text-shadow: 0 5px 0 #8a5a06, 0 0 24px rgba(0,0,0,.8); }
+.banner-jefe.nivel span { color: #fff6dc; text-shadow: 0 3px 0 #4a2c17; }
 .banner-jefe.vencido b { color: #ffe36b; text-shadow: 0 5px 0 #8a5a06, 0 0 24px rgba(0,0,0,.8); }
 .banner-jefe.vencido span { color: #fff6dc; text-shadow: 0 3px 0 #4a2c17; }
 @keyframes banner { from { opacity: 0; transform: scale(1.7); } to { opacity: 1; transform: none; } }
@@ -302,6 +304,7 @@ h3 { margin: 12px 0 6px; font: 19px var(--f-tit); color: var(--madera-osc); lett
 #t-inter { right: 0; bottom: 104px; background: rgba(79,196,106,.6); }
 #t-arpon { right: 64px; bottom: 120px; }
 #t-dina { right: 126px; bottom: 118px; }
+#t-arma { right: 164px; bottom: 58px; }
 
 /* ---------- pantallas chicas ---------- */
 @media (max-width: 820px), (max-height: 560px) {
