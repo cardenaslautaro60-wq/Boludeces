@@ -15,6 +15,12 @@ for (const k in DIM_BOTE) { const d = DIM_BOTE[k]; d.hullY = d.piso + 0.55 * d.H
 DIM_BOTE.pesquero.hullY = 0.155; // el pesquero tiene cubierta propia: casco más hundido
 DIM_BOTE.pesquero.pisoCub = 0.5 - 0.155;
 const AMARRE = { remo: { lado: -1, t: 0.5 }, lancha: { lado: 1, t: 0.5 }, pesquero: { lado: -1, t: 0.86 } };
+// Nombres con su artículo (para frases correctas en español)
+const NOM_BOTE = {
+  remo: { el: 'el bote a remo', al: 'al bote a remo', del: 'del bote a remo', Subir: 'Subir al bote a remo' },
+  lancha: { el: 'la lancha', al: 'a la lancha', del: 'de la lancha', Subir: 'Subir a la lancha' },
+  pesquero: { el: 'el pesquero', al: 'al pesquero', del: 'del pesquero', Subir: 'Subir al pesquero' },
+};
 const MSG_LIMITE = {
   remo: 'El mar se pone bravo: el bote a remo no aguanta más lejos. Una lancha llega al mar abierto.',
   lancha: 'Más allá el mar es una pared de olas. Solo un pesquero cruza el abismo.',
@@ -135,7 +141,7 @@ function comprarBote(id) {
   b.x = a.x; b.z = a.z; b.ang = 0; b.vel = 0; b.dock = null;
   b.y = alturaOla(b.x, b.z, J.t);
   orientarBote(b, 1);
-  toast(`¡Compraste el ${b.def.nombre.toLowerCase()}! Está amarrado en el muelle: acercate y apretá E.`, '#9bffb0');
+  toast(`¡Compraste ${NOM_BOTE[id].el}! Está amarrado en el muelle: acercate y apretá E.`, '#9bffb0');
   sfx('mision');
   chapoteo(b.x, b.z, 16, 1.2);
 }
@@ -316,7 +322,7 @@ function abordar(b, callado) {
   actualizarBote(0);
   if (!callado) {
     sfx('splash'); chapoteo(b.x, b.z, 6, 0.6);
-    toast(`A bordo del ${b.def.nombre.toLowerCase()}. WASD navega (la proa sigue a la cámara) · E para bajar cerca de la costa.`, '#9be7ff');
+    toast(`A bordo ${NOM_BOTE[b.def.id].del}. WASD navega (la proa sigue a la cámara) · E para bajar cerca de la costa.`, '#9be7ff');
   }
 }
 function buscarDesembarco(b) {
@@ -374,5 +380,5 @@ function botePoi() {
     if (d < b.dm.L * 0.5 + 2.8 && d < md) { md = d; mejor = b; }
   }
   if (!mejor) return null;
-  return { id: 'bote:' + mejor.def.id, x: mejor.x, z: mejor.z, r: 99, nombre: mejor.def.nombre, accion: 'Subir al ' + mejor.def.nombre.toLowerCase(), prioridad: false, accionBote: () => abordar(mejor) };
+  return { id: 'bote:' + mejor.def.id, x: mejor.x, z: mejor.z, r: 99, nombre: mejor.def.nombre, accion: NOM_BOTE[mejor.def.id].Subir, prioridad: false, accionBote: () => abordar(mejor) };
 }

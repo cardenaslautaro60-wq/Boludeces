@@ -101,11 +101,13 @@ void main() {
   vec2 fuv = vec2((vW.x - uFishC.x) / uFishW + 0.5, 0.5 - (vW.z - uFishC.y) / uFishW);
   float sh = 0.0;
   if (fuv.x > 0.0 && fuv.x < 1.0 && fuv.y > 0.0 && fuv.y < 1.0) {
-    float e = 0.5 / uFishW;
-    sh = texture2D(uFish, fuv).r * 0.4 + (texture2D(uFish, fuv + vec2(e, 0.0)).r + texture2D(uFish, fuv - vec2(e, 0.0)).r + texture2D(uFish, fuv + vec2(0.0, e)).r + texture2D(uFish, fuv - vec2(0.0, e)).r) * 0.15;
+    float e = 0.42 / uFishW;
+    float c0 = texture2D(uFish, fuv).r;
+    float c1 = max(max(texture2D(uFish, fuv + vec2(e, 0.0)).r, texture2D(uFish, fuv - vec2(e, 0.0)).r), max(texture2D(uFish, fuv + vec2(0.0, e)).r, texture2D(uFish, fuv - vec2(0.0, e)).r));
+    sh = max(c0, c1 * 0.7);
     sh *= smoothstep(0.0, 0.06, min(min(fuv.x, 1.0 - fuv.x), min(fuv.y, 1.0 - fuv.y)));
   }
-  col = mix(col, vec3(0.008, 0.04, 0.085) * mix(1.0, 0.4, uNoche), sh * 0.82 * (1.0 - fres * 0.4));
+  col = mix(col, vec3(0.004, 0.02, 0.05) * mix(1.0, 0.4, uNoche), sh * 0.94 * (1.0 - fres * 0.3));
   float dist0 = length(vW - cameraPosition);
   col = mix(col, uHorizonte, smoothstep(250.0, 1600.0, dist0) * 0.55);
   float spec = pow(max(dot(R, uSolDir), 0.0), 260.0);
@@ -121,7 +123,7 @@ void main() {
   float alfa = mix(0.3, 0.6, smoothstep(0.0, 12.0, dpt));
   alfa = mix(alfa, 0.9, fres * 0.55);
   alfa = max(alfa, espuma);
-  alfa = max(alfa, sh * 0.85);
+  alfa = max(alfa, sh * 0.9);
   // niebla
   float d = length(vW - cameraPosition);
   float f = 1.0 - exp(-uDensidad * uDensidad * d * d);
@@ -132,7 +134,7 @@ void main() {
 }`;
 
 // ---- Sombras de los peces: se dibujan desde arriba en una textura y el agua las oscurece ----
-const SOMBRAS = { rt: null, cam: null, W: 160, N: 512 };
+const SOMBRAS = { rt: null, cam: null, W: 128, N: 1024 };
 const _clr = new THREE.Color();
 function crearSombrasRT() {
   const S = SOMBRAS;

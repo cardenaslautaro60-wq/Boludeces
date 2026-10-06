@@ -525,6 +525,7 @@ function dibujarMapaGrande(cv) {
     if (m.jefe) { g.fillStyle = m.col; g.beginPath(); g.arc(sx, sy, 10, 0, TAU); g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 2; g.stroke(); }
     g.font = `${m.tam}px sans-serif`;
     g.fillText(m.ico, sx, sy + 1);
+    if (m.etiqueta === false) continue; // los lugares de la isla principal van en la leyenda
     g.font = 'bold 11px sans-serif';
     g.lineWidth = 3; g.strokeStyle = 'rgba(8,24,48,.85)'; g.strokeText(m.txt, sx, sy + m.tam * 0.95 + 4);
     g.fillStyle = '#fff6dc'; g.fillText(m.txt, sx, sy + m.tam * 0.95 + 4);
@@ -555,6 +556,7 @@ PANELES.mapa = {
     return `<div class="mapa-wrap"><canvas id="mapa-cv" width="560" height="560"></canvas>
       <div class="mapa-info"><h3>Zonas del mar</h3>${ZONAS.map((z) => `<div class="leyenda"><span class="zona-pt" style="background:${z.tono}"></span><b>${z.nombre}</b><small>${z.hasta > 9e8 ? `desde ${z.desde} m` : `${z.desde}–${z.hasta} m`}</small></div>`).join('')}
       <p class="nota chico">La línea punteada amarilla marca hasta dónde aguanta el mar tu mejor bote.</p>
+      <p class="leyenda-lugares">${LUGARES_MAPA.map((l) => `<span>${l.ico} ${l.n}</span>`).join('')}<span>⚓ Muelle</span><span>💰 Cofre</span><span>☠️ Jefe</span></p>
       <h3>Tus botes</h3>${lista || '<div class="vacio">Todavía no tenés botes. Se compran en el almacén.</div>'}</div></div>`;
   },
   despues(root) { dibujarMapaGrande($('#mapa-cv', root)); },

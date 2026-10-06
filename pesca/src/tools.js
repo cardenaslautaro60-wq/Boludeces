@@ -130,7 +130,7 @@ function distSegPunto3(x0, y0, z0, x1, y1, z1, px, py, pz) {
 function actualizarArpon(q, dt) {
   const mano = posMano();
   if (q.estado === 'vuela') {
-    const v = 64 * dt;
+    const v = (q.entro ? 36 : 64) * dt; // en el agua frena
     const x0 = q.x, y0 = q.y, z0 = q.z;
     q.x += q.dx * v; q.y += q.dy * v; q.z += q.dz * v; q.rec += v;
     if (!q.golpeo) {
@@ -146,13 +146,16 @@ function actualizarArpon(q, dt) {
         if (distSegPunto3(x0, y0, z0, q.x, q.y, q.z, b.x, 0.5, b.z) < b.def.radio * 0.95) { q.golpeo = true; golpearJefe(b, q.dmg, 'arpon', q.x, q.z); break; }
       }
     }
-    // tierra: se clava
-    if (!q.golpeo && q.y < Math.max(H(q.x, q.z), -0.05) - 0.05) {
-      if (H(q.x, q.z) > 0) { q.golpeo = true; sfx('impacto'); chispas(q.x, q.y + 0.1, q.z, '#e8d9a8', 6, 3); } else { chapoteo(q.x, q.z, 6, 0.6); sfx('splash'); q.golpeo = true; }
+    // entra al agua (sigue hacia abajo) o se clava en la tierra / el fondo
+    const suelo = H(q.x, q.z);
+    if (!q.entro && suelo < 0 && q.y < alturaOla(q.x, q.z, J.t)) { q.entro = true; chapoteo(q.x, q.z, 6, 0.6); sfx('splash'); }
+    if (!q.golpeo && q.y < suelo + 0.05) {
+      q.golpeo = true;
+      if (suelo > 0) { sfx('impacto'); chispas(q.x, q.y + 0.1, q.z, '#e8d9a8', 6, 3); } else sfx('impacto');
     }
     if (q.golpeo || q.rec >= q.rango) {
       q.estado = 'clavado'; q.tc = 0;
-      if (!q.golpeo) { if (esAgua(q.x, q.z)) { chapoteo(q.x, q.z, 6, 0.6); sfx('splash'); } }
+      if (!q.golpeo && !q.entro) { if (esAgua(q.x, q.z)) { chapoteo(q.x, q.z, 6, 0.6); sfx('splash'); } }
     }
   } else if (q.estado === 'clavado') {
     q.tc += dt;

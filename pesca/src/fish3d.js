@@ -23,6 +23,8 @@ function crearPez(sp, x, z, o = {}) {
   };
   f.vel = (0.7 + sp.fuerza * 0.9 + largo * 0.9) * f.vf;
   f.mod = crearModeloEspecie(sp, largo);
+  // los peces son finitos vistos desde arriba: la sombra se ensancha para que se lea (hasta ~35% del largo)
+  { const bb = new THREE.Box3().setFromObject(f.mod.grupo), sz = bb.getSize(new THREE.Vector3()); f.latSombra = clamp(0.38 / Math.max(0.05, sz.z / Math.max(0.05, sz.x)), 1, 3.2); }
   modoModelo(f.mod, 'sombra', zona);
   f.mod.grupo.visible = false;
   ESC.escena.add(f.mod.grupo);
@@ -167,8 +169,9 @@ function sincronizarPez(f, dt) {
   // opacidad por aparición gradual: se escala desde cero
   const k = f.estado === 'nada' || f.estado === 'asustado' || f.estado === 'curioso' || f.estado === 'mordisqueo' ? smooth(0, 1, f.alfa) : 1;
   // las sombras se agrandan un poco para que se lean desde lejos
-  const esc = color ? 1 : clamp(0.9 / Math.max(0.12, f.largo), 1.25, 3.2);
-  m.grupo.scale.setScalar(Math.max(0.001, k * esc));
+  const esc = color ? 1 : clamp(1.4 / Math.max(0.12, f.largo), 1.25, 3.6);
+  const kk = Math.max(0.001, k * esc);
+  m.grupo.scale.set(kk, kk, kk * (color ? 1 : f.latSombra || 1));
 }
 
 function actualizarMuerto(f, dt, idx) {

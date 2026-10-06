@@ -276,8 +276,8 @@ const mapaPx = (x, z) => [(x / MAPA.ext + 0.5) * MAPA.px, (z / MAPA.ext + 0.5) *
 // Marcadores comunes: devuelve [{x,z,ico,txt,col,tam}]
 function marcadoresMapa() {
   const m = [];
-  for (const l of LUGARES_MAPA) { const p = MUN.pois.find((q) => q.id === l.id) || MUN.edificios.find((q) => q.id === l.id); if (p) m.push({ x: p.x, z: p.z, ico: l.ico, txt: l.n, tam: 15 }); }
-  m.push({ x: MUELLE.x, z: MUELLE.z1 + 2, ico: '⚓', txt: 'Muelle', tam: 15 });
+  for (const l of LUGARES_MAPA) { const p = MUN.pois.find((q) => q.id === l.id) || MUN.edificios.find((q) => q.id === l.id); if (p) m.push({ x: p.x, z: p.z, ico: l.ico, txt: l.n, tam: 15, etiqueta: false }); }
+  m.push({ x: MUELLE.x, z: MUELLE.z1 + 2, ico: '⚓', txt: 'Muelle', tam: 15, etiqueta: false });
   for (const c of MUN.cofres) if (G.dia !== c.dia) m.push({ x: c.x, z: c.z, ico: '💰', txt: 'Cofre', tam: 12, soloMapa: true });
   for (const b of BOSSES) {
     const vis = G.jefes[b.def.id] && G.jefes[b.def.id].visto;
