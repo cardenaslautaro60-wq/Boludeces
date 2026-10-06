@@ -21,9 +21,11 @@ function iniciar3D() {
   crearTerreno(ESC.escena);
   crearMar(ESC.escena);
   crearMateriales();
-  crearPalmas(ESC.escena); crearRocas(ESC.escena); crearArbustos(ESC.escena); crearProps(ESC.escena); crearEdificios(ESC.escena);
+  crearPalmas(ESC.escena); crearArboles(ESC.escena); crearRocas(ESC.escena); crearArbustos(ESC.escena); crearProps(ESC.escena); crearEdificios(ESC.escena);
+  crearArsenal(ESC.escena);
   crearFX(ESC.escena);
   crearLinea3D(ESC.escena);
+  crearTiros(ESC.escena);
   crearBotes(ESC.escena);
   crearJefes();
   iniciarInput(canvas);
@@ -33,6 +35,7 @@ function iniciar3D() {
   // el pescador y la gente de la isla
   iniciarJugador();
   crearNPCs();
+  crearNPCsArsenal();
   J.hora = 17.3;
   poblarInicial();
   ESC.listo = true;
@@ -204,6 +207,7 @@ function actualizar(dt) {
   actualizarLinea(dt);
   actualizarPeces(dt);
   actualizarProyectiles(dt);
+  actualizarArmas(dt);
   actualizarJefes(dt);
   actualizarPeligros(dt);
   actualizarTentaculos(dt);
@@ -217,6 +221,7 @@ function actualizar(dt) {
   actualizarCielo(dt, ESC.camara);
   actualizarProps(dt);
   actualizarEdificios(dt);
+  actualizarArsenal(dt);
   actualizarFX(dt);
   actualizarHUD(dt);
   ambienteFrame(dt);

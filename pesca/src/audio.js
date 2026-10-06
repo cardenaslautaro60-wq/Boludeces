@@ -127,6 +127,16 @@ const SFX = {
     tono(f * 1.05, 0.3, 'sine', 0.045, { slide: f * 0.55, delay: 0.26, vib: [28, 40] });
   },
   pasos() { ruido(0.05, 0.03, { f: 900 }); },
+  rifle() { ruido(0.2, 0.5, { f: 2400, slide: 260, q: 0.7 }); tono(170, 0.14, 'sawtooth', 0.3, { slide: 48 }); },
+  escopeta() { ruido(0.3, 0.62, { f: 1700, slide: 180 }); tono(105, 0.22, 'sawtooth', 0.36, { slide: 38 }); },
+  rafaga() { ruido(0.07, 0.3, { f: 2800, slide: 600 }); tono(220, 0.05, 'square', 0.13, { slide: 90 }); },
+  bazuca() { ruido(0.55, 0.42, { tipo: 'bandpass', f: 500, slide: 2400, q: 0.8 }); tono(90, 0.5, 'sawtooth', 0.26, { slide: 210 }); },
+  recarga() { tono(1200, 0.03, 'square', 0.08); tono(850, 0.04, 'square', 0.08, { delay: 0.2 }); ruido(0.07, 0.1, { tipo: 'highpass', f: 2500, delay: 0.55 }); tono(1500, 0.04, 'square', 0.1, { delay: 0.95 }); },
+  sinbalas() { tono(700, 0.03, 'square', 0.07); },
+  golpeG() { ruido(0.25, 0.55, { f: 300, slide: 60 }); tono(70, 0.3, 'sine', 0.5, { slide: 30 }); },
+  fuego() { ruido(0.9, 0.4, { tipo: 'bandpass', f: 700, slide: 300, q: 0.6 }); tono(110, 0.8, 'sawtooth', 0.12, { slide: 70, vib: [18, 10] }); },
+  aguijon() { tono(900, 0.14, 'sawtooth', 0.2, { slide: 250 }); ruido(0.14, 0.2, { tipo: 'highpass', f: 2500 }); },
+  tierra() { ruido(0.5, 0.4, { f: 220, slide: 60, q: 0.4 }); },
 };
 function sfx(nombre, a) {
   if (!AUD.ctx || !G.ajustes.sonido) return;

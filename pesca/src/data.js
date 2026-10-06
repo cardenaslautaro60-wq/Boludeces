@@ -183,8 +183,40 @@ const JEFES = [
   { id: 'leviatan', fl: 2.4, ac: 52, stun: 1.8, nombre: 'El Leviatán', apodo: 'el Señor de la Noche', forma: 'leviatan', hp: 28000, precio: 480000, radio: 9, vel: 6, dmg: 40, d: 260, ang: 1.45, vaiven: 0.8, per: 120, cuando: 'noche', color: '#4a7dff',
     intro: 'Sale de noche. Dicen que el mar entero se mueve cuando respira.', consejo: 'Solo aparece de noche. Aguantá las tres fases y tené curas a mano.',
     botin: [['elixir', 3], ['corona', 1]], danoLinea: 1 },
+  // Nivel 2: jefes de tierra de la Isla Arsenal. No se pescan: se pelean con armas, arpón y dinamita.
+  // aggro = a cuántos metros se despierta; suelta = a cuántos metros se da por vencido y vuelve a su guarida.
+  { id: 'gorila', tierra: true, nivel: 2, forma: 'gorila', nombre: 'Don Gorila', apodo: 'el Rey de la Selva', hp: 9000, precio: 60000, plata: 45000, radio: 2.8, alto: 4.0, vel: 6.5, dmg: 30, stun: 2.0, aggro: 36, suelta: 85, lugar: 'la selva de la Isla Arsenal', color: '#7a6652',
+    intro: 'Un gorila del tamaño de una casa. Defiende su claro a golpes.', consejo: 'Salta y golpea el suelo: salí del círculo rojo. Cuando se cansa, dale con todo.',
+    botin: [['botiquin', 2], ['cartuchos', 12]] },
+  { id: 'escorpion', tierra: true, nivel: 2, forma: 'escorpion', nombre: 'La Reina Escorpión', apodo: 'la Dueña del Pedregal', hp: 16000, precio: 130000, plata: 110000, radio: 3.4, alto: 1.7, vel: 8, dmg: 36, stun: 1.8, aggro: 34, suelta: 85, lugar: 'el pedregal de la Isla Arsenal', color: '#c28a3a',
+    intro: 'Cava bajo la arena y sale justo donde estás parado.', consejo: 'Cuando se entierra, mirá el círculo: va a salir ahí. Después queda aturdida un buen rato.',
+    botin: [['balas', 40], ['elixir', 1]], arma: 'subfusil' },
+  { id: 'draco', tierra: true, nivel: 2, forma: 'dragon', nombre: 'Draco', apodo: 'el Dragón del Volcán', hp: 32000, precio: 320000, plata: 300000, radio: 5.2, alto: 4.6, vel: 7, dmg: 46, stun: 1.7, aggro: 30, suelta: 95, lugar: 'la cumbre del volcán', color: '#c0392b',
+    intro: 'Duerme sobre la lava desde antes de que hubiera isla.', consejo: 'Su aliento barre en línea y las bolas de fuego dejan brasas. En la última fase llueven meteoros.',
+    botin: [['cohetes', 4], ['elixir', 3]], arma: 'bazuca' },
 ];
 const JEFE = Object.fromEntries(JEFES.map((j) => [j.id, j]));
+
+// ---------------------------------------------------------------------------
+// ARMAS (Nivel 2). Se compran o se ganan en la Isla Arsenal. 'jefe' = arma que suelta ese jefe al vencerlo por primera vez.
+// ---------------------------------------------------------------------------
+const ARMAS = [
+  { id: 'rifle', nombre: 'Rifle de caza', precio: 38000, dano: 170, perdigones: 1, dispersion: 0.003, cargador: 5, recarga: 1.9, cadencia: 0.85, alcance: 180, mun: 'balas', auto: false, retroceso: 0.035, color: '#6b4a2b', icono: '🔫',
+    desc: 'Un tiro, mucho daño y buen alcance. Ideal para pegar cuando el jefe queda aturdido.' },
+  { id: 'escopeta', nombre: 'Escopeta de caño', precio: 52000, dano: 40, perdigones: 7, dispersion: 0.075, cargador: 6, recarga: 2.5, cadencia: 0.75, alcance: 46, mun: 'cartuchos', auto: false, retroceso: 0.06, color: '#4a3a2a', icono: '💥',
+    desc: 'Siete perdigones por tiro. Devastadora de cerca, inútil de lejos.' },
+  { id: 'subfusil', nombre: 'Subfusil Ráfaga', precio: 0, jefe: 'escorpion', dano: 26, perdigones: 1, dispersion: 0.02, cargador: 30, recarga: 2.1, cadencia: 0.1, alcance: 95, mun: 'balas', auto: true, retroceso: 0.008, color: '#3d4350', icono: '🔫',
+    desc: 'Ráfagas de balas sin parar. Se lo quitás a La Reina Escorpión.' },
+  { id: 'bazuca', nombre: 'Lanzacohetes Ballena', precio: 0, jefe: 'draco', dano: 650, radio: 8, perdigones: 1, dispersion: 0, cargador: 1, recarga: 2.6, cadencia: 0.6, alcance: 150, mun: 'cohetes', auto: false, cohete: true, retroceso: 0.08, color: '#5a6b3a', icono: '🚀',
+    desc: 'Un cohete que explota en área. Se lo quitás a Draco.' },
+];
+const ARMA = Object.fromEntries(ARMAS.map((a) => [a.id, a]));
+const MUNICION = [
+  { id: 'balas', nombre: 'Balas', pack: 30, precio: 720, max: 240, icono: '🔸' },
+  { id: 'cartuchos', nombre: 'Cartuchos', pack: 12, precio: 960, max: 96, icono: '🟥' },
+  { id: 'cohetes', nombre: 'Cohetes', pack: 3, precio: 4500, max: 24, icono: '🚀' },
+];
+const MUN_ID = Object.fromEntries(MUNICION.map((m) => [m.id, m]));
 
 // ---------------------------------------------------------------------------
 // EQUIPO
@@ -254,6 +286,7 @@ const ITEMS = Object.fromEntries([...COMIDAS, ...CURAS].map((i) => [i.id, i]));
 ITEMS.dinamita = { id: 'dinamita', nombre: 'Dinamita', icono: '🧨' };
 ITEMS.carnada = { id: 'carnada', nombre: 'Carnada de jefe', icono: '🦐' };
 ITEMS.corona = { id: 'corona', nombre: 'Corona del Leviatán', icono: '👑' };
+for (const m of MUNICION) ITEMS[m.id] = { id: m.id, nombre: m.nombre, icono: m.icono };
 
 // Botes: abren el mundo. maxD = hasta qué distancia de cualquier costa aguanta el mar.
 const BOTES = [

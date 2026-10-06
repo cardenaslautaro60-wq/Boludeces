@@ -11,6 +11,8 @@ function nuevoG() {
     cana: 0, partes: { carretel: 0, linea: 0, anzuelo: 0, senuelo: 0 },
     arpon: -1, red: -1, mochila: 0, chaleco: 0,
     botes: {}, boteAct: null, // botes comprados: id -> {x,z,ang}
+    armas: {}, armaSel: null, municion: { balas: 0, cartuchos: 0, cohetes: 0 }, cargador: {}, // Nivel 2: armas que tenés, la elegida, balas de reserva y de cada cargador
+    visitas: {}, // islas donde ya estuviste
     peces: [], // {id, kg, brillo}
     cuerpos: [], // cuerpos de jefes que todavía no vendiste: {id}
     items: { empanada: 2, vendas: 1 },
@@ -73,7 +75,10 @@ const cupoUsado = () => G.peces.length + G.cuerpos.length * 4;
 const cupoMax = () => MOCHILAS[G.mochila].cap;
 const mochilaLlena = () => cupoUsado() >= cupoMax();
 const tiene = (id) => (G.items[id] || 0) > 0;
-function darItem(id, n = 1) { G.items[id] = (G.items[id] || 0) + n; }
+function darItem(id, n = 1) {
+  if (MUN_ID[id]) { G.municion[id] = Math.min(MUN_ID[id].max, (G.municion[id] || 0) + n); return; }
+  G.items[id] = (G.items[id] || 0) + n;
+}
 function sacarItem(id, n = 1) { G.items[id] = Math.max(0, (G.items[id] || 0) - n); }
 
 function hashStr(s) {

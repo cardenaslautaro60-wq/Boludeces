@@ -56,12 +56,13 @@ function crearPersona(o = {}) {
   else if (hat === 'capitan') cara.push(cil(0.22, 0.24, 0.1, '#f9fbfc', 0, 0.17, 0, 12), cil(0.24, 0.24, 0.04, '#26354d', 0, 0.12, 0, 12), cil(0.2, 0.2, 0.02, '#26354d', 0, 0.24, 0.0, 12), caja(0.3, 0.02, 0.16, '#26354d', 0, 0.1, 0.2), esf(0.03, '#e8c860', 0, 0.17, 0.23, 1, 1, 0.5, 0));
   else if (hat === 'gorra') cara.push(esf(0.19, '#2b9bb0', 0, 0.06, 0, 1, 0.75, 1, 1), caja(0.28, 0.02, 0.2, '#1d7488', 0, 0.1, 0.2));
   else if (hat === 'panuelo') cara.push(esf(0.18, '#e0553d', 0, 0.07, 0, 1, 0.8, 1, 1), esf(0.04, '#ffffff', -0.08, 0.15, 0.1, 1, 1, 1, 0), esf(0.04, '#ffffff', 0.07, 0.17, 0.05, 1, 1, 1, 0), cono(0.07, 0.2, '#e0553d', 0, 0.06, -0.22, 4, -1.2));
+  else if (hat === 'casco') cara.push(esf(0.21, '#4f5a3c', 0, 0.07, 0, 1, 0.82, 1, 1), cil(0.26, 0.26, 0.03, '#3f4a2e', 0, 0.04, 0, 12), esf(0.04, '#e8c860', 0, 0.15, 0.2, 1, 1, 0.5, 0));
   else if (hat === 'galera') cara.push(cil(0.27, 0.27, 0.03, '#1c1426', 0, 0.14, 0, 14), cil(0.17, 0.17, 0.3, '#1c1426', 0, 0.3, 0, 12), cil(0.175, 0.175, 0.06, '#e8c860', 0, 0.2, 0, 12));
   rig.cabeza = mk(unir(cara), cab, 0, 0, 0, mt);
   g.add(cab);
   rig.cabezaG = cab;
   // herramientas en la mano derecha
-  rig.herr = { cana: new THREE.Group(), arpon: new THREE.Group(), red: new THREE.Group(), dinamita: new THREE.Group() };
+  rig.herr = { cana: new THREE.Group(), arpon: new THREE.Group(), red: new THREE.Group(), dinamita: new THREE.Group(), arma: new THREE.Group() };
   if (o.herramientas) {
     const col = o.canaCol || '#c9a45c';
     rig.matCana = new THREE.MeshStandardMaterial({ color: col, roughness: 0.5, metalness: 0.1 });
@@ -119,6 +120,19 @@ function crearPersona(o = {}) {
     mecha.position.set(0, 0.06, -0.3);
     d.add(pal, mecha);
     rig.mano.add(d);
+    // armas (Nivel 2): cada una apunta hacia -z; "boca" marca la punta del caño
+    rig.armas = {};
+    const ar = rig.herr.arma = new THREE.Group();
+    const mM = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.35, metalness: 0.6 });
+    const mW = new THREE.MeshStandardMaterial({ color: '#7a5230', roughness: 0.8 });
+    const tubo = (r, largo, z, mat, y = 0, x = 0) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, largo, 8), mat); m.rotation.x = Math.PI / 2; m.position.set(x, y, z - largo / 2); m.castShadow = true; return m; };
+    const bloque = (w, h, d, mat, x, y, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); m.castShadow = true; return m; };
+    const nueva = (id, zBoca, partes) => { const g = new THREE.Group(); for (const q of partes) g.add(q); const boca = new THREE.Object3D(); boca.position.set(0, 0.02, zBoca); g.add(boca); g.visible = false; ar.add(g); rig.armas[id] = { g, boca }; };
+    nueva('rifle', -1.1, [bloque(0.07, 0.13, 0.4, mW, 0, -0.03, 0.26), bloque(0.07, 0.1, 0.36, mM('#2b2f35'), 0, 0, -0.05), tubo(0.022, 0.86, -0.22, mM('#1f2329'), 0.02), bloque(0.08, 0.07, 0.42, mW, 0, -0.025, -0.4), tubo(0.032, 0.3, -0.06, mM('#15181c'), 0.1)]);
+    nueva('escopeta', -1.2, [bloque(0.07, 0.14, 0.42, mW, 0, -0.03, 0.26), bloque(0.075, 0.1, 0.3, mM('#2b2f35'), 0, 0, -0.04), tubo(0.032, 0.98, -0.18, mM('#1f2329'), 0.02), tubo(0.026, 0.8, -0.2, mM('#2a2e36'), -0.045), bloque(0.1, 0.08, 0.28, mW, 0, -0.045, -0.5)]);
+    nueva('subfusil', -0.75, [bloque(0.08, 0.14, 0.58, mM('#3d4350'), 0, 0, -0.1), tubo(0.022, 0.34, -0.38, mM('#1f2329'), 0.02), bloque(0.06, 0.3, 0.1, mM('#2a2e36'), 0, -0.2, -0.12), bloque(0.06, 0.16, 0.08, mM('#2a2e36'), 0, -0.12, 0.14), bloque(0.04, 0.05, 0.3, mM('#2a2e36'), 0, 0.02, 0.32), bloque(0.04, 0.05, 0.12, mM('#cfd8df'), 0, 0.1, -0.2)]);
+    nueva('bazuca', -0.95, [tubo(0.08, 1.45, 0.45, mM('#5a6b3a'), 0.03), bloque(0.09, 0.06, 0.16, mM('#2a2e36'), 0, 0.14, -0.1), bloque(0.06, 0.18, 0.08, mM('#2a2e36'), 0, -0.1, 0.0), new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.22, 10).rotateX(-Math.PI / 2).translate(0, 0.03, 0.62), mM('#3b4a28')), new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.18, 10).rotateX(Math.PI / 2).translate(0, 0.03, -1.02), mM('#c0392b'))]);
+    rig.mano.add(ar);
     for (const k in rig.herr) rig.herr[k].visible = false;
   }
   rig.t = o.fase || 0;
@@ -155,4 +169,11 @@ function animarPersona(rig, dt, vel, o = {}) {
 // Pone la herramienta que corresponde en la mano
 function mostrarHerramienta(rig, tool) {
   for (const k in rig.herr) rig.herr[k].visible = k === tool;
+}
+
+// Elige cuál de las armas se ve en la mano
+function mostrarArma(rig, id) {
+  if (!rig.armas) return;
+  for (const k in rig.armas) rig.armas[k].g.visible = k === id;
+  rig.boca = rig.armas[id] ? rig.armas[id].boca : null;
 }

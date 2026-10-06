@@ -175,7 +175,7 @@ function crearRocas(escena) {
     e.set(0, r.rot, 0); q.setFromEuler(e);
     m.compose(new THREE.Vector3(r.x, r.y - 0.15 * r.s, r.z), q, new THREE.Vector3(1.4 * r.s, 1.2 * r.s, 1.4 * r.s));
     im.setMatrixAt(i, m);
-    col.set('#8f959c').lerp(new THREE.Color(r.c > 0.5 ? '#a8a49a' : '#7d868f'), r.c);
+    col.set(r.v ? '#4b4549' : '#8f959c').lerp(new THREE.Color(r.v ? (r.c > 0.5 ? '#6a5a55' : '#3a3a40') : (r.c > 0.5 ? '#a8a49a' : '#7d868f')), r.c);
     im.setColorAt(i, col);
   });
   im.castShadow = true; im.receiveShadow = true;
@@ -201,10 +201,36 @@ function crearArbustos(escena) {
   escena.add(im); escena.add(f);
 }
 
+// Árboles de selva (Isla Arsenal): tronco alto, copa en capas y alguna enredadera
+function crearArboles(escena) {
+  if (!MUN.arboles.length) return;
+  const partes = [];
+  const alto = 8.2, seg = 8;
+  for (let i = 0; i < seg; i++) {
+    const a = { x: 0.15 * Math.sin(i * 0.7), y: (i / seg) * alto, z: 0 }, b = { x: 0.15 * Math.sin((i + 1) * 0.7), y: ((i + 1) / seg) * alto, z: 0 };
+    partes.push(cilEntre(a, b, 0.5 - 0.25 * (i / seg), 0.5 - 0.25 * ((i + 1) / seg), i % 2 ? '#6b4a2b' : '#5a3d22', 7));
+  }
+  for (const [x, z] of [[0.6, 0.3], [-0.5, 0.5], [0.1, -0.7]]) partes.push(cilEntre({ x: x * 1.6, y: 0, z: z * 1.6 }, { x: x * 0.3, y: 1.4, z: z * 0.3 }, 0.22, 0.3, '#5a3d22', 5));
+  const verdes = ['#2f7f3c', '#3d9447', '#277238', '#4aa44f'];
+  [[0, 8.6, 0, 3.0], [1.8, 7.7, 0.6, 2.2], [-1.7, 7.9, -0.5, 2.3], [0.4, 7.4, -1.9, 2.1], [-0.3, 7.5, 1.9, 2.0], [0.3, 10.0, 0.2, 2.0]].forEach(([x, y, z, r], i) => partes.push(esf(r, verdes[i % 4], x, y, z, 1.15, 0.72, 1.15, 1)));
+  partes.push(esf(0.28, '#ff5a8a', 1.4, 7.2, 1.6, 1, 1, 1, 0), esf(0.28, '#ffd23c', -1.9, 7.5, 0.9, 1, 1, 1, 0));
+  for (const [x, z] of [[1.9, 1.2], [-1.6, -1.5]]) partes.push(cilEntre({ x, y: 7.4, z }, { x: x * 1.05, y: 3.6, z: z * 1.05 }, 0.05, 0.04, '#2f6b2f', 4));
+  const lista = MUN.arboles;
+  const im = new THREE.InstancedMesh(unir(partes), MAT.palma, lista.length);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
+  lista.forEach((a, i) => {
+    e.set(0, a.rot, 0); q.setFromEuler(e);
+    m.compose(new THREE.Vector3(a.x, a.y - 0.3, a.z), q, new THREE.Vector3(a.s, a.s * (0.9 + a.c * 0.35), a.s));
+    im.setMatrixAt(i, m);
+  });
+  im.castShadow = true; im.receiveShadow = false; im.frustumCulled = false;
+  escena.add(im);
+}
+
 // ---------------------------------------------------------------------------
 // Props (se unen en pocas mallas)
 // ---------------------------------------------------------------------------
-const PROPS3D = { fuego: null, luces: [], redes: [] };
+const PROPS3D = { fuegos: [], luces: [], redes: [] };
 
 function crearProps(escena) {
   const solido = [], metal = [], lamparas = [];
@@ -265,6 +291,45 @@ function crearProps(escena) {
       const g = crearCascoBote(3.6, 1.35, 0.6, '#2f6fa8', '#e8d5a8');
       g.rotateY(ry(p)); g.rotateZ(0.12);
       solido.push(at(mover(g, 0, 0.35, 0)));
+    } else if (p.kind === 'carpa') {
+      const col = p.c || '#6f7d46';
+      solido.push(at(giro(caja(2.5, 0.07, 3.6, col, -0.85, 1.0, 0, 0, 0.95))), at(giro(caja(2.5, 0.07, 3.6, shadeHex(col, -0.06), 0.85, 1.0, 0, 0, -0.95))));
+      solido.push(at(giro(caja(2.4, 0.06, 3.5, '#5a4a30', 0, 0.04, 0))), at(giro(caja(0.08, 2.1, 0.08, '#6b4424', 0, 1.0, 1.75))), at(giro(caja(0.08, 2.1, 0.08, '#6b4424', 0, 1.0, -1.75))), at(giro(caja(0.06, 0.06, 3.7, '#6b4424', 0, 2.05, 0))));
+      solido.push(at(giro(caja(1.0, 1.4, 0.05, '#1b1a14', 0, 0.75, 1.76))));
+    } else if (p.kind === 'sacos') {
+      for (let i = 0; i < 4; i++) solido.push(at(giro(esf(0.36, i % 2 ? '#b3a47a' : '#c2b588', -1.2 + i * 0.8, 0.28, 0, 1.45, 0.75, 1, 1))));
+      for (let i = 0; i < 3; i++) solido.push(at(giro(esf(0.36, i % 2 ? '#c2b588' : '#b3a47a', -0.8 + i * 0.8, 0.78, 0.04, 1.45, 0.75, 1, 1))));
+      solido.push(at(giro(esf(0.36, '#b3a47a', 0, 1.25, 0, 1.45, 0.75, 1, 1))));
+    } else if (p.kind === 'canon') {
+      solido.push(at(giro(caja(1.9, 0.35, 0.9, '#6b4a2b', 0, 0.62, 0))));
+      for (const sz of [-0.55, 0.55]) solido.push(at(giro(cil(0.48, 0.48, 0.16, '#4a3420', 0.2, 0.5, sz, 12, Math.PI / 2))));
+      metal.push(at(giro(cil(0.3, 0.2, 2.6, '#2f353c', 0.4, 1.05, 0, 10, 0, 0, Math.PI / 2 + 0.12))));
+      metal.push(at(giro(esf(0.26, '#2f353c', -0.85, 1.0, 0, 1, 1, 1, 1))));
+    } else if (p.kind === 'bandera') {
+      solido.push(at(cil(0.07, 0.09, 6.2, '#cfd5d9', 0, 3.1, 0, 6)), at(esf(0.13, '#e8c860', 0, 6.25, 0, 1, 1, 1, 1)));
+      solido.push(at(caja(1.7, 1.0, 0.05, '#4f5a3c', 0.9, 5.5, 0)), at(caja(1.7, 0.2, 0.06, '#e8c860', 0.9, 5.5, 0)), at(esf(0.17, '#c0392b', 0.9, 5.5, 0.04, 1, 1, 0.3, 1)));
+    } else if (p.kind === 'torre') {
+      for (const [sx, sz] of [[-1.5, -1.5], [1.5, -1.5], [-1.5, 1.5], [1.5, 1.5]]) solido.push(at(cilEntre({ x: sx * 1.25, y: 0, z: sz * 1.25 }, { x: sx, y: 7.2, z: sz }, 0.2, 0.16, '#6b4424', 6)));
+      for (const yy of [2.4, 4.8]) { const k = 1.25 - yy / 7.2 * 0.25; solido.push(at(caja(k * 3, 0.1, 0.1, '#8a5a30', 0, yy, k * 1.5)), at(caja(k * 3, 0.1, 0.1, '#8a5a30', 0, yy, -k * 1.5)), at(caja(0.1, 0.1, k * 3, '#8a5a30', k * 1.5, yy, 0)), at(caja(0.1, 0.1, k * 3, '#8a5a30', -k * 1.5, yy, 0))); }
+      solido.push(at(caja(3.8, 0.2, 3.8, '#9a6a3a', 0, 7.3, 0)));
+      for (const [wx, wz, ww, wd] of [[0, 1.8, 3.8, 0.1], [0, -1.8, 3.8, 0.1], [1.8, 0, 0.1, 3.8], [-1.8, 0, 0.1, 3.8]]) solido.push(at(caja(ww, 0.9, wd, '#8a5a30', wx, 7.85, wz)));
+      for (const [sx, sz] of [[-1.7, -1.7], [1.7, -1.7], [-1.7, 1.7], [1.7, 1.7]]) solido.push(at(cil(0.07, 0.07, 2.2, '#6b4424', sx, 8.3, sz, 6)));
+      solido.push(at(cono(3.0, 1.5, '#4f5a3c', 0, 10.35, 0, 4, 0, Math.PI / 4)));
+      solido.push(at(caja(0.5, 4.2, 0.1, '#7a5230', 0, 2.1, 1.4)));
+      lamparas.push(at(esf(0.22, '#ffffff', 0, 9.2, 0, 1, 1.2, 1, 1)));
+    } else if (p.kind === 'ruina') {
+      const v = (p.v || 0) % 3;
+      const piedra = ['#9d9a8a', '#8f8d80', '#a8a594'][v];
+      if (v === 0) { solido.push(at(giro(cil(0.62, 0.7, 3.4, piedra, 0, 1.7, 0, 9))), at(giro(cil(0.78, 0.78, 0.3, '#868375', 0, 3.5, 0, 9))), at(giro(cil(0.4, 0.62, 0.5, '#5f8a4a', 0, 3.7, 0, 7)))); }
+      else if (v === 1) { solido.push(at(giro(caja(3.6, 2.2, 0.7, piedra, 0, 1.1, 0))), at(giro(caja(1.6, 1.3, 0.7, piedra, 1.2, 2.8, 0))), at(giro(caja(3.7, 0.25, 0.8, '#5f8a4a', 0, 2.25, 0)))); }
+      else { solido.push(at(giro(caja(1.3, 1.0, 1.3, piedra, -0.8, 0.5, 0.2, 0.3))), at(giro(caja(1.0, 0.8, 1.2, '#868375', 0.6, 0.4, -0.4, -0.4))), at(giro(caja(1.8, 0.9, 0.9, piedra, 0.1, 1.2, 0.1, 0.8))), at(giro(esf(0.5, '#5f8a4a', 0.2, 1.8, 0.1, 1.3, 0.5, 1, 1)))); }
+    } else if (p.kind === 'hueso') {
+      const marfil = '#e9e2cf';
+      for (let k = 0; k < 2; k++) {
+        const zz = (k - 0.5) * 1.8; let prev = { x: -1.6, y: 0, z: zz };
+        for (let i = 1; i <= 7; i++) { const a = (i / 7) * Math.PI; const q = { x: -1.6 + (i / 7) * 3.2, y: Math.sin(a) * 2.1 * (1 - 0.15 * k), z: zz }; solido.push(at(giro(cilEntre(prev, q, 0.16, 0.13, marfil, 5)))); prev = q; }
+      }
+      solido.push(at(giro(cil(0.12, 0.12, 4.2, marfil, 0, 0.12, -0.1, 5, Math.PI / 2, 0, Math.PI / 2))));
     } else if (p.kind === 'fogata') {
       for (let i = 0; i < 9; i++) { const a = (i / 9) * TAU; solido.push(at(esf(0.28, i % 2 ? '#8b939b' : '#6d757d', Math.cos(a) * 0.95, 0.12, Math.sin(a) * 0.95, 1, 0.7, 1, 0))); }
       solido.push(at(cil(0.1, 0.1, 1.6, '#5a3a1e', 0, 0.28, 0, 6, 0, 0.3, 1.45)));
@@ -277,7 +342,7 @@ function crearProps(escena) {
         c.position.set(p.x, y + 0.55 + i * 0.02, p.z);
         escena.add(c); llamas.push(c);
       }
-      PROPS3D.fuego = { llamas, x: p.x, y, z: p.z };
+      PROPS3D.fuegos.push({ llamas, x: p.x, y, z: p.z });
     }
   }
   const mc = new THREE.Mesh(unir(solido), MAT.vc);
@@ -287,8 +352,7 @@ function crearProps(escena) {
   if (lamparas.length) { const ml = new THREE.Mesh(unir(lamparas), MAT.lampara); escena.add(ml); }
 }
 function actualizarProps(dt) {
-  const f = PROPS3D.fuego;
-  if (f) {
+  for (const f of PROPS3D.fuegos) {
     f.llamas.forEach((c, i) => {
       const k = 0.85 + 0.3 * Math.sin(J.t * (9 + i * 2.3) + i);
       c.scale.set(1 + 0.18 * Math.sin(J.t * 12 + i), k, 1 + 0.18 * Math.cos(J.t * 11 + i));

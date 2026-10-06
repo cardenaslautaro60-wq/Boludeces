@@ -15,7 +15,17 @@ function colorTerreno(out, x, z, h, pend, isla, enIsla) {
   } else {
     out.copy(C.arena);
     const g = smooth(0.95, 1.7, h + (n - 0.5) * 0.7);
-    if (isla && isla.tipo === 'roca') {
+    if (isla && isla.tipo === 'arsenal') {
+      // selva, roca volcánica, ceniza y vetas de lava en la cumbre
+      const alt = h + (n - 0.5) * 1.4;
+      const selva = smooth(1.2, 3.4, alt) * (1 - smooth(21, 30, alt));
+      out.lerp(n2 > 0.5 ? C.selva : C.selva2, selva);
+      if (alt > 21) out.lerp(C.volcan, smooth(21, 30, alt));
+      if (alt > 33) out.lerp(C.ceniza, smooth(33, 39, alt) * 0.75);
+      if (pend > 0.85) out.lerp(C.volcan, smooth(0.85, 1.5, pend) * 0.85);
+      const dv = Math.hypot(x - (isla.x + 18), z - (isla.z - 34));
+      if (dv < 24 && alt > 28) { out.lerp(C.ceniza, smooth(24, 14, dv) * 0.55); out.lerp(C.lava, smooth(22, 10, dv) * smooth(0.58, 0.8, n2) * 0.95); }
+    } else if (isla && isla.tipo === 'roca') {
       out.lerp(C.roca, smooth(1.5, 5, h));
       out.lerp(C.pasto2, g * (1 - smooth(4, 12, h)) * 0.8);
     } else {
@@ -49,7 +59,7 @@ function construirParche(x0, z0, x1, z1, paso, mat, excluir) {
       const pend = Math.hypot(hx, hz) / (2 * paso);
       let isla = null;
       for (const is of ISLAS) if (Math.hypot(x - is.x, z - is.z) < is.base * 1.8) { isla = is; break; }
-      colorTerreno(c, x, z, h, pend, isla, isla === PRINCIPAL && h > 0.5);
+      colorTerreno(c, x, z, h, pend, isla, (isla === PRINCIPAL || (isla && isla.tipo === 'arsenal')) && h > 0.5);
       col[k * 3] = c.r; col[k * 3 + 1] = c.g; col[k * 3 + 2] = c.b;
     }
   }
@@ -79,6 +89,7 @@ function crearTerreno(escena) {
     arenaSub: new THREE.Color('#d9c894'), fondo: new THREE.Color('#2c6a7e'), alga: new THREE.Color('#5d9a6a'), arenaMoj: new THREE.Color('#e0cb92'),
     arena: new THREE.Color('#f3dfa8'), pasto: new THREE.Color('#79c05a'), pasto2: new THREE.Color('#4e9e46'), pasto3: new THREE.Color('#8ccb62'),
     roca: new THREE.Color('#8f959c'), tierra: new THREE.Color('#d8bf88'),
+    selva: new THREE.Color('#2f7f3c'), selva2: new THREE.Color('#3f9447'), volcan: new THREE.Color('#4a4448'), ceniza: new THREE.Color('#7a7076'), lava: new THREE.Color('#d2492a'),
   };
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95, metalness: 0 });
   mat.onBeforeCompile = (sh) => {
@@ -102,7 +113,7 @@ function crearTerreno(escena) {
   TERR.mat = mat;
   const grupo = new THREE.Group();
   const rects = [];
-  const defs = [[0, 0, 196], [-208, 98, 120], [66, 338, 100], [-330, -300, 136]];
+  const defs = [[0, 0, 196], [-208, 98, 120], [66, 338, 100], [-330, -300, 136], [465, 119, 190]];
   for (const [cx, cz, half] of defs) {
     const x0 = Math.round((cx - half) / 2) * 2, x1 = Math.round((cx + half) / 2) * 2, z0 = Math.round((cz - half) / 2) * 2, z1 = Math.round((cz + half) / 2) * 2;
     grupo.add(construirParche(x0, z0, x1, z1, 2, mat, rects));

@@ -70,6 +70,7 @@ const SLOTS = [
   { id: 'arpon', tecla: '2', icono: '🔱', tipo: 'tool' },
   { id: 'red', tecla: '3', icono: '🕸️', tipo: 'tool' },
   { id: 'dinamita', tecla: '4', icono: '🧨', tipo: 'tool' },
+  { id: 'arma', tecla: '5', icono: '🔫', tipo: 'tool' },
   { id: 'comer', tecla: 'F', icono: '🍗', tipo: 'uso' },
   { id: 'curar', tecla: 'H', icono: '🩹', tipo: 'uso' },
   { id: 'carnada', tecla: 'B', icono: '🦐', tipo: 'uso' },
@@ -174,6 +175,7 @@ function actualizarHUD(dt) {
   let av = '';
   if (P.cerca && !J.panel && J.modo === 'jugando') av = `<kbd>E</kbd> ${esc(P.cerca.accion)}`;
   else if (LINEA.estado === 'picada') av = '<b class="pique">¡CLAVÁ!</b>';
+  else if (P.tool === 'arma' && P.recarga) av = '<b>↻ Recargando…</b>';
   else if (LINEA.estado === 'libre' && P.tool === 'cana' && G.ajustes.ayuda && G.stats.capturas === 0 && P.mira.agua) av = IN.tactil ? 'Apuntá al agua y tocá el botón para lanzar' : 'Apuntá al agua con la mira y hacé clic para lanzar';
   if (C.av !== av) { C.av = av; e.aviso.innerHTML = av; e.aviso.hidden = !av; }
   // zona y bote
@@ -209,15 +211,25 @@ function actualizarHotbar() {
     else if (s.id === 'arpon') { activo = P.tool === 'arpon'; off = G.arpon < 0; cd = P.cdArpon / (arponActual() ? arponActual().enfr : 1); }
     else if (s.id === 'red') { activo = P.tool === 'red'; off = G.red < 0; cd = P.cdRed / (redActual() ? redActual().enfr : 1); }
     else if (s.id === 'dinamita') { activo = P.tool === 'dinamita'; n = G.items.dinamita || 0; off = n === 0; cd = P.cdDina / 0.5; }
+    else if (s.id === 'arma') {
+      const a = armaActual();
+      const tengo = ARMAS.some((q) => G.armas[q.id]);
+      if (el.hidden === tengo) el.hidden = !tengo;
+      activo = P.tool === 'arma'; off = !a;
+      n = a ? `${cargadorDe(a)}/${reservaDe(a)}` : '';
+      cd = P.recarga ? P.recarga.t / P.recarga.dur : 0;
+      const ic = $('.s-ic', el), t2 = a ? a.icono : '🔫';
+      if (ic.textContent !== t2) ic.textContent = t2;
+    }
     else if (s.id === 'comer') { n = totalItems(COMIDAS); off = n === 0; cd = P.cdItem / 0.7; }
     else if (s.id === 'curar') { n = totalItems(CURAS); off = n === 0; cd = P.cdItem / 0.7; }
     else if (s.id === 'carnada') { n = G.items.carnada || 0; off = n === 0; activo = G.carnadaArmada; }
-    const key = `${s.id}${activo}${off}${n}`;
+    const key = `${s.id}${activo}${off}${n}${s.id === 'arma' ? (armaActual() ? armaActual().id : '') : ''}`;
     if (C['s' + s.id] !== key) {
       C['s' + s.id] = key;
       el.classList.toggle('activo', activo);
       el.classList.toggle('off', off);
-      $('.s-n', el).textContent = n === '' || (s.id !== 'dinamita' && s.id !== 'comer' && s.id !== 'curar' && s.id !== 'carnada') ? '' : n;
+      $('.s-n', el).textContent = n === '' || (s.id !== 'dinamita' && s.id !== 'comer' && s.id !== 'curar' && s.id !== 'carnada' && s.id !== 'arma') ? '' : n;
     }
     const cdEl = $('.s-cd', el);
     const h2 = Math.round(clamp(cd, 0, 1) * 100);

@@ -18,7 +18,7 @@ const P = {
   pos: { x: 0, y: 0, z: 0 }, vel: { x: 0, y: 0, z: 0 }, yaw: 0, mov: 0, walkT: 0,
   enSuelo: true, modo: 'tierra', // tierra | bote
   tool: 'cana', hp: 100, hpMax: 100, hambre: 100,
-  flash: 0, inv: 0, comiendo: 0, cdItem: 0, cdArpon: 0, cdRed: 0, cdDina: 0, stun: 0, lento: 0, sinDano: 10,
+  flash: 0, inv: 0, comiendo: 0, cdItem: 0, cdArpon: 0, cdRed: 0, cdDina: 0, cdArma: 0, recarga: null, stun: 0, lento: 0, sinDano: 10,
   rodar: { t: 0, cd: 0, dx: 0, dz: 1 },
   buffs: [], cerca: null,
   mira: { x: 0, y: 0, z: 0, agua: false, dist: 0 },

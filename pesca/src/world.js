@@ -12,6 +12,8 @@ const ISLAS = [
   { id: 'coral', nombre: 'Arrecife de Coral', x: -208, z: 98, base: 34, arm: [[2, 0.08, 0.4], [4, 0.06, 1.7]], tipo: 'atolon' },
   { id: 'naufragio', nombre: 'Banco del Naufragio', x: 66, z: 338, base: 19, arm: [[2, 0.1, 2.0], [3, 0.07, 0.6]], tipo: 'banco' },
   { id: 'calavera', nombre: 'Isla Calavera', x: -330, z: -300, base: 46, arm: [[2, 0.12, 0.9], [3, 0.09, 2.8], [5, 0.05, 0.1]], tipo: 'roca', hMax: 24 },
+  // Nivel 2: una isla grande con selva y volcán, lejos de la costa: solo se llega en lancha o pesquero
+  { id: 'arsenal', nombre: 'Isla Arsenal', x: 465, z: 119, base: 100, arm: [[2, 0.09, 0.5], [3, 0.07, 1.9], [5, 0.04, 3.1], [7, 0.02, 0.8]], tipo: 'arsenal', nivel: 2 },
 ];
 const ISLA = Object.fromEntries(ISLAS.map((i) => [i.id, i]));
 const PRINCIPAL = ISLA.principal;
@@ -58,6 +60,20 @@ function colinas(x, z) {
 // Zonas planas para los edificios (se llenan en armarMundo)
 const PLANOS = [];
 
+// Colinas de la isla Arsenal: [dx, dz, altura, radio] respecto del centro. La primera es el volcán.
+const ARS_COLINAS = [[18, -34, 46, 42], [-45, -10, 12, 26], [40, 22, 9, 24], [-12, 38, 6, 18], [60, -50, 10, 22], [-60, 30, 7, 20]];
+function alturaArsenal(is, x, z, u) {
+  let h = 0.9 * smooth(0, 9, u) + 1.5 * smooth(8, 28, u);
+  let rel = 0;
+  for (const [hx, hz, A, r] of ARS_COLINAS) {
+    const d2 = ((x - is.x - hx) * (x - is.x - hx) + (z - is.z - hz) * (z - is.z - hz)) / (r * r);
+    if (d2 < 7) rel += A * Math.exp(-d2 * 1.25);
+  }
+  // borde del cráter alrededor de la cumbre del volcán
+  const dv = Math.hypot(x - is.x - ARS_COLINAS[0][0], z - is.z - ARS_COLINAS[0][1]);
+  rel += 9 * Math.exp(-((dv - 22) / 6.5) * ((dv - 22) / 6.5));
+  return h + rel * smooth(10, 36, u) + (fbm2(x * 0.07 + 3, z * 0.07 - 5) - 0.5) * 3.2 * smooth(8, 26, u);
+}
 function alturaIsla(is, x, z) {
   const dx = x - is.x, dz = z - is.z;
   const r = Math.hypot(dx, dz);
@@ -77,6 +93,7 @@ function alturaIsla(is, x, z) {
     const k = smooth(0, 30, u);
     return 0.8 * smooth(0, 6, u) + (is.hMax * k * (0.55 + 0.9 * fbm2(x * 0.06, z * 0.06))) * (0.5 + 0.5 * smooth(8, 34, u));
   }
+  if (is.tipo === 'arsenal') return alturaArsenal(is, x, z, u);
   let h = 0.9 * smooth(0, 9, u) + 1.1 * smooth(8, 26, u);
   if (is === PRINCIPAL) {
     h += colinas(x, z) * smooth(6, 30, u) + (fbm2(x * 0.09, z * 0.09) - 0.5) * 1.4 * smooth(4, 18, u);
@@ -105,7 +122,13 @@ const MUELLE = (() => {
   const R = radioPolar(PRINCIPAL, Math.PI / 2);
   return { x: 0, z0: R - 3, z1: R + PESCA.pierLen, ancho: 3.4, alto: 1.2, R };
 })();
-const enMuelle = (x, z, m = 0) => Math.abs(x - MUELLE.x) <= MUELLE.ancho / 2 + m && z >= MUELLE.z0 - m && z <= MUELLE.z1 + m;
+// Muelle de la isla Arsenal (sale de su costa sur, igual que el principal)
+const MUELLE2 = (() => {
+  const is = ISLA.arsenal, R = radioPolar(is, Math.PI / 2);
+  return { x: is.x, z0: is.z + R - 3, z1: is.z + R + PESCA.pierLen, ancho: 3.4, alto: 1.2, R };
+})();
+const MUELLES = [MUELLE, MUELLE2];
+const enMuelle = (x, z, m = 0) => MUELLES.some((M) => Math.abs(x - M.x) <= M.ancho / 2 + m && z >= M.z0 - m && z <= M.z1 + m);
 function alturaPiso(x, z) {
   if (enMuelle(x, z, -0.1)) return MUELLE.alto;
   return H(x, z);
@@ -153,11 +176,11 @@ const esAgua = (x, z) => H(x, z) < -0.05 && !enMuelle(x, z, 0.3);
 // ---------------------------------------------------------------------------
 // Lugares, edificios y colisiones
 // ---------------------------------------------------------------------------
-const MUN = { edificios: [], solidos: [], circulos: [], pois: [], luces: [], caminos: [], props: [], palmas: [], rocas: [], cofres: [], arbustos: [], listo: false };
+const MUN = { edificios: [], solidos: [], circulos: [], pois: [], luces: [], caminos: [], props: [], palmas: [], rocas: [], cofres: [], arbustos: [], arboles: [], listo: false };
 
 function armarMundo() {
   const O = MUN;
-  for (const k of ['edificios', 'solidos', 'circulos', 'pois', 'luces', 'caminos', 'props', 'palmas', 'rocas', 'cofres', 'arbustos']) O[k].length = 0;
+  for (const k of ['edificios', 'solidos', 'circulos', 'pois', 'luces', 'caminos', 'props', 'palmas', 'rocas', 'cofres', 'arbustos', 'arboles']) O[k].length = 0;
   PLANOS.length = 0;
   const rnd = mulberry32(20241006);
   const plano = (x, z, r, h) => PLANOS.push({ x, z, r, h });
@@ -283,7 +306,7 @@ function armarMundo() {
   // Rocas y palmeras de los islotes
   const rnd2 = mulberry32(777);
   for (const is of ISLAS.slice(1)) {
-    if (is.tipo === 'atolon') continue;
+    if (is.tipo === 'atolon' || is.tipo === 'arsenal') continue;
     const n = is.tipo === 'roca' ? 14 : is.tipo === 'banco' ? 3 : 7;
     for (let i = 0; i < n; i++) {
       const p = puntoCosta(rnd2() * TAU, -(3 + rnd2() * is.base * 0.5), is);
@@ -293,7 +316,124 @@ function armarMundo() {
       else { O.palmas.push({ x: p.x, z: p.z, y: h, s: 0.7 + rnd2() * 0.5, rot: rnd2() * TAU, incl: (rnd2() - 0.5) * 0.5 }); O.circulos.push({ x: p.x, z: p.z, r: 0.45 }); }
     }
   }
+  armarArsenal({ O, ed, plano, prop, camino, cofre, rnd: mulberry32(4242) });
   O.listo = true;
+}
+
+// ---------------------------------------------------------------------------
+// Nivel 2: Isla Arsenal. Armería, campamento, torre, ruinas, tres arenas de jefes y selva.
+// ---------------------------------------------------------------------------
+const ARSENAL = { is: null, plaza: null, armeria: null, arenas: {}, volcan: null };
+function armarArsenal(c) {
+  const { O, ed, plano, prop, camino, cofre, rnd } = c;
+  const is = ISLA.arsenal;
+  ARSENAL.is = is;
+  const ha = (x, z) => alturaIsla(is, x, z);
+  const pc = (th, d) => puntoCosta(th, d, is);
+  // plaza junto al muelle
+  const pie = { x: MUELLE2.x, z: MUELLE2.z0 + 3 };
+  const plazaZ = pie.z - 17;
+  ARSENAL.plaza = { x: pie.x, z: plazaZ };
+  const baseP = Math.max(2.0, ha(pie.x, plazaZ) + 0.25);
+  // Armería del Sargento Roca
+  const ax = pie.x - 15, az = plazaZ - 2;
+  const arm = ed('armeria', 'casa', ax, az, 11, 8, 4.2, { base: Math.max(2.1, ha(ax, az) + 0.25), nombre: 'Armería del Sargento Roca', pared: '#9a9f82', techo: '#4f5a3c', techo2: '#38422a', cartel: 'ARMERÍA', toldo: ['#e8e1c0', '#5f6d3c'] });
+  ARSENAL.armeria = arm;
+  O.pois.push({ id: 'armeria', x: arm.x, z: arm.z + arm.d / 2 + 1.6, r: 4.8, nombre: arm.nombre, accion: 'Entrar a la armería', nivel: 2 });
+  // campamento: carpas, fogata, cajas y barriles
+  const cx = pie.x + 17, cz = plazaZ - 4;
+  plano(cx, cz, 12, Math.max(2.0, ha(cx, cz) + 0.25));
+  prop('carpa', cx - 6, cz - 3, { rot: 0.5, c: '#6f7d46' }, 2.2);
+  prop('carpa', cx + 5, cz - 5, { rot: -0.3, c: '#8a7a4a' }, 2.2);
+  prop('carpa', cx + 6, cz + 4, { rot: -1.2, c: '#6f7d46' }, 2.2);
+  const fog = { id: 'fogata2', kind: 'fogata', x: cx, z: cz + 1 };
+  O.props.push(fog); O.circulos.push({ x: fog.x, z: fog.z, r: 1.1 });
+  O.pois.push({ id: 'fogata', x: cx, z: cz + 3.2, r: 3.6, nombre: 'Fogata del campamento', accion: 'Cocinar en la fogata', nivel: 2 });
+  O.luces.push({ x: cx, y: 2.3, z: cz + 1, r: 16, c: '#ff9a3c', flick: true });
+  prop('sacos', cx - 2, cz + 7, { rot: 0.1 }, 1.6); prop('sacos', cx + 3, cz + 8, { rot: -0.2 }, 1.6);
+  prop('barril', cx - 8, cz + 3); prop('barril', cx - 8.8, cz + 4.2); prop('cajon', cx + 9, cz - 1); prop('cajon', cx + 9.2, cz + 0.2);
+  prop('canon', pie.x - 3, plazaZ - 10, { rot: Math.PI / 2 + 0.2 }, 1.6);
+  prop('bandera', ax + 7.2, az + 6, {}, 0.3);
+  prop('barril', ax - 7, az + 5); prop('cajon', ax - 7.2, az + 6.4); prop('sacos', ax + 2, az + 7, { rot: 0 }, 1.6); prop('sacos', ax - 3, az + 7.4, { rot: 0.1 }, 1.6);
+  // torre de vigía
+  const tx = pie.x + 38, tz = plazaZ - 20;
+  plano(tx, tz, 5, Math.max(2.0, ha(tx, tz) + 0.2));
+  prop('torre', tx, tz, { rot: 0.3 }, 2.6);
+  // cartel de bienvenida
+  prop('cartel', pie.x + 3.6, pie.z - 4, { txt: 'ISLA ARSENAL', rot: -0.3 }, 0.4);
+  O.luces.push({ x: MUELLE2.x, y: 3.3, z: MUELLE2.z1 - 1, r: 14, c: '#ffd68c' });
+  for (const [x, z] of [[pie.x - 3.4, pie.z - 6], [pie.x + 3.4, pie.z - 6], [ax + 5.8, az + 6]]) { prop('farol', x, z, {}, 0.25); O.luces.push({ x, y: 4, z, r: 14, c: '#ffd68c' }); }
+  O.luces.push({ x: arm.x, y: arm.base + 2.4, z: arm.z + arm.d / 2 + 1, r: 12, c: '#ffc878' });
+
+  // arenas de los tres jefes de tierra
+  const lair = (id, x, z, r, h) => { const l = { x, z, r, h }; ARSENAL.arenas[id] = l; if (JEFE[id]) JEFE[id].lair = l; plano(x, z, r, h); return l; };
+  const pg = pc(-2.2, -50), pe = pc(0.35, -44);
+  const vx = is.x + 18, vz = is.z - 34;
+  const lg = lair('gorila', pg.x, pg.z, 24, Math.max(3, ha(pg.x, pg.z) + 0.4));
+  const le = lair('escorpion', pe.x, pe.z, 24, Math.max(3, ha(pe.x, pe.z) + 0.4));
+  const ld = lair('draco', vx, vz, 17, 35);
+  ARSENAL.volcan = { x: vx, z: vz, h: 35 };
+  // ruinas de la selva alrededor del claro del gorila
+  for (let i = 0; i < 6; i++) { const a = (i / 6) * TAU + 0.3, r = lg.r + 3.5; prop('ruina', lg.x + Math.cos(a) * r, lg.z + Math.sin(a) * r, { rot: a + Math.PI / 2, v: i }, 2.2); }
+  // el claro del escorpión: costillas de huesos y rocas
+  for (let i = 0; i < 5; i++) { const a = (i / 5) * TAU + 1.1, r = le.r + 2.5; prop('hueso', le.x + Math.cos(a) * r, le.z + Math.sin(a) * r, { rot: a, v: i }, 1.4); }
+
+  // caminos de tierra: muelle -> plaza -> campamento / arenas / volcán
+  camino([{ x: pie.x, z: MUELLE2.z0 + 2 }, { x: pie.x, z: plazaZ }], 3.4);
+  camino([{ x: pie.x, z: plazaZ }, { x: arm.x + 1, z: az + arm.d / 2 + 1.5 }], 2.6);
+  camino([{ x: pie.x, z: plazaZ }, { x: cx, z: cz + 4 }], 2.8);
+  camino([{ x: pie.x, z: plazaZ - 2 }, { x: pie.x - 8, z: plazaZ - 24 }, { x: lg.x + 4, z: lg.z + 20 }, { x: lg.x, z: lg.z }], 2.6);
+  camino([{ x: cx + 4, z: cz - 4 }, { x: pe.x - 8, z: pe.z + 16 }, { x: pe.x, z: pe.z }], 2.6);
+  camino([{ x: cx + 6, z: cz - 8 }, { x: tx, z: tz }, { x: is.x + 42, z: is.z - 12 }, { x: is.x + 34, z: is.z - 26 }, { x: vx + 14, z: vz + 10 }, { x: vx - 6, z: vz + 12 }, { x: vx, z: vz }], 2.4);
+  // cofres y cajas de armas
+  cofre('arsenal1', 'arsenal', Math.PI, -6, [4000, 14000]);
+  cofre('arsenal2', 'arsenal', -Math.PI / 2, -7, [6000, 20000]);
+  cofre('arsenal3', 'arsenal', 2.3, -34, [9000, 30000]);
+
+  // vegetación: palmeras en la playa, selva tupida adentro y rocas volcánicas
+  const libreDeArena = (x, z, m) => [lg, le, ld].some((l) => Math.hypot(x - l.x, z - l.z) < l.r + m);
+  const cercaCamino = (x, z, m) => O.caminos.some((cm) => { for (let i = 0; i < cm.pts.length - 1; i++) { const a = cm.pts[i], b = cm.pts[i + 1]; if (distSeg(x, z, a.x, a.z, b.x, b.z) < cm.w / 2 + m) return true; } return false; });
+  const cercaEdif = (x, z, m) => O.edificios.some((e) => e.id !== 'faro' && Math.abs(x - e.x) < e.w / 2 + m && z > e.z - e.d / 2 - m && z < e.z + e.d / 2 + m + 6) || Math.hypot(x - cx, z - cz) < 14 || Math.hypot(x - tx, z - tz) < 7;
+  const ocupado = (x, z, m) => libreDeArena(x, z, m) || cercaCamino(x, z, m) || cercaEdif(x, z, m) || enMuelle(x, z, 6);
+  let intentos = 0;
+  while (O.palmas.filter((q) => dist(q.x, q.z, is.x, is.z) < 140).length < 30 && intentos++ < 1800) {
+    const th = rnd() * TAU, d = -(4 + rnd() * 12);
+    const p = pc(th, d), h = ha(p.x, p.z);
+    if (h < 0.6 || h > 5 || ocupado(p.x, p.z, 3)) continue;
+    if (O.palmas.some((q) => dist(p.x, p.z, q.x, q.z) < 6)) continue;
+    O.palmas.push({ x: p.x, z: p.z, y: h, s: 0.85 + rnd() * 0.5, rot: rnd() * TAU, incl: (rnd() - 0.5) * 0.5 });
+    O.circulos.push({ x: p.x, z: p.z, r: 0.45 });
+  }
+  intentos = 0; let nArb = 0;
+  while (nArb < 120 && intentos++ < 4000) {
+    const th = rnd() * TAU, d = -(16 + rnd() * 74);
+    const p = pc(th, d), h = ha(p.x, p.z);
+    if (h < 2.4 || h > 26 || ocupado(p.x, p.z, 4.5)) continue;
+    if (O.arboles.some((q) => dist(p.x, p.z, q.x, q.z) < 6.2)) continue;
+    O.arboles.push({ x: p.x, z: p.z, y: h, s: 0.9 + rnd() * 0.8, rot: rnd() * TAU, c: rnd() });
+    O.circulos.push({ x: p.x, z: p.z, r: 0.6 });
+    nArb++;
+  }
+  intentos = 0; let nArbu = 0;
+  while (nArbu < 46 && intentos++ < 1500) {
+    const th = rnd() * TAU, d = -(12 + rnd() * 70);
+    const p = pc(th, d), h = ha(p.x, p.z);
+    if (h < 1.8 || h > 22 || ocupado(p.x, p.z, 2.5)) continue;
+    O.arbustos.push({ x: p.x, z: p.z, y: h, s: 0.8 + rnd() * 1.0, c: rnd() });
+    nArbu++;
+  }
+  intentos = 0; let nRoc = 0;
+  while (nRoc < 50 && intentos++ < 2200) {
+    const th = rnd() * TAU, d = -(8 + rnd() * 82);
+    const p = pc(th, d), h = ha(p.x, p.z);
+    if (h < 0.4 || ocupado(p.x, p.z, 2)) continue;
+    const alta = h > 14;
+    if (!alta && rnd() < 0.55) continue;
+    const s = alta ? 1.6 + rnd() * 2.8 : 0.8 + rnd() * 1.4;
+    O.rocas.push({ x: p.x, z: p.z, y: h, s, rot: rnd() * TAU, c: rnd(), v: h > 9 });
+    if (h > -0.3) O.circulos.push({ x: p.x, z: p.z, r: 0.9 * s });
+    nRoc++;
+  }
 }
 function distSeg(px, pz, x0, z0, x1, z1) {
   const vx = x1 - x0, vz = z1 - z0;

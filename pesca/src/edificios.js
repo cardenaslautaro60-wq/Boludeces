@@ -159,32 +159,33 @@ function crearFaro(e) {
   return g;
 }
 
-function crearMuelle(escena) {
-  const { z0, z1, ancho, alto } = MUELLE;
+function crearMuelle(escena) { for (const M of MUELLES) crearUnMuelle(escena, M); }
+function crearUnMuelle(escena, M) {
+  const { z0, z1, ancho, alto } = M, X = M.x;
   const L = [];
   const largo = z1 - z0;
   const n = Math.floor(largo / 0.34);
   for (let i = 0; i < n; i++) {
     const c = ['#b6855a', '#a97a50', '#bf8f62', '#a07048'][i % 4];
-    L.push(caja(ancho, 0.1, 0.3, c, 0, alto, z0 + 0.17 + i * 0.34));
+    L.push(caja(ancho, 0.1, 0.3, c, X, alto, z0 + 0.17 + i * 0.34));
   }
-  for (const sx of [-1.2, 0, 1.2]) L.push(caja(0.22, 0.28, largo, '#5a3a20', sx, alto - 0.2, (z0 + z1) / 2));
+  for (const sx of [-1.2, 0, 1.2]) L.push(caja(0.22, 0.28, largo, '#5a3a20', X + sx, alto - 0.2, (z0 + z1) / 2));
   for (let z = z0 + 1; z <= z1; z += 3) {
-    for (const sx of [-1, 1]) L.push(cil(0.2, 0.22, 7, '#4a2e18', sx * (ancho / 2 - 0.05), alto - 2.8, z, 7));
+    for (const sx of [-1, 1]) L.push(cil(0.2, 0.22, 7, '#4a2e18', X + sx * (ancho / 2 - 0.05), alto - 2.8, z, 7));
   }
   for (let z = z0 + 3; z <= z1; z += 3) {
-    for (const sx of [-1, 1]) L.push(cil(0.09, 0.1, 1.0, '#6b4424', sx * (ancho / 2 - 0.05), alto + 0.55, z, 6));
-    for (const sx of [-1, 1]) if (z + 3 <= z1) L.push(caja(0.06, 0.06, 3, '#e1cfa0', sx * (ancho / 2 - 0.05), alto + 0.9, z + 1.5));
+    for (const sx of [-1, 1]) L.push(cil(0.09, 0.1, 1.0, '#6b4424', X + sx * (ancho / 2 - 0.05), alto + 0.55, z, 6));
+    for (const sx of [-1, 1]) if (z + 3 <= z1) L.push(caja(0.06, 0.06, 3, '#e1cfa0', X + sx * (ancho / 2 - 0.05), alto + 0.9, z + 1.5));
   }
   // bolardos
-  for (const z of [z0 + 22, z0 + 30]) for (const sx of [-1, 1]) L.push(cil(0.14, 0.16, 0.45, '#3a3f46', sx * (ancho / 2 - 0.2), alto + 0.3, z, 8));
+  for (const z of [z0 + 22, z0 + 30]) for (const sx of [-1, 1]) L.push(cil(0.14, 0.16, 0.45, '#3a3f46', X + sx * (ancho / 2 - 0.2), alto + 0.3, z, 8));
   const m = new THREE.Mesh(unir(L), MAT.vc);
   m.castShadow = true; m.receiveShadow = true;
   escena.add(m);
   // farol del final del muelle
   const f = [cil(0.08, 0.1, 3.4, '#3e4650', 0, 1.7, 0, 6), caja(0.5, 0.12, 0.5, '#3e4650', 0, 3.45, 0), cono(0.38, 0.35, '#c0392b', 0, 4.15, 0, 4)];
   const fm = new THREE.Mesh(unir(f), MAT.vc);
-  fm.position.set(ancho / 2 - 0.2, alto, z1 - 0.3);
+  fm.position.set(X + ancho / 2 - 0.2, alto, z1 - 0.3);
   fm.castShadow = true;
   escena.add(fm);
   const lm = new THREE.Mesh(unir([esf(0.26, '#ffffff', 0, 3.75, 0, 1, 1.2, 1, 1)]), MAT.lampara);

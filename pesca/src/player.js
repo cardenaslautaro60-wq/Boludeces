@@ -222,11 +222,12 @@ function animarJugador(dt) {
   const vel = Math.hypot(P.vel.x, P.vel.z);
   const tool = P.tool === 'dinamita' && !tiene('dinamita') ? null : P.tool;
   if (tool) mostrarHerramienta(rig, tool); else mostrarHerramienta(rig, '');
+  if (tool === 'arma') mostrarArma(rig, G.armaSel);
   rig.matCana && rig.matCana.color.set(CANIAS[G.cana].color);
   if (rig.matPunta && G.arpon >= 0) rig.matPunta.color.set(ARPONES[G.arpon].color);
   const peleando = LINEA.estado === 'pelea';
   const acc = P.accion > 0 ? Math.sin((1 - P.accion) * Math.PI) : 0;
-  animarPersona(rig, dt, P.modo === 'bote' ? 0 : vel, { herr: !!tool, acc, alza: peleando ? 0.62 : tool === 'cana' ? 0.5 : 0.38, comiendo: P.comiendo > 0 });
+  animarPersona(rig, dt, P.modo === 'bote' ? 0 : vel, { herr: !!tool, acc, alza: tool === 'arma' ? 0.92 : peleando ? 0.62 : tool === 'cana' ? 0.5 : 0.38, brazoIzq: tool === 'arma' ? -1.15 : undefined, comiendo: P.comiendo > 0 });
   // la caña se dobla con la tensión
   const T = LINEA.estado === 'pelea' && LINEA.pelea ? LINEA.pelea.T : 0;
   const bend = T * 0.5 + (peleando ? 0.1 : 0);
@@ -285,6 +286,8 @@ function procesarAcciones() {
   if (pulsada('Digit2')) elegirHerramienta('arpon');
   if (pulsada('Digit3')) elegirHerramienta('red');
   if (pulsada('Digit4')) elegirHerramienta('dinamita');
+  if (pulsada('Digit5')) elegirHerramienta('arma');
+  if (pulsada('KeyR')) recargarArma();
   if (IN.rueda && apretada('ControlLeft') === false && !IN.bloqueado && false) { /* la rueda mueve la cámara */ }
   if (pulsada('KeyF')) comerMejor();
   if (pulsada('KeyH')) curarMejor();
@@ -307,17 +310,23 @@ function procesarAcciones() {
   } else if (P.tool === 'arpon' && (clic || IN.accionTactilPulso)) lanzarArpon();
   else if (P.tool === 'red' && (clic || IN.accionTactilPulso)) lanzarRed();
   else if (P.tool === 'dinamita' && (clic || IN.accionTactilPulso)) lanzarDinamita();
+  else if (P.tool === 'arma') usarArma(clic || IN.accionTactilPulso, IN.botones[0] || IN.accionTactil);
   IN.accionTactilPulso = false;
 }
 function herramientaDisponible(t) {
   if (t === 'cana') return true;
   if (t === 'arpon') return G.arpon >= 0;
   if (t === 'red') return G.red >= 0;
+  if (t === 'arma') return ARMAS.some((a) => G.armas[a.id]);
   return t === 'dinamita';
 }
 function elegirHerramienta(t) {
-  if (!herramientaDisponible(t)) { toast(t === 'arpon' ? 'Todavía no tenés arpón. Se compra en el almacén.' : 'Todavía no tenés red. Se compra en el almacén.', '#ffe39a'); sfx('error'); return; }
+  if (!herramientaDisponible(t)) {
+    toast(t === 'arpon' ? 'Todavía no tenés arpón. Se compra en el almacén.' : t === 'arma' ? 'Todavía no tenés ningún arma. Se consiguen en la Isla Arsenal (Nivel 2): se llega en lancha o pesquero.' : 'Todavía no tenés red. Se compra en el almacén.', '#ffe39a'); sfx('error'); return;
+  }
+  if (t === 'arma') ciclarArma();
   if (t === 'dinamita' && !tiene('dinamita')) { toast('No te queda dinamita. Se compra en el almacén.', '#ffe39a'); sfx('error'); }
+  if (t !== 'cana' && (LINEA.estado === 'espera' || LINEA.estado === 'mordisqueo')) recogerLinea(true);
   P.tool = t;
   sfx('click');
 }

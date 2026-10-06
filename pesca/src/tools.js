@@ -35,7 +35,7 @@ function asistirPunteria(alcance) {
     if (f.sp.tipo || f.alfa < 0.35) continue;
     probar(f.x, f.y, f.z, f.largo * 0.45, f);
   }
-  for (const b of BOSSES) if (b.estado === 'pelea') probar(b.x, 0.4, b.z, b.def.radio, b);
+  for (const b of BOSSES) if (b.estado === 'pelea' && !b.oculto) { const c = centroJefe(b); probar(c.x, c.y, c.z, b.def.radio, b); }
   return mejor;
 }
 
@@ -115,7 +115,7 @@ function actualizarProyectiles(dt) {
     const q = PROY[i];
     q.t += dt;
     let vive = true;
-    if (q.tipo === 'arpon') vive = actualizarArpon(q, dt); else if (q.tipo === 'red') vive = actualizarRed(q, dt); else if (q.tipo === 'dina') vive = actualizarDina(q, dt);
+    if (q.tipo === 'arpon') vive = actualizarArpon(q, dt); else if (q.tipo === 'red') vive = actualizarRed(q, dt); else if (q.tipo === 'dina') vive = actualizarDina(q, dt); else if (q.tipo === 'cohete') vive = actualizarCohete(q, dt);
     if (!vive) { quitarProy(q); PROY.splice(i, 1); }
   }
 }
@@ -142,8 +142,9 @@ function actualizarArpon(q, dt) {
     }
     if (!q.golpeo) {
       for (const b of BOSSES) {
-        if (b.estado !== 'pelea') continue;
-        if (distSegPunto3(x0, y0, z0, q.x, q.y, q.z, b.x, 0.5, b.z) < b.def.radio * 0.95) { q.golpeo = true; golpearJefe(b, q.dmg, 'arpon', q.x, q.z); break; }
+        if (b.estado !== 'pelea' || b.oculto) continue;
+        const c = centroJefe(b);
+        if (distSegPunto3(x0, y0, z0, q.x, q.y, q.z, c.x, c.y, c.z) < b.def.radio * 0.95) { q.golpeo = true; golpearJefe(b, q.dmg, 'arpon', q.x, q.z); break; }
       }
     }
     // entra al agua (sigue hacia abajo) o se clava en la tierra / el fondo

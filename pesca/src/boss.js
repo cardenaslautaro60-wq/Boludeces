@@ -51,11 +51,16 @@ function adornosLeviatan(mod, L) {
 }
 
 function crearJefes() {
-  for (const b of BOSSES) if (b.mod) ESC.escena.remove(b.mod.grupo);
+  for (const b of BOSSES) { if (b.mod) ESC.escena.remove(b.mod.grupo); if (b.estrellas) ESC.escena.remove(b.estrellas); }
   BOSSES.length = 0;
   for (const def of JEFES) {
+    if (def.tierra) { if (typeof crearJefeTierra === 'function') crearJefeTierra(def); continue; } // los de tierra los arma boss-tierra.js
     const mod = crearModeloJefe(def);
     mod.sombraRT = false;
+    // material propio: el destello de los golpes no se contagia a los demás peces
+    const mc = MAT_CRIA.vc.clone();
+    mod.grupo.traverse((o) => { if (o.isMesh && o.material === MAT_CRIA.vc) { o.material = mc; if (o.userData.matColor) o.userData.matColor = mc; } });
+    mod.matColor = mc;
     modoModelo(mod, 'sombra', 'abismo');
     mod.grupo.visible = false;
     ESC.escena.add(mod.grupo);
@@ -81,6 +86,7 @@ function jefeEnPantalla() {
   return null;
 }
 function jefeRetirarse(b) {
+  if (b.tierra) { reiniciarJefeTierra(b); return; }
   if (b.estado === 'pelea' || b.estado === 'atraido' || b.estado === 'mordiendo') {
     b.estado = 'huyendo'; b.atk = null; b.hooked = false; b.alza = 0; b.abierto = 0; b.aturdido = 0;
     b.hp = Math.min(b.hpMax, b.hp + b.hpMax * 0.1);
@@ -99,6 +105,7 @@ function jefeBuscarCebo(x, z) {
 
 function actualizarJefes(dt) {
   for (const b of BOSSES) {
+    if (b.tierra) { actualizarJefeTierra(b, dt); sincronizarJefeTierra(b, dt); continue; }
     b.t += dt;
     b.flash = Math.max(0, b.flash - dt * 4);
     b.emerge = Math.min(1, b.emerge + dt * 1.2);
@@ -186,7 +193,7 @@ function sincronizarJefe(b, dt) {
   }
   // destello de golpe y estrellas
   const em = b.flash > 0 ? b.flash * 0.7 : 0;
-  m.grupo.traverse((o) => { if (o.isMesh && o.material && o.material.emissive && o.material !== MAT_CRIA.brillo && o.material !== MAT_CRIA.medusa) o.material.emissive.setRGB(em, em, em); });
+  if (m.matColor) m.matColor.emissive.setRGB(em, em, em);
   if (b.estado === 'pelea') {
     // aleteo / ola al desplazarse
     if (b.vel > 3 && Math.random() < dt * 8) ondaAgua(b.x + rand(-b.def.radio, b.def.radio), b.z + rand(-b.def.radio, b.def.radio), 3.4, 1.1, 0.5, 1);
@@ -290,12 +297,11 @@ function comenzarAtaque(b) {
 // ---------------------------------------------------------------------------
 // Peligros (zonas rojas que se llenan antes del golpe)
 // ---------------------------------------------------------------------------
-const TELE = { geoC: null, geoL: null, mats: [] };
 function matTelegrafo(color) {
   const u = { uK: { value: 0 }, uCol: { value: new THREE.Color(color) }, uT: { value: 0 }, uLin: { value: 0 } };
-  const m = new THREE.ShaderMaterial({
+  return new THREE.ShaderMaterial({
     uniforms: u, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false,
-    vertexShader: 'varying vec2 vP; void main(){ vP = position.xz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+    vertexShader: 'attribute vec2 aP; varying vec2 vP; void main(){ vP = aP; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
     fragmentShader: `uniform float uK; uniform vec3 uCol; uniform float uT; uniform float uLin; varying vec2 vP;
       void main(){
         float a; float borde;
@@ -315,12 +321,39 @@ function matTelegrafo(color) {
         gl_FragColor = vec4(uCol, clamp(a, 0.0, 0.95));
       }`,
   });
-  return m;
 }
-function geosTelegrafo() {
-  if (TELE.geoC) return;
-  TELE.geoC = new THREE.CircleGeometry(1, 56).rotateX(-Math.PI / 2);
-  TELE.geoL = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+// La zona roja copia el relieve: se arma con una malla que sigue el suelo (o el agua) punto por punto
+const yTele = (x, z) => Math.max(H(x, z), alturaOla(x, z, J.t) + 0.12) + 0.14;
+function geoTeleCirculo(x, z, r) {
+  const RN = 7, AN = 30, pos = [x, yTele(x, z), z], aP = [0, 0], idx = [];
+  for (let i = 1; i <= RN; i++) for (let j = 0; j < AN; j++) {
+    const an = (j / AN) * TAU, rr = i / RN, px = x + Math.cos(an) * r * rr, pz = z + Math.sin(an) * r * rr;
+    pos.push(px, yTele(px, pz), pz); aP.push(Math.cos(an) * rr, Math.sin(an) * rr);
+  }
+  for (let j = 0; j < AN; j++) idx.push(0, 1 + j, 1 + ((j + 1) % AN));
+  for (let i = 1; i < RN; i++) for (let j = 0; j < AN; j++) {
+    const a0 = 1 + (i - 1) * AN + j, a1 = 1 + (i - 1) * AN + ((j + 1) % AN), b0 = 1 + i * AN + j, b1 = 1 + i * AN + ((j + 1) % AN);
+    idx.push(a0, b0, a1, a1, b0, b1);
+  }
+  return armarGeoTele(pos, aP, idx);
+}
+function geoTeleLinea(x1, z1, x2, z2, w) {
+  const len = Math.hypot(x2 - x1, z2 - z1) || 1, n = Math.max(2, Math.ceil(len / 2)), nx = -(z2 - z1) / len, nz = (x2 - x1) / len;
+  const pos = [], aP = [], idx = [];
+  for (let i = 0; i <= n; i++) {
+    const u = i / n, cx = lerp(x1, x2, u), cz = lerp(z1, z2, u);
+    for (const sd of [1, -1]) { const px = cx + nx * (w / 2) * sd, pz = cz + nz * (w / 2) * sd; pos.push(px, yTele(px, pz), pz); aP.push(u - 0.5, 0.5 * sd); }
+    if (i > 0) { const a = (i - 1) * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+  }
+  return armarGeoTele(pos, aP, idx);
+}
+function armarGeoTele(pos, aP, idx) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('aP', new THREE.Float32BufferAttribute(aP, 2));
+  g.setIndex(idx);
+  g.computeBoundingSphere();
+  return g;
 }
 function alturaSobre(x, z, r) {
   let m = Math.max(H(x, z), 0), n = 0;
@@ -329,12 +362,10 @@ function alturaSobre(x, z, r) {
   return m;
 }
 function peligroCirculo(x, z, r, delay, dmg, o = {}) {
-  geosTelegrafo();
-  const col = o.efecto === 'lento' ? '#8a52e0' : o.rayo ? '#4fb8ff' : '#ff3c32';
+  const col = o.efecto === 'lento' ? '#8a52e0' : o.efecto === 'veneno' ? '#58d94a' : o.efecto === 'fuego' ? '#ff8a1e' : o.rayo ? '#4fb8ff' : '#ff3c32';
   const mat = matTelegrafo(col);
-  const mesh = new THREE.Mesh(TELE.geoC, mat);
-  mesh.scale.set(r, 1, r);
-  mesh.position.set(x, Math.max(alturaSobre(x, z, r), alturaOla(x, z, J.t)) + 0.14, z);
+  const mesh = new THREE.Mesh(geoTeleCirculo(x, z, r), mat);
+  mesh.frustumCulled = false;
   mesh.renderOrder = 3;
   ESC.escena.add(mesh);
   const p = Object.assign({ tipo: 'circ', x, z, r, t: 0, delay, dmg, res: false, tr: 0, persist: 0, mesh, mat }, o);
@@ -343,15 +374,11 @@ function peligroCirculo(x, z, r, delay, dmg, o = {}) {
   return p;
 }
 function peligroLinea(x1, z1, x2, z2, w, delay, dmg, o = {}) {
-  geosTelegrafo();
   const col = o.rayo ? '#4fb8ff' : '#ff3c32';
   const mat = matTelegrafo(col);
   mat.uniforms.uLin.value = 1;
-  const mesh = new THREE.Mesh(TELE.geoL, mat);
-  const len = Math.hypot(x2 - x1, z2 - z1);
-  mesh.scale.set(len, 1, w);
-  mesh.rotation.y = -Math.atan2(z2 - z1, x2 - x1);
-  mesh.position.set((x1 + x2) / 2, Math.max(alturaSobre((x1 + x2) / 2, (z1 + z2) / 2, len * 0.3), alturaOla(x1, z1, J.t)) + 0.14, (z1 + z2) / 2);
+  const mesh = new THREE.Mesh(geoTeleLinea(x1, z1, x2, z2, w), mat);
+  mesh.frustumCulled = false;
   mesh.renderOrder = 3;
   ESC.escena.add(mesh);
   const p = Object.assign({ tipo: 'linea', x: x1, z: z1, x2, z2, w, t: 0, delay, dmg, res: false, tr: 0, persist: 0, mesh, mat }, o);
@@ -362,6 +389,7 @@ function peligroLinea(x1, z1, x2, z2, w, delay, dmg, o = {}) {
 function quitarPeligro(i) {
   const p = PELIGROS[i];
   ESC.escena.remove(p.mesh);
+  p.mesh.geometry.dispose();
   p.mat.dispose();
   PELIGROS.splice(i, 1);
 }
@@ -381,6 +409,11 @@ function actualizarPeligros(dt) {
         p.mat.uniforms.uK.value = 1;
         p.mesh.material.opacity = Math.min(1, p.persist);
         if (p.efecto === 'lento' && Math.hypot(P.pos.x - p.x, P.pos.z - p.z) < p.r) P.lento = 0.25;
+        else if ((p.efecto === 'veneno' || p.efecto === 'fuego') && Math.hypot(P.pos.x - p.x, P.pos.z - p.z) < p.r) {
+          p.tick = (p.tick || 0) - dt;
+          if (p.tick <= 0) { p.tick = 0.7; if (p.dmg > 0) herirJugador(p.dmg, 'zona'); if (p.efecto === 'veneno') P.lento = 0.3; }
+        }
+        if (p.efecto === 'fuego' && Math.random() < dt * 10) particula({ x: p.x + rand(-p.r, p.r) * 0.7, y: alturaSobre(p.x, p.z, p.r) + 0.2, z: p.z + rand(-p.r, p.r) * 0.7, vx: 0, vy: rand(1.2, 2.6), vz: 0, vida: 0.7, size: 0.35, col: pick(['#ff8a1e', '#ffc23a', '#ff5a1e']), alfa: 0.8, tipo: T_HUMO, crece: 0.6, g: 0 });
         if (p.persist <= 0) quitarPeligro(i);
       } else {
         p.mesh.visible = p.tr < 0.3 && Math.floor(p.tr * 30) % 2 === 0;
@@ -392,16 +425,19 @@ function actualizarPeligros(dt) {
 function resolverPeligro(p) {
   p.res = true; p.tr = 0;
   p.mat.uniforms.uK.value = 1;
-  if (p.efecto === 'lento') { p.persist = p.dur || 6; return; }
+  if (p.efecto === 'lento' || p.efecto === 'veneno') { p.persist = p.dur || 6; p.tick = 0.5; return; }
+  if (p.efecto === 'fuego') p.persist = p.dur || 3.5;
   let golpe;
   const dj = distSeg(P.pos.x, P.pos.z, p.x, p.z, p.tipo === 'circ' ? p.x : p.x2, p.tipo === 'circ' ? p.z : p.z2);
   if (p.tipo === 'circ') golpe = dj < p.r + 0.6; else golpe = dj < p.w / 2 + 0.6;
-  if (golpe && p.dmg > 0 && P.pos.y < 3.5) herirJugador(p.dmg, 'jefe');
+  if (golpe && p.dmg > 0 && P.pos.y - alturaPiso(P.pos.x, P.pos.z) < 3.5) herirJugador(p.dmg, 'jefe');
+  if (p.efecto === 'fuego') p.dmg = Math.max(2, Math.round(p.dmg * 0.3));
   if (p.tent) tentaculoFx(p.tent.x, p.tent.z, p.x, p.z, 0.8, p.tent.ancho || 0.9, p.tent.col);
   if (p.tipo === 'circ') {
     if (H(p.x, p.z) < 0) chapoteo(p.x, p.z, 12, p.r / 4); else for (let k = 0; k < 10; k++) polvo(p.x + rand(-p.r, p.r) * 0.6, Math.max(0, H(p.x, p.z)), p.z + rand(-p.r, p.r) * 0.6);
     if (p.rayo) { rayoFx(p.x, p.z); chispas(p.x, 1, p.z, '#bff4ff', 16, 6); }
   } else if (p.rayo) { rayoFx(p.x, p.z); rayoFx((p.x + p.x2) / 2, (p.z + p.z2) / 2); rayoFx(p.x2, p.z2); }
+  if (p.impacto) { const yy = alturaSobre(p.x, p.z, p.r); chispas(p.x, yy + 0.4, p.z, '#ff9a3c', 14, 7); for (let k = 0; k < 5; k++) polvo(p.x + rand(-p.r, p.r) * 0.6, yy, p.z + rand(-p.r, p.r) * 0.6); }
   sacudir(p.tipo === 'circ' ? 10 : 8);
   sfx(p.rayo ? 'explosion' : 'impacto');
 }
@@ -582,7 +618,7 @@ function actuarEmbestida(b, a, dt) {
 // Daño al jefe
 // ---------------------------------------------------------------------------
 function golpearJefe(b, dmg, fuente, x, z) {
-  if (b.estado !== 'pelea') return;
+  if (b.estado !== 'pelea' || b.oculto) return;
   let mult = 1;
   const stun = b.aturdido > 0;
   if (stun) mult = 2;
