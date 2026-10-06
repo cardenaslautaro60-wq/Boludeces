@@ -299,7 +299,7 @@ const BOTES = [
 const BARCO = { precio: 450000, nombre: 'Reparar el barco' };
 
 // Fichas del casino
-const FICHAS = [10, 50, 100, 500, 1000, 5000, 25000, 100000];
+const FICHAS = [10, 50, 100, 500, 1000, 5000, 25000, 100000, 500000];
 
 // Constantes de pesca
 const PESCA = {

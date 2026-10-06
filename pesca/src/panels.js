@@ -64,7 +64,7 @@ document.addEventListener('click', (e) => {
   if (!root || root.hidden || !root.contains(e.target)) return;
   if (e.target.closest('[data-x]') || (e.target.classList.contains('velo') && PANELES[PANEL.id] && !PANELES[PANEL.id].fijo)) { cerrarPanel(); return; }
   const tab = e.target.closest('[data-tab]');
-  if (tab) { PANEL.tab = tab.dataset.tab; sfx('click'); renderPanel(); $('.cuerpo', root).scrollTop = 0; return; }
+  if (tab) { const dp = PANELES[PANEL.id]; if (dp && dp.ocupado && dp.ocupado()) return; PANEL.tab = tab.dataset.tab; sfx('click'); renderPanel(); $('.cuerpo', root).scrollTop = 0; return; }
   const b = e.target.closest('[data-act]');
   if (b && !b.disabled) {
     const f = ACC[b.dataset.act];
