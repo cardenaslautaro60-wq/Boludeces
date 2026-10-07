@@ -156,7 +156,12 @@ function empezarJuego(continuar) {
 async function iniciarRed() {
   const ok = await conectarRed();
   if (J.modo === 'titulo') { desconectarRed(); return; }
-  toast(ok ? `🌐 En línea${RED.cfg.sala ? ' · sala ' + RED.cfg.sala : ''}. Chat con T, emotes con G, lista con Tab.` : 'No se pudo conectar: seguís jugando solo.', ok ? '#9be7ff' : '#ffb3a8');
+  if (!ok) { toast('No se pudo conectar: seguís jugando solo.', '#ffb3a8'); return; }
+  // da unos segundos a que el canal se conecte de verdad
+  for (let i = 0; i < 20 && RED.sala && !RED.sala.conectada(); i++) await new Promise((r) => setTimeout(r, 200));
+  if (J.modo === 'titulo' || !RED.sala) return;
+  if (RED.sala.conectada()) toast(`🌐 En línea${RED.cfg.sala ? ' · sala ' + RED.cfg.sala : ''}. Chat con T, emotes con G, lista con Tab.`, '#9be7ff');
+  else toast('Sin conexión con la sala por ahora: seguís jugando solo y se reintenta solo.', '#ffe39a');
 }
 function nuevaPartida() { empezarJuego(false); }
 function limpiarFlotantes() {

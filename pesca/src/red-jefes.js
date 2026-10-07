@@ -66,7 +66,7 @@ function publicarJefesAnfitrion(dt) {
     const k = JSON.stringify(hz);
     if (k !== RJ.ultHz) { RJ.ultHz = k; patch.hz = hz.length ? hz : null; }
   }
-  if (Object.keys(patch).length) S.presencia(patch);
+  if (Object.keys(patch).length) ponerPresencia(patch);
 }
 
 // ---------------------------------------------------------------------------
@@ -212,7 +212,7 @@ function aplicarZonasAnfitrion(hp) {
     const key = RED.hostId + ':' + e[0];
     if (RJ.vistas.has(key)) continue;
     RJ.vistas.set(key, J.t + 30);
-    const tipo = e[1], delay = finito(e[7]), dmg = finito(e[8]), flags = e[9] | 0, edad = finito(e[10]), dur = finito(e[11]);
+    const tipo = e[1], delay = clamp(finito(e[7], 1), 0.1, 4), dmg = clamp(finito(e[8]), 0, 150), flags = e[9] | 0, edad = finito(e[10]), dur = clamp(finito(e[11]), 0, 12);
     const persiste = (flags & 56) !== 0;
     if (edad > delay + (persiste ? dur : 0.35)) continue; // llegó tarde
     const o = {};
@@ -220,7 +220,8 @@ function aplicarZonasAnfitrion(hp) {
     if (flags & 8) { o.efecto = 'lento'; o.dur = dur; } else if (flags & 16) { o.efecto = 'veneno'; o.dur = dur; } else if (flags & 32) { o.efecto = 'fuego'; o.dur = dur; }
     if (flags & 64 && e.length >= 16) o.tent = { x: finito(e[12]), z: finito(e[13]), ancho: finito(e[14], 1), col: COLORES_TENT[e[15] | 0] || COLORES_TENT[0] };
     const x = finito(e[2]), z = finito(e[3]);
-    const p = tipo === 0 ? peligroCirculo(x, z, finito(e[4], 3), delay, dmg, o) : peligroLinea(x, z, finito(e[4]), finito(e[5]), finito(e[6], 4), delay, dmg, o);
+    if (Math.abs(x) > MUNDO.R * 1.6 || Math.abs(z) > MUNDO.R * 1.6) continue;
+    const p = tipo === 0 ? peligroCirculo(x, z, clamp(finito(e[4], 3), 1, 30), delay, dmg, o) : peligroLinea(x, z, clamp(finito(e[4]), -MUNDO.R * 2, MUNDO.R * 2), clamp(finito(e[5]), -MUNDO.R * 2, MUNDO.R * 2), clamp(finito(e[6], 4), 1, 14), delay, dmg, o);
     p.t = edad;
     if (edad >= delay) { // ya había golpeado: solo queda la zona persistente
       p.res = true; p.tr = 0; p.persist = Math.max(0.1, dur - (edad - delay)); p.mat.uniforms.uK.value = 1;
@@ -252,7 +253,7 @@ function publicarPedidos(dt) {
   RJ.tDano -= dt;
   if (RJ.danoSucio && RJ.tDano <= 0) { RJ.tDano = 0.2; RJ.danoSucio = false; patch.dm = Object.fromEntries(Object.entries(RJ.dano).map(([k, o]) => [k, [o.vida, Math.round(o.total)]])); }
   if (RJ.pedidoSucio) { RJ.pedidoSucio = false; patch.cb = RJ.cebo; patch.hk = RJ.enganche; }
-  if (Object.keys(patch).length) RED.sala.presencia(patch);
+  if (Object.keys(patch).length) ponerPresencia(patch);
   // la carnada que el anfitrión nunca aceptó: se devuelve
   const c = RJ.ceboPend;
   if (c && J.t - c.t > 3.5) {
@@ -280,7 +281,7 @@ function actualizarMundoRedJefes(dt) {
     publicarPedidos(dt);
   }
   // estoy listo para hacer de anfitrión cuando ya copié el mundo de otro, o si pasó un rato y no hay nadie que lo tenga
-  if (!RJ.listo && (RJ.adoptado || (RJ.tConexion > 1.6 && !hayAnfitrionListo()))) { RJ.listo = true; S.presencia({ lh: 1 }); }
+  if (!RJ.listo && (RJ.adoptado || (RJ.tConexion > 1.6 && !hayAnfitrionListo()))) { RJ.listo = true; ponerPresencia({ lh: 1 }); }
 }
 const hayAnfitrionListo = () => [...RED.remotos.values()].some((r) => r.p && r.p.lh === 1);
 function reiniciarRedJefes() {

@@ -21,10 +21,11 @@ const RED = {
   estado: 'apagada', // apagada | conectando | conectada | error
   tPub: 0, tHost: 0, ultPose: '', seq: { chat: 0, emo: 0 }, avisos: [], cola: [],
   chat: [], // { id, nombre, texto, t }
+  mia: {}, // copia de mi presencia (el canal admite 4 KiB como mucho)
 };
 const COLORES_CAMISA = ['#ff8a65', '#4fc3f7', '#aed581', '#ffd54f', '#ba68c8', '#f06292', '#4db6ac', '#e8e8e8'];
 const SOMBREROS_MP = ['paja', 'gorra', 'panuelo', 'capitan'];
-const TEMAS_RED = ['chat', 'emo', 'fx']; // los que hay que declarar al publicar el Artifact
+const TEMAS_RED = ['chat', 'emo']; // los que hay que declarar al publicar el Artifact (room: { topics: { chat: 'interact', emo: 'interact' } })
 const CLAVE_RED = 'isla-anzuelo-red';
 const r1 = (v) => Math.round(v * 10) / 10;
 const r2 = (v) => Math.round(v * 100) / 100;
@@ -32,7 +33,9 @@ const r2 = (v) => Math.round(v * 100) / 100;
 function nombreSeguro(s) { return String(s || '').replace(/[^\p{L}\p{N} _.\-]/gu, '').trim().slice(0, 16); }
 function cargarCfgRed() {
   try {
-    const o = JSON.parse(localStorage.getItem(CLAVE_RED) || '{}');
+    const crudo = localStorage.getItem(CLAVE_RED);
+    RED.cfg.nuevo = !crudo; // primera vez que se abre el juego en este navegador
+    const o = JSON.parse(crudo || '{}');
     if (o.nombre) RED.cfg.nombre = nombreSeguro(o.nombre);
     RED.cfg.online = !!o.online; RED.cfg.sala = nombreSeguro(o.sala).toLowerCase().replace(/\s+/g, '-');
     if (Number.isFinite(o.color)) RED.cfg.color = clamp(Math.floor(o.color), 0, COLORES_CAMISA.length - 1);
@@ -207,9 +210,24 @@ function desconectarRed() {
   reiniciarRedJefes();
   tomarJefesComoAnfitrion(true);
 }
+// Toda mi presencia pasa por acá: se lleva la cuenta de su tamaño y, si se acerca al tope del canal (4 KiB), se suelta lo menos importante
+function ponerPresencia(patch) {
+  const S = RED.sala;
+  if (!S) return;
+  for (const k in patch) { if (patch[k] === null) delete RED.mia[k]; else RED.mia[k] = patch[k]; }
+  let n = JSON.stringify(RED.mia).length;
+  if (n > 3600) {
+    for (const k of ['ch', 'hz', 'em', 'l', 'a']) {
+      if (n <= 3600) break;
+      if (RED.mia[k] !== undefined) { delete RED.mia[k]; patch[k] = null; n = JSON.stringify(RED.mia).length; }
+    }
+  }
+  S.presencia(patch);
+}
 // Lo primero que se publica: quién soy y cómo me veo
 function presenciaInicial() {
-  RED.sala.presencia({ v: RED.version, n: nombreSeguro(RED.cfg.nombre), c: RED.cfg.color, j: 1, k: G.stats.jefesMatados || 0 });
+  RED.mia = {};
+  ponerPresencia({ v: RED.version, n: nombreSeguro(RED.cfg.nombre), c: RED.cfg.color, j: 1, k: G.stats.jefesMatados || 0 });
 }
 
 // ---------------------------------------------------------------------------
@@ -248,7 +266,7 @@ function publicarEstado(dt) {
   const kb = bt ? bt.join(',') : '';
   if (kb !== RED.ultBote) { RED.ultBote = kb; patch.bt = bt; hay = true; }
   if (RED.cola.length) { Object.assign(patch, RED.cola.shift()); hay = true; }
-  if (hay) S.presencia(patch);
+  if (hay) ponerPresencia(patch);
 }
 function lineaParaRed() {
   const e = LINEA.estado;
@@ -376,7 +394,7 @@ function actualizarMundoRedBase(dt) {
   if (!S || !RED.activa) { actualizarMundoRedJefes(dt); return; }
   if (RED.anfitrion) {
     RED.tHost -= dt;
-    if (RED.tHost <= 0) { RED.tHost = 1.0; S.presencia({ tm: [r2(J.hora), r2(J.clima.objetivo), r2(J.clima.lluvia)] }); }
+    if (RED.tHost <= 0) { RED.tHost = 1.0; ponerPresencia({ tm: [r2(J.hora), r2(J.clima.objetivo), r2(J.clima.lluvia)] }); }
   } else {
     const hp = presenciaAnfitrion();
     const tm = hp && hp.tm;

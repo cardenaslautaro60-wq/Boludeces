@@ -520,11 +520,16 @@ PANELES.pausa = {
     return `<div class="menu-pausa">${btn('seguir', 'Seguir jugando', { cls: 'gold' })}${btn('ayuda', '❓ Cómo se juega', { cls: 'verde' })}
     <label class="sw"><input type="checkbox" data-aj="sonido" ${G.ajustes.sonido ? 'checked' : ''}><i></i><span>Sonido</span></label>
     <label class="sw"><input type="checkbox" data-aj="musica" ${G.ajustes.musica ? 'checked' : ''}><i></i><span>Música</span></label>
+    <p class="nota chico">${RED.activa ? `🌐 En línea · ${jugadoresEnSala()} ${jugadoresEnSala() === 1 ? 'jugador' : 'jugadores'}${RED.cfg.sala ? ' · sala ' + esc(RED.cfg.sala) : ''}${RED.anfitrion && jugadoresEnSala() > 1 ? ' · sos el anfitrión' : ''}` : RED.estado === 'conectando' ? '🌐 Conectando…' : '🌐 Jugando solo'}</p>
+    ${btn('redAlternar', RED.sala ? '🌐 Salir de la sala en línea' : '🌐 Jugar en línea', { cls: 'azul' })}
     ${btn('guardar', '💾 Guardar', { cls: 'gris' })}${btn('titulo', '🏝️ Volver al título', { cls: 'gris' })}</div>`;
   },
   despues: PANELES.cabana.despues,
 };
 ACC.seguir = () => cerrarPanel();
+ACC.redAlternar = () => {
+  if (RED.sala) { desconectarRed(); RED.cfg.online = false; guardarCfgRed(); toast('Saliste de la sala: jugás solo.', '#ffe39a'); } else { RED.cfg.online = true; guardarCfgRed(); iniciarRed(); toast('Conectando…', '#9be7ff'); }
+};
 ACC.ayuda = () => { abrirPanel('ayuda'); };
 ACC.titulo = () => { cerrarPanel(); guardar(); irAlTitulo(); };
 PANELES.ayuda = {
@@ -541,14 +546,15 @@ PANELES.ayuda = {
       <li><b>Mundo abierto:</b> el mar se divide en zonas por distancia a la costa. Con un bote llegás a islotes, naufragios y cofres; cada bote aguanta el mar hasta cierta distancia.</li>
       <li><b>Jefes:</b> comprá carnada de jefe, armala, lanzá cerca de su sombra y pelealos. Esquivá las zonas rojas y pegales con arpón o dinamita cuando queden aturdidos.</li>
       <li><b>Nivel 2:</b> la Isla Arsenal está más allá del mar abierto: se llega en <b>lancha</b> o <b>pesquero</b>. Ahí hay una armería (rifle, escopeta), jefes de tierra y un volcán. Con <b>5</b> sacás el arma, clic dispara y <b>R</b> recarga.</li>
-      <li><b>Casino:</b> el Turco te espera. Apostá con cabeza.</li>
+      <li><b>Casino:</b> el Turco te espera: tragamonedas con pozo, ruleta, veintiuno, doble o nada y carreras de peces. Apostá con cabeza.</li>
+      <li><b>Multijugador:</b> en el título activá «Jugar en línea» (poné tu nombre y, si querés, un código de sala para jugar solo con tus amigos). Se ven en el mundo, chatean (<b>T</b>) y pelean juntos a los jefes: cada uno cobra su botín si peleó. La hora y el clima son de todos.</li>
     </ul>
     <h3>Controles</h3>
     <div class="teclas">${t ? `<div><b>Joystick</b> moverse / navegar</div><div><b>Arrastrar a la derecha</b> mirar</div><div><b>Botón grande</b> lanzar · clavar · recoger</div><div><b>E</b> entrar / subir / bajar</div><div><b>⤒</b> saltar · <b>↻</b> rodar</div><div><b>🔱 🧨</b> arpón y dinamita</div>` : `
       <div><kbd>W A S D</kbd> moverse / navegar</div><div><kbd>Mouse</kbd> mirar</div><div><kbd>Clic</kbd> usar herramienta</div><div><kbd>Espacio</kbd> saltar · mantener para recoger</div>
       <div><kbd>Clic der.</kbd> arpón</div><div><kbd>Q</kbd> dinamita</div><div><kbd>Shift</kbd> correr</div><div><kbd>V</kbd> rodar (esquivar)</div>
       <div><kbd>E</kbd> entrar · subir · bajar</div><div><kbd>1</kbd>-<kbd>5</kbd> herramienta (5 = arma)</div><div><kbd>R</kbd> recargar</div><div><kbd>F</kbd> comer</div><div><kbd>H</kbd> curarse</div>
-      <div><kbd>B</kbd> armar carnada</div><div><kbd>I</kbd> mochila</div><div><kbd>C</kbd> bitácora</div><div><kbd>M</kbd> mapa</div><div><kbd>Rueda</kbd> zoom</div><div><kbd>Esc</kbd> menú</div>`}</div></div>`;
+      <div><kbd>B</kbd> armar carnada</div><div><kbd>T</kbd> chat</div><div><kbd>G</kbd> emotes</div><div><kbd>Tab</kbd> jugadores</div><div><kbd>I</kbd> mochila</div><div><kbd>C</kbd> bitácora</div><div><kbd>M</kbd> mapa</div><div><kbd>Rueda</kbd> zoom</div><div><kbd>Esc</kbd> menú</div>`}</div></div>`;
   },
 };
 
@@ -584,6 +590,7 @@ function dibujarMapaGrande(cv) {
     const [px, py] = mapaPx(m.x, m.z);
     const sx = px * k, sy = py * k;
     if (m.jefe) { g.fillStyle = m.col; g.beginPath(); g.arc(sx, sy, 10, 0, TAU); g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 2; g.stroke(); }
+    if (m.jug) { g.fillStyle = m.col; g.beginPath(); g.arc(sx, sy, 6.5, 0, TAU); g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 2.2; g.stroke(); g.font = 'bold 11px sans-serif'; g.lineWidth = 3; g.strokeStyle = 'rgba(8,24,48,.85)'; g.strokeText(m.txt, sx, sy - 13); g.fillStyle = '#fff6dc'; g.fillText(m.txt, sx, sy - 13); continue; }
     g.font = `${m.tam}px sans-serif`;
     g.fillText(m.ico, sx, sy + 1);
     if (m.etiqueta === false) continue; // los lugares de la isla principal van en la leyenda

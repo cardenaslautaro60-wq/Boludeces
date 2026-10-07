@@ -303,6 +303,7 @@ function marcadoresMapa() {
     m.push({ x: b.x, z: b.z, ico: '☠️', txt: b.def.nombre, tam: 17, col: b.def.color, jefe: true, activo: b.estado === 'pelea' });
   }
   for (const b of BOTE.lista) if (G.botes[b.def.id] && BOTE.act !== b) m.push({ x: b.x, z: b.z, ico: '⛵', txt: b.def.nombre, tam: 14 });
+  if (RED.activa) for (const r of RED.remotos.values()) if (r.pose) m.push({ x: r.pose.x, z: r.pose.z, ico: '', txt: r.nombre, tam: 12, col: COLORES_CAMISA[r.color] || '#fff', jug: true });
   return m;
 }
 
@@ -333,6 +334,7 @@ function dibujarMinimapa() {
     const [sx, sy] = aPant(m.x, m.z);
     if (Math.hypot(sx - R, sy - R) > R - 6) continue;
     if (m.jefe) { g.fillStyle = m.col; g.beginPath(); g.arc(sx, sy, m.activo ? 8 + Math.sin(J.t * 8) * 1.5 : 7, 0, TAU); g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.stroke(); }
+    if (m.jug) { g.fillStyle = m.col; g.beginPath(); g.arc(sx, sy, 4.5, 0, TAU); g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 1.6; g.stroke(); continue; }
     g.font = `${m.tam - 4}px sans-serif`;
     g.fillText(m.ico, sx, sy + 1);
   }

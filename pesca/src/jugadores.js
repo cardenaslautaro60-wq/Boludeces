@@ -208,7 +208,7 @@ function abrirChat() {
   MPV.log.classList.add('abierto');
   const inp = $('input', MPV.entrada);
   inp.value = '';
-  setTimeout(() => inp.focus(), 30);
+  inp.focus();
 }
 function cerrarChat(enviar) {
   if (!MPV.abierto) return;
@@ -304,4 +304,6 @@ async function armarBloqueRed(t) {
   if (!est || !est.isConnected) return;
   est.textContent = T.room ? 'Conectado al canal del Artifact: jugás con quien tenga la página abierta.' : T.ws ? 'Servidor propio detectado: jugás con quien entre a esta dirección.' : T.bc ? 'Sin servidor: solo se ven las pestañas de este navegador.' : 'No hay conexión disponible.';
   est.classList.add(T.room || T.ws ? 'ok' : 'local');
+  // la primera vez, si hay una sala real, se propone jugar en línea
+  if (RED.cfg.nuevo && (T.room || T.ws)) { const on = $('#rd-on', blq); on.checked = true; guardar2(); }
 }
