@@ -296,6 +296,10 @@ window.__J = J; window.__P = P; window.__CAM = CAM; window.__LINEA = LINEA; wind
 window.__G = () => G; window.__BOTE = BOTE;
 window.__empezar = (cont) => empezarJuego(!!cont);
 
+// al cerrar o recargar la página (también cuando llega una versión nueva) o al pasar a otra pestaña, queda guardado lo último que se hizo
+window.addEventListener('pagehide', () => { if (J.partida) guardar(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden && J.partida) guardar(); });
+
 window.addEventListener('DOMContentLoaded', () => {
   const carga = $('#carga');
   setTimeout(() => {
