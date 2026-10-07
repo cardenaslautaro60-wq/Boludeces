@@ -18,7 +18,7 @@ function abrirPanel(id, tab) {
   PANEL.tab = tab || def.tab0 || null;
   PANEL.scroll = 0;
   J.panel = id;
-  PANEL.abierto = J.t;
+  PANEL.abierto = performance.now(); // en tiempo real: con un menú abierto el reloj del juego (J.t) está quieto
   IN.botones[0] = IN.botones[1] = IN.botones[2] = false;
   IN.soltando = true; soltarLock(); setTimeout(() => { IN.soltando = false; }, 250);
   const root = $('#panel');

@@ -302,8 +302,17 @@ async function armarBloqueRed(t) {
   const T = await detectarTransportes(10000);
   const est = sinEstado();
   if (!est || !est.isConnected) return;
-  est.textContent = T.room ? 'Conectado al canal del Artifact: jugás con quien tenga la página abierta.' : T.ws ? 'Servidor propio detectado: jugás con quien entre a esta dirección.' : T.bc ? 'Sin servidor: solo se ven las pestañas de este navegador.' : 'No hay conexión disponible.';
-  est.classList.add(T.room || T.ws ? 'ok' : 'local');
+  let canal = false;
+  if (T.room) {
+    est.textContent = 'Conectando con el canal del Artifact…';
+    canal = await canalConectado();
+    if (!est.isConnected) return;
+  }
+  est.textContent = canal ? 'Conectado al canal del Artifact: jugás con quien tenga la página abierta.'
+    : T.ws ? 'Servidor propio detectado: jugás con quien entre a esta dirección.'
+      : T.room ? 'El canal del Artifact no responde (puede hacer falta abrir la página con tu cuenta de Claude): por ahora jugás solo.'
+        : T.bc ? 'Sin servidor: solo se ven las pestañas de este navegador.' : 'No hay conexión disponible.';
+  est.classList.add(canal || T.ws ? 'ok' : 'local');
   // la primera vez, si hay una sala real, se propone jugar en línea
-  if (RED.cfg.nuevo && (T.room || T.ws)) { const on = $('#rd-on', blq); on.checked = true; guardar2(); }
+  if (RED.cfg.nuevo && (canal || T.ws)) { const on = $('#rd-on', blq); on.checked = true; guardar2(); }
 }

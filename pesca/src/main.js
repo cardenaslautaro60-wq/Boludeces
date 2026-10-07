@@ -169,6 +169,7 @@ async function iniciarRed() {
   for (let i = 0; i < 20 && RED.sala && !RED.sala.conectada(); i++) await new Promise((r) => setTimeout(r, 200));
   if (J.modo === 'titulo' || !RED.sala) return;
   if (RED.sala.conectada()) toast(`🌐 En línea${RED.cfg.sala ? ' · sala ' + RED.cfg.sala : ''}. Chat con T, emotes con G, lista con Tab.`, '#9be7ff');
+  else if (RED.sala.error === 'not_granted' || RED.sala.error === 'revoked') toast('Esta página no te deja entrar a la sala (hace falta abrirla con tu cuenta de Claude): seguís jugando solo.', '#ffe39a');
   else toast('Sin conexión con la sala por ahora: seguís jugando solo y se reintenta solo.', '#ffe39a');
 }
 function nuevaPartida() { empezarJuego(false); }
@@ -202,8 +203,9 @@ function camaraTitulo(dt) {
 
 const TECLAS_PANEL = { KeyI: 'mochila', KeyC: 'bitacora', KeyM: 'mapa', KeyP: 'pausa' };
 function teclasDePanel() {
-  if (pulsada('Escape') && J.t - PANEL.abierto > 0.2) { cerrarPanel(); return true; }
-  for (const k in TECLAS_PANEL) if (pulsada(k) && J.panel === TECLAS_PANEL[k] && J.t - PANEL.abierto > 0.2) { cerrarPanel(); return true; }
+  const pasado = performance.now() - PANEL.abierto > 200;
+  if (pulsada('Escape') && pasado) { cerrarPanel(); return true; }
+  for (const k in TECLAS_PANEL) if (pulsada(k) && J.panel === TECLAS_PANEL[k] && pasado) { cerrarPanel(); return true; }
   return false;
 }
 

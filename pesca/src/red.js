@@ -60,7 +60,9 @@ function salaRoom(room) {
   };
   S.presencia = (patch) => { try { const r = room.presence(patch); if (r && r.catch) r.catch(() => {}); } catch (e) { /* sin sala */ } };
   S.emitir = (tema, datos) => { try { const r = room.emit(tema, datos); if (r && r.catch) r.catch(() => {}); } catch (e) { /* sin permiso */ } };
-  S.escuchar = (tema, fn) => room.on(tema, (m) => fn({ tema, datos: m.data, id: m.peer, esYo: !!(m.isMe && m.sameTab) }), () => {});
+  // el aviso de error de un oyente es terminal (p. ej. not_granted: este espectador no entra a la sala); se guarda para explicárselo al jugador
+  S.error = null;
+  S.escuchar = (tema, fn) => room.on(tema, (m) => fn({ tema, datos: m.data, id: m.peer, esYo: !!(m.isMe && m.sameTab) }), (e) => { S.error = (e && e.code) || 'upstream_error'; });
   S.conectada = () => !!room.connected();
   S.cerrar = () => { try { if (room.leave) room.leave(); } catch (e) { /* nada */ } };
   return S;
@@ -174,6 +176,16 @@ async function detectarTransportes(maxMs = 2500) {
   T.ws = !!(window.__RED_SERVIDOR && /^https?:$/.test(location.protocol));
   return T;
 }
+// El canal del Artifact puede existir y aun así no admitir a este espectador (enlace público, sin sesión): se espera a que conecte de verdad
+async function canalConectado(maxMs = 4500) {
+  const room = RED.transportes.room;
+  if (!room) return false;
+  for (let t = 0; t < maxMs; t += 250) {
+    try { if (room.connected()) return true; } catch (e) { return false; }
+    await espera(250);
+  }
+  return false;
+}
 function parametrosRed() {
   const q = new URLSearchParams(location.search);
   return { red: q.get('red'), sala: q.get('sala') };
@@ -211,16 +223,18 @@ function desconectarRed() {
   reiniciarRedJefes();
   tomarJefesComoAnfitrion(true);
 }
-// Toda mi presencia pasa por acá: se lleva la cuenta de su tamaño y, si se acerca al tope del canal (4 KiB), se suelta lo menos importante
+// Toda mi presencia pasa por acá: se lleva la cuenta de su tamaño (en bytes UTF-8, como mide el canal) y, si se acerca al tope (4 KiB),
+// se suelta lo menos importante
+const bytesJSON = (o) => new TextEncoder().encode(JSON.stringify(o)).length;
 function ponerPresencia(patch) {
   const S = RED.sala;
   if (!S) return;
   for (const k in patch) { if (patch[k] === null) delete RED.mia[k]; else RED.mia[k] = patch[k]; }
-  let n = JSON.stringify(RED.mia).length;
+  let n = bytesJSON(RED.mia);
   if (n > 3600) {
     for (const k of ['ch', 'hz', 'em', 'l', 'a']) {
       if (n <= 3600) break;
-      if (RED.mia[k] !== undefined) { delete RED.mia[k]; patch[k] = null; n = JSON.stringify(RED.mia).length; }
+      if (RED.mia[k] !== undefined) { delete RED.mia[k]; patch[k] = null; n = bytesJSON(RED.mia); }
     }
   }
   S.presencia(patch);
