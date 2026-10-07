@@ -276,29 +276,34 @@ function actualizarBotes(dt) {
       if (Math.hypot(dxx, dzz) < 0.06 && Math.abs(angDiff(b.ang, b.dock.ang)) < 0.02) { b.x = b.dock.x; b.z = b.dock.z; b.ang = b.dock.ang; b.dock = null; b.vel = 0; G.botes[b.def.id] = { x: b.x, z: b.z, ang: b.ang }; }
     }
     if (b !== BOTE.act) orientarBote(b, dt);
-    // remos y hélice
-    const mov = Math.abs(b.vel);
-    for (const r of b.remos) {
-      b.remoT += dt * (mov > 0.4 ? 1.5 + mov * 0.9 : 0.2);
-      const fase = b.remoT * (b.def.id === 'remo' ? 1 : 0);
-      const barrido = mov > 0.4 ? Math.sin(fase) * 0.5 : Math.sin(J.t * 0.8 + r.s) * 0.04 + 0.12;
-      r.g.rotation.y = r.s * barrido;
-      r.g.rotation.x = mov > 0.4 ? Math.cos(fase) * 0.12 * r.s : 0;
+    animarBote(b, dt);
+  }
+}
+
+// Remos, hélice y estela de un bote (el mío o el de otro jugador)
+function animarBote(b, dt) {
+  // remos y hélice
+  const mov = Math.abs(b.vel);
+  for (const r of b.remos) {
+    b.remoT += dt * (mov > 0.4 ? 1.5 + mov * 0.9 : 0.2);
+    const fase = b.remoT * (b.def.id === 'remo' ? 1 : 0);
+    const barrido = mov > 0.4 ? Math.sin(fase) * 0.5 : Math.sin(J.t * 0.8 + r.s) * 0.04 + 0.12;
+    r.g.rotation.y = r.s * barrido;
+    r.g.rotation.x = mov > 0.4 ? Math.cos(fase) * 0.12 * r.s : 0;
+  }
+  if (b.helice) { b.spin += dt * (4 + mov * 5); b.helice.rotation.x = b.spin; }
+  // estela
+  if (mov > 1.4 && b.def.id !== 'remo') {
+    b.estela = (b.estela || 0) - dt;
+    if (b.estela <= 0) {
+      b.estela = 0.12;
+      const fx = Math.sin(b.ang), fz = Math.cos(b.ang);
+      ondaAgua(b.x - fx * b.dm.L * 0.45, b.z - fz * b.dm.L * 0.45, 1.8 + mov * 0.35, 1.3, 0.5, 1);
+      if (mov > 6) chapoteo(b.x + fx * b.dm.L * 0.42, b.z + fz * b.dm.L * 0.42, 2, 0.45);
     }
-    if (b.helice) { b.spin += dt * (4 + mov * 5); b.helice.rotation.x = b.spin; }
-    // estela
-    if (mov > 1.4 && b.def.id !== 'remo') {
-      b.estela = (b.estela || 0) - dt;
-      if (b.estela <= 0) {
-        b.estela = 0.12;
-        const fx = Math.sin(b.ang), fz = Math.cos(b.ang);
-        ondaAgua(b.x - fx * b.dm.L * 0.45, b.z - fz * b.dm.L * 0.45, 1.8 + mov * 0.35, 1.3, 0.5, 1);
-        if (mov > 6) chapoteo(b.x + fx * b.dm.L * 0.42, b.z + fz * b.dm.L * 0.42, 2, 0.45);
-      }
-    } else if (mov > 0.7 && b.def.id === 'remo') {
-      b.estela = (b.estela || 0) - dt;
-      if (b.estela <= 0) { b.estela = 0.5; const fx = Math.sin(b.ang), fz = Math.cos(b.ang); ondaAgua(b.x - fx * 1.5, b.z - fz * 1.5, 1.4, 1.2, 0.4, 1); }
-    }
+  } else if (mov > 0.7 && b.def.id === 'remo') {
+    b.estela = (b.estela || 0) - dt;
+    if (b.estela <= 0) { b.estela = 0.5; const fx = Math.sin(b.ang), fz = Math.cos(b.ang); ondaAgua(b.x - fx * 1.5, b.z - fz * 1.5, 1.4, 1.2, 0.4, 1); }
   }
 }
 

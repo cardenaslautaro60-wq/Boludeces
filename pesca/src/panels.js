@@ -351,11 +351,12 @@ PANELES.cabana = {
 };
 ACC.dormir = () => {
   G.dia++;
-  J.hora = 7;
+  const comp = RED.activa && jugadoresEnSala() > 1;
+  if (!comp) J.hora = 7; // en una sala compartida la hora es de todos: solo se cambia tu día (precios)
   P.hp = P.hpMax; P.hambre = Math.max(30, P.hambre - 14);
   P.buffs.length = 0;
   sfx('dormir');
-  toast('Dormiste hasta las 7:00. ¡Amaneció un día nuevo! Cambiaron los precios.', '#ffe39a');
+  toast(comp ? 'Descansaste un rato. Cambiaron los precios del mercado (la hora es de todos).' : 'Dormiste hasta las 7:00. ¡Amaneció un día nuevo! Cambiaron los precios.', '#ffe39a');
   guardar();
 };
 ACC.guardar = () => { guardar(); toast('Partida guardada.', '#9bffb0'); sfx('click'); };

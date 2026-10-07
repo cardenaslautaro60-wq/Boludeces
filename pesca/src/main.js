@@ -30,6 +30,7 @@ function iniciar3D() {
   crearJefes();
   iniciarInput(canvas);
   crearHUD();
+  crearUIRed();
   redimensionar();
   window.addEventListener('resize', redimensionar);
   // el pescador y la gente de la isla
@@ -78,9 +79,11 @@ function mostrarTitulo() {
     sfx('click'); empezarJuego(false);
   });
   $('#tt-ayuda', t).addEventListener('click', () => { iniciarAudio(); sfx('click'); abrirPanel('ayuda'); });
+  armarBloqueRed(t);
 }
 function irAlTitulo() {
   if (J.partida) guardar();
+  desconectarRed();
   J.partida = false;
   J.modo = 'titulo';
   J.panel = null;
@@ -114,6 +117,8 @@ function reiniciarMundo() {
 }
 function empezarJuego(continuar) {
   iniciarAudio();
+  const bq = $('.tit-red');
+  if (bq && bq.guardar) bq.guardar();
   let ok = false;
   if (continuar) ok = cargarPartida();
   if (!ok) { G = nuevoG(); continuar = false; }
@@ -146,6 +151,12 @@ function empezarJuego(continuar) {
   } else toast('¡Bienvenido de vuelta!', '#9bffb0');
   revisarMisiones();
   pedirLock();
+  if (RED.cfg.online) iniciarRed();
+}
+async function iniciarRed() {
+  const ok = await conectarRed();
+  if (J.modo === 'titulo') { desconectarRed(); return; }
+  toast(ok ? `🌐 En línea${RED.cfg.sala ? ' · sala ' + RED.cfg.sala : ''}. Chat con T, emotes con G, lista con Tab.` : 'No se pudo conectar: seguís jugando solo.', ok ? '#9be7ff' : '#ffb3a8');
 }
 function nuevaPartida() { empezarJuego(false); }
 function limpiarFlotantes() {
@@ -160,6 +171,7 @@ function limpiarFlotantes() {
 // ---------------------------------------------------------------------------
 function actualizarClima(dt) {
   const C = J.clima;
+  if (!RED.anfitrion && RED.activa) { C.lluvia += (C.objetivo - C.lluvia) * Math.min(1, dt * 0.1); if (C.lluvia < 0.003) C.lluvia = 0; C.ola = 1 + C.lluvia * 0.85 + 0.15 * Math.sin(J.t * 0.021); C.viento = 0.25 + C.lluvia * 0.6; return; }
   C.tClima -= dt;
   if (C.tClima <= 0) { C.tClima = rand(110, 250); C.objetivo = Math.random() < 0.27 ? rand(0.5, 1) : 0; }
   C.lluvia += (C.objetivo - C.lluvia) * Math.min(1, dt * 0.1);
@@ -191,17 +203,24 @@ function actualizar(dt) {
     limpiarPulsos();
     return;
   }
-  if (J.panel) {
+  const enMenu = !!J.panel;
+  // con otros jugadores el mundo no se frena cuando abrís un menú (seguís protegido, pero los jefes siguen peleando)
+  const compartido = RED.activa && jugadoresEnSala() > 1;
+  if (enMenu) {
     teclasDePanel();
-    actualizarCielo(0, ESC.camara);
-    limpiarPulsos();
-    return;
+    if (!compartido) {
+      actualizarCielo(0, ESC.camara);
+      limpiarPulsos();
+      return;
+    }
+    P.inv = Math.max(P.inv, 1.2);
   }
   const jugando = J.modo === 'jugando';
   J.t += dt;
   if (jugando) { J.hora = (J.hora + (dt * 24) / PESCA.diaSeg) % 24; G.stats.segundos += dt; if (J.hora < 0.01 || (J.hora < 6.02 && J.hora > 5.98)) { /* amanecer */ } }
   actualizarClima(dt);
-  if (jugando) actualizarJugador(dt); else { P.vel.x = P.vel.z = 0; calcularMira(); }
+  actualizarMulti(dt);
+  if (jugando && !enMenu) actualizarJugador(dt); else { P.vel.x = P.vel.z = 0; calcularMira(); }
   if (J.dia !== G.dia) J.dia = G.dia;
   actualizarCamara(dt);
   actualizarLinea(dt);
@@ -223,6 +242,8 @@ function actualizar(dt) {
   actualizarEdificios(dt);
   actualizarArsenal(dt);
   actualizarVisitas(dt);
+  actualizarRemotos(dt);
+  actualizarBotonesRed();
   actualizarFX(dt);
   actualizarHUD(dt);
   ambienteFrame(dt);

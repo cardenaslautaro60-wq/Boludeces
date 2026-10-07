@@ -295,6 +295,8 @@ function procesarAcciones() {
   if (pulsada('KeyI')) abrirPanel('mochila');
   if (pulsada('KeyC')) abrirPanel('bitacora');
   if (pulsada('KeyM')) abrirPanel('mapa');
+  if (pulsada('KeyT') && !MPV.abierto) abrirChat();
+  if (pulsada('KeyG')) alternarEmotes();
   if (pulsada('Escape') || pulsada('KeyP')) abrirPanel('pausa');
   if (pulsada('KeyQ') || IN.dinaTactil) lanzarDinamita();
   IN.dinaTactil = false;
