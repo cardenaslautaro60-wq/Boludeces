@@ -4,6 +4,9 @@
 
 const REAPARECE_JEFE = 240; // segundos hasta que un jefe vuelve
 const RANGO_CEBO = 38; // metros: a esa distancia de la boya un jefe nota la carnada
+// Multijugador: el jefe apunta a un jugador (en solitario, siempre a vos). Con otros jugadores, el anfitrión elige a quién y los demás solo ven.
+const blanco = (b) => b.blanco || P.pos;
+const esProxy = () => RED.activa && !RED.anfitrion;
 
 const ARTE_JEFE = {
   cangrejo: { sp: { arte: { forma: 'cangrejo', c1: '#e0583a', c2: '#f7a07f' } }, L: 8.2, y: -1.0, ysub: -2.6 },
@@ -66,7 +69,8 @@ function crearJefes() {
     ESC.escena.add(mod.grupo);
     const b = {
       def, mod, estado: 'patrulla', x: 0, z: 0, ang: 0, vel: 0, hp: def.hp, hpMax: def.hp, t: rand(100), fase0: rand(TAU), orb: rand(TAU),
-      respawn: 0, fase: 0, aturdido: 0, cd: 0, atk: null, flash: 0, alza: 0, abierto: 0, muerteT: 0, hooked: false, emerge: 1, tCuerpo: 0, y: ARTE_JEFE[def.forma].ysub,
+      respawn: 0, fase: 0, aturdido: 0, cd: 0, atk: null, flash: 0, alza: 0, abierto: 0, muerteT: 0, hooked: false, emerge: 1, y: ARTE_JEFE[def.forma].ysub,
+      vida: 1, kid: 0, contrib: {}, cebo: null, blanco: null, blancoId: null, cuerpoLocal: null, botinPendiente: false, botinEn: 0, dignos: [],
     };
     const p = posicionOrbita(b);
     b.x = p.x; b.z = p.z; b.ang = p.th + Math.PI / 2;
@@ -82,9 +86,43 @@ function posicionOrbita(b) {
 const minDist = (b) => 3 + b.def.radio * 0.7;
 const jefeVisible = (b) => b.estado !== 'oculto' && b.estado !== 'muerto';
 function jefeEnPantalla() {
-  for (const b of BOSSES) if (b.estado === 'pelea' || b.estado === 'muriendo' || b.estado === 'mordiendo') return b;
+  for (const b of BOSSES) if ((b.estado === 'pelea' || b.estado === 'muriendo' || b.estado === 'mordiendo') && Math.hypot(b.x - P.pos.x, b.z - P.pos.z) < 240) return b;
   return null;
 }
+// Jugadores a los que un jefe puede apuntar: yo (si estoy en pie) y los demás de la sala (si se los ve vivos y recientes)
+function blancosPosibles() {
+  const L = [];
+  if (J.modo === 'jugando' && P.hp > 0) L.push({ id: 'yo', pos: P.pos, local: true });
+  if (RED.activa) {
+    const ahora = performance.now();
+    for (const r of RED.remotos.values()) { const q = r.pose; if (q && r.posBlanco && ahora - q.t < 4000 && q.hp > 0 && !(q.f & 16)) L.push({ id: r.id, pos: r.posBlanco, local: false }); }
+  }
+  return L;
+}
+// El jugador más cercano dentro de `rango` (y con diferencia de altura < dy)
+function blancoCercano(b, rango, dy = 99) {
+  let mejor = null, md = rango;
+  for (const q of blancosPosibles()) { const d = Math.hypot(q.pos.x - b.x, q.pos.z - b.z); if (d < md && Math.abs(q.pos.y - b.y) < dy) { md = d; mejor = q; } }
+  return mejor;
+}
+// Elige a quién pelea (se queda con el mismo salvo que otro esté bastante más cerca); null si no hay nadie dentro de `rango`
+function elegirBlancoJefe(b, rango) {
+  let mejor = null, md = rango, actual = null;
+  for (const q of blancosPosibles()) {
+    const d = Math.hypot(q.pos.x - b.x, q.pos.z - b.z);
+    if (q.id === b.blancoId) actual = { q, d };
+    if (d < md) { md = d; mejor = q; }
+  }
+  if (actual && actual.d < rango && (!mejor || actual.d <= md * 1.3 + 2)) mejor = actual.q;
+  b.blancoId = mejor ? mejor.id : null;
+  b.blanco = mejor ? mejor.pos : null;
+  return mejor;
+}
+const jugadoresCerca = (b, r) => Math.max(1, blancosPosibles().filter((q) => Math.hypot(q.pos.x - b.x, q.pos.z - b.z) < r).length);
+// Vida máxima de un jefe: crece 20 % cada vez que lo vencés (hasta 5) y 65 % por cada jugador extra que pelea
+function hpMaxJefe(def, cerca = 1) { return Math.round(def.hp * (1 + 0.2 * Math.min(5, jefeKills(def.id))) * (1 + 0.65 * (clamp(cerca, 1, 6) - 1))); }
+const miIdRed = () => (RED.activa && RED.yo ? String(RED.yo) : 'yo');
+
 function jefeRetirarse(b) {
   if (b.tierra) { reiniciarJefeTierra(b); return; }
   if (b.estado === 'pelea' || b.estado === 'atraido' || b.estado === 'mordiendo') {
@@ -92,7 +130,11 @@ function jefeRetirarse(b) {
     b.hp = Math.min(b.hpMax, b.hp + b.hpMax * 0.1);
   }
 }
-function jefeSoltarCebo(b) { if (b.estado === 'atraido' || b.estado === 'mordiendo') b.estado = 'huyendo'; if (LINEA.jefe === b) LINEA.jefe = null; }
+function jefeSoltarCebo(b) {
+  if (esProxy()) { if (b.estado === 'atraido' || b.estado === 'mordiendo' || b.estado === 'patrulla') pedirSoltarCebo(b); if (LINEA.jefe === b) LINEA.jefe = null; return; }
+  if (b.estado === 'atraido' || b.estado === 'mordiendo') { b.estado = 'huyendo'; b.cebo = null; }
+  if (LINEA.jefe === b) LINEA.jefe = null;
+}
 function jefeBuscarCebo(x, z) {
   let mejor = null, md = RANGO_CEBO;
   for (const b of BOSSES) {
@@ -102,9 +144,18 @@ function jefeBuscarCebo(x, z) {
   }
   return mejor;
 }
+// Un jefe nota la carnada: el anfitrión lo atrae a la boya; otro jugador se lo pide al anfitrión
+function jefeCebado(b) {
+  if (esProxy()) { pedirCebo(b, LINEA.x, LINEA.z); return; }
+  b.estado = 'atraido'; b.cebo = { local: true, id: 'yo' };
+}
 
 function actualizarJefes(dt) {
+  const proxy = esProxy();
   for (const b of BOSSES) {
+    if (b.cuerpoLocal) cuerpoJefe(b, dt);
+    if (b.botinPendiente && J.t >= b.botinEn) recompensasJefe(b);
+    if (proxy) { actualizarJefeProxy(b, dt); continue; }
     if (b.tierra) { actualizarJefeTierra(b, dt); sincronizarJefeTierra(b, dt); continue; }
     b.t += dt;
     b.flash = Math.max(0, b.flash - dt * 4);
@@ -121,38 +172,37 @@ function actualizarJefes(dt) {
         const dx = b.x - px, dz = b.z - pz;
         if (Math.hypot(dx, dz) > 0.002) b.ang = turnToward(b.ang, Math.atan2(dz, dx), dt * 1.5);
         b.vel = Math.hypot(dx, dz) / dt;
-        if (Math.hypot(b.x - P.pos.x, b.z - P.pos.z) < 90 && !(G.jefes[b.def.id] && G.jefes[b.def.id].visto) && J.t - BOSS3D.avisoT > 20) {
-          BOSS3D.avisoT = J.t;
-          (G.jefes[b.def.id] = G.jefes[b.def.id] || { kills: 0 }).visto = true;
-          toast(`Una sombra gigante se mueve bajo el agua... (${b.def.nombre})`, '#ffb3a8');
-          sfx('jefeCerca');
-        }
+        avisoSombra(b);
         break;
       }
       case 'atraido': {
-        if (LINEA.jefe !== b || (LINEA.estado !== 'espera' && LINEA.estado !== 'mordisqueo')) { b.estado = 'huyendo'; break; }
-        const des = Math.atan2(LINEA.z - b.z, LINEA.x - b.x);
+        const cb = ceboDe(b);
+        if (!cb) { b.estado = 'huyendo'; b.cebo = null; break; }
+        const des = Math.atan2(cb.z - b.z, cb.x - b.x);
         b.ang = turnToward(b.ang, des, dt * 2.2);
         const v = b.def.vel * 1.5;
         b.x += Math.cos(b.ang) * v * dt; b.z += Math.sin(b.ang) * v * dt;
         b.vel = v;
         if (Math.random() < dt * 4) ondaAgua(b.x + rand(-3, 3), b.z + rand(-3, 3), 4, 1, 0.4, 1);
-        if (Math.hypot(b.x - LINEA.x, b.z - LINEA.z) < b.def.radio + 3) {
-          b.estado = 'mordiendo';
-          LINEA.estado = 'picada'; LINEA.t = 0; LINEA.ventana = 1.8; LINEA.hundida = 1; LINEA.pez = null;
-          chapoteo(LINEA.x, LINEA.z, 20, 1.8);
-          sfx('rugido'); sacudir(22);
-          toast('¡EL JEFE PICÓ! ¡Clavá!', '#ff8a7a');
+        if (Math.hypot(b.x - cb.x, b.z - cb.z) < b.def.radio + 3) {
+          b.estado = 'mordiendo'; b.tMuerde = 0;
+          if (cb.local) { LINEA.estado = 'picada'; LINEA.t = 0; LINEA.ventana = 1.8; LINEA.hundida = 1; LINEA.pez = null; toast('¡EL JEFE PICÓ! ¡Clavá!', '#ff8a7a'); }
+          chapoteo(cb.x, cb.z, 20, 1.8);
+          if (cb.local) { sfx('rugido'); sacudir(22); }
         }
         break;
       }
-      case 'mordiendo':
-        b.vel = 0;
-        if (LINEA.jefe !== b || LINEA.estado !== 'picada') b.estado = LINEA.estado === 'pelea' ? 'pelea' : 'huyendo';
+      case 'mordiendo': {
+        b.vel = 0; b.tMuerde = (b.tMuerde || 0) + dt;
+        if (b.cebo && b.cebo.id && b.cebo.id !== 'yo') {
+          // el que lo cebó es otro jugador: se queda mordiendo mientras su línea siga en "picada"; si clava, pasa a pelear
+          const r = RED.remotos.get(b.cebo.id), l = r && r.p && Array.isArray(r.p.l) ? r.p.l : null;
+          if (!l || (l[0] !== 4 && l[0] !== 5 && b.tMuerde > 1.2)) { b.estado = 'huyendo'; b.cebo = null; }
+        } else if (LINEA.jefe !== b || LINEA.estado !== 'picada') { b.estado = LINEA.estado === 'pelea' ? 'pelea' : 'huyendo'; if (b.estado === 'huyendo') b.cebo = null; }
         break;
-      case 'pelea': iaJefe(b, dt); break;
+      }
+      case 'pelea': elegirBlancoMar(b); iaJefe(b, dt); break;
       case 'muriendo': muriendoJefe(b, dt); break;
-      case 'cuerpo': cuerpoJefe(b, dt); break;
       case 'huyendo': {
         const p = posicionOrbita(b);
         const d = Math.hypot(b.x - p.x, b.z - p.z);
@@ -172,19 +222,47 @@ function actualizarJefes(dt) {
     sincronizarJefe(b, dt);
   }
 }
+// Aviso la primera vez que pasás cerca de la sombra de un jefe
+function avisoSombra(b) {
+  if (Math.hypot(b.x - P.pos.x, b.z - P.pos.z) < 90 && !(G.jefes[b.def.id] && G.jefes[b.def.id].visto) && J.t - BOSS3D.avisoT > 20) {
+    BOSS3D.avisoT = J.t;
+    (G.jefes[b.def.id] = G.jefes[b.def.id] || { kills: 0 }).visto = true;
+    toast(`Una sombra gigante se mueve bajo el agua... (${b.def.nombre})`, '#ffb3a8');
+    sfx('jefeCerca');
+  }
+}
+// Dónde está la carnada que atrae al jefe: mi boya o la de otro jugador. null si ya no hay carnada.
+function ceboDe(b) {
+  const c = b.cebo;
+  if (!c) return null;
+  if (c.local || !c.id || c.id === 'yo') {
+    if (LINEA.jefe !== b || (LINEA.estado !== 'espera' && LINEA.estado !== 'mordisqueo')) return null;
+    return { x: LINEA.x, z: LINEA.z, local: true };
+  }
+  const r = RED.remotos.get(c.id), l = r && r.p && Array.isArray(r.p.l) ? r.p.l : null;
+  if (!l || (l[0] !== 2 && l[0] !== 3) || !Number.isFinite(l[1]) || !Number.isFinite(l[2])) return null;
+  return { x: l[1], z: l[2], local: false };
+}
+// Elige a quién pelea el jefe del mar (en solitario, a vos)
+function elegirBlancoMar(b) {
+  if (!RED.activa) { b.blanco = null; b.blancoId = 'yo'; return; }
+  const q = elegirBlancoJefe(b, 230);
+  if (!q) { b.estado = 'huyendo'; b.atk = null; b.aturdido = 0; b.alza = 0; b.abierto = 0; b.hp = Math.min(b.hpMax, b.hp + b.hpMax * 0.1); limpiarPeligros(); }
+}
 function sincronizarJefe(b, dt) {
   const m = b.mod, cfg = ARTE_JEFE[b.def.forma];
-  const vis = jefeVisible(b) && Math.hypot(b.x - P.pos.x, b.z - P.pos.z) < 520;
+  const cuerpo = !!b.cuerpoLocal;
+  const vis = (jefeVisible(b) || cuerpo) && Math.hypot(b.x - P.pos.x, b.z - P.pos.z) < 520;
   m.grupo.visible = vis;
   if (!vis) return;
-  const sumergido = b.estado === 'patrulla' || b.estado === 'atraido' || b.estado === 'mordiendo' || b.estado === 'huyendo' || b.estado === 'oculto';
-  const yObj = sumergido ? cfg.ysub : b.estado === 'cuerpo' ? 0.05 : b.estado === 'muriendo' ? cfg.y - Math.min(0.8, b.muerteT * 0.3) : cfg.y;
+  const sumergido = !cuerpo && (b.estado === 'patrulla' || b.estado === 'atraido' || b.estado === 'mordiendo' || b.estado === 'huyendo' || b.estado === 'oculto');
+  const yObj = sumergido ? cfg.ysub : cuerpo ? 0.05 : b.estado === 'muriendo' ? cfg.y - Math.min(0.8, b.muerteT * 0.3) : cfg.y;
   b.y += (yObj - b.y) * Math.min(1, dt * (sumergido ? 1.2 : 2.5));
   const suelo = H(b.x, b.z);
   const y = Math.max(b.y, suelo + 0.2);
-  m.grupo.position.set(b.x, y + (b.estado === 'cuerpo' ? Math.sin(b.t * 1.3) * 0.05 : 0), b.z);
+  m.grupo.position.set(b.x, y + (cuerpo ? Math.sin(b.t * 1.3) * 0.05 : 0), b.z);
   m.grupo.rotation.set(0, -b.ang, 0);
-  if (b.estado === 'cuerpo' || (b.estado === 'muriendo' && b.muerteT > 0.8)) m.grupo.rotation.x = Math.PI;
+  if (cuerpo || (b.estado === 'muriendo' && b.muerteT > 0.8)) m.grupo.rotation.x = Math.PI;
   modoModelo(m, sumergido ? 'sombra' : 'color', 'abismo');
   m.animar(dt, Math.max(b.vel, 1.2), J.t, b.fase0);
   if (b.def.forma === 'cangrejo') {
@@ -204,11 +282,10 @@ function sincronizarJefe(b, dt) {
   if (b.estrellas.visible) b.estrellas.children.forEach((s, i) => { const a = J.t * 4 + (i / 3) * TAU; s.position.set(b.x + Math.cos(a) * b.def.radio * 0.8, 2.6 + b.def.radio * 0.4 + Math.sin(a * 2) * 0.3, b.z + Math.sin(a) * b.def.radio * 0.8); s.rotation.y = a * 2; });
 }
 function reaparecerJefe(b) {
-  const k = Math.min(5, jefeKills(b.def.id));
-  b.hpMax = Math.round(b.def.hp * (1 + 0.2 * k));
+  b.hpMax = hpMaxJefe(b.def);
   b.hp = b.hpMax;
   b.estado = b.def.cuando === 'noche' && J.luz > 0.5 ? 'oculto' : 'patrulla';
-  b.fase = 0; b.aturdido = 0; b.atk = null; b.hooked = false; b.alza = 0; b.abierto = 0; b.emerge = 1;
+  b.fase = 0; b.aturdido = 0; b.atk = null; b.hooked = false; b.alza = 0; b.abierto = 0; b.emerge = 1; b.cebo = null; b.cuerpoLocal = null; b.contrib = {}; b.vida = (b.vida || 1) + 1;
   const p = posicionOrbita(b);
   b.x = p.x; b.z = p.z; b.y = ARTE_JEFE[b.def.forma].ysub;
   if (G.jefes[b.def.id] && G.jefes[b.def.id].kills > 0) toast(`${b.def.nombre} volvió a su guarida, más fuerte.`, '#ffb3a8');
@@ -221,31 +298,35 @@ function jefeEnganchado(b) {
   const L = LINEA, d = b.def;
   const re = b.estado === 'pelea';
   L.estado = 'pelea'; L.t = 0; L.jefe = b; L.pez = null;
-  b.hooked = true;
+  b.hooked = true; L.tEnganche = J.t;
   const pseudo = { id: d.id, kg: [1, 1], fuerza: d.fl, aguante: 99, pat: 'normal' };
   L.pelea = nuevaPelea(pseudo, 1, L.equipo, { boss: true });
   L.pelea.pullFijo = 0.4; L.pelea.T = 0.3;
-  if (re) { chapoteo(b.x, b.z, 12, 1.5); sfx('clavar'); toast('¡Enganchado de nuevo!', '#9bffb0'); return; }
-  b.estado = 'pelea'; b.emerge = 0;
-  if (b.hp <= 0 || b.hp > b.hpMax) b.hp = b.hpMax;
-  b.fase = 0; b.aturdido = 0; b.atk = null; b.cd = 2.4;
+  if (esProxy()) { pedirEnganche(b); chapoteo(b.x, b.z, re ? 12 : 30, re ? 1.5 : 3); sfx(re ? 'clavar' : 'rugido'); if (re) toast('¡Enganchado de nuevo!', '#9bffb0'); return; }
+  if (re) { chapoteo(b.x, b.z, 12, 1.5); sfx('clavar'); toast('¡Enganchado de nuevo!', '#9bffb0'); b.blancoId = 'yo'; return; }
+  empezarPeleaMar(b, 'yo');
+}
+// El jefe del mar empieza a pelear: lo llama quien lo engancha (si es el anfitrión) o el anfitrión cuando lo engancha otro jugador
+function empezarPeleaMar(b, quien) {
+  const d = b.def;
+  const frac = b.hpMax > 0 ? clamp(b.hp / b.hpMax, 0, 1) : 1;
+  b.estado = 'pelea'; b.emerge = 0; b.cebo = null;
+  b.hpMax = hpMaxJefe(d, jugadoresCerca(b, 230)); b.hp = (frac > 0 ? frac : 1) * b.hpMax;
+  b.fase = 0; b.aturdido = 0; b.atk = null; b.cd = 2.4; b.contrib = b.contrib || {}; b.blancoId = quien;
   (G.jefes[d.id] = G.jefes[d.id] || { kills: 0 }).visto = true;
-  chapoteo(b.x, b.z, 30, 3);
-  sfx('rugido'); sacudir(26);
-  musica('jefe');
-  bannerJefe(d);
+  if (Math.hypot(b.x - P.pos.x, b.z - P.pos.z) < 280) { chapoteo(b.x, b.z, 30, 3); sfx('rugido'); sacudir(26); musica('jefe'); bannerJefe(d); }
 }
 // Posición de combate: en el agua, a "ac" metros del jugador, del lado donde ya está el jefe
 function posCombate(b) {
-  const d = b.def;
-  let a0 = Math.atan2(b.z - P.pos.z, b.x - P.pos.x);
+  const d = b.def, T = blanco(b);
+  let a0 = Math.atan2(b.z - T.z, b.x - T.x);
   if (d.forma === 'tiburon') a0 += Math.sin(b.t * 0.55) * 0.7;
   else if (d.forma === 'anguila') a0 += Math.sin(b.t * 0.8) * 0.9;
   const mdist = minDist(b);
   for (const k of [1, 1.35, 1.8, 2.4, 3.2]) {
     for (const off of [0, 0.35, -0.35, 0.7, -0.7, 1.1, -1.1, 1.6, -1.6, 2.2, -2.2, 3]) {
       const a = a0 + off, r = d.ac * k;
-      const x = P.pos.x + Math.cos(a) * r, z = P.pos.z + Math.sin(a) * r;
+      const x = T.x + Math.cos(a) * r, z = T.z + Math.sin(a) * r;
       if (H(x, z) < -1.5 && distCosta(x, z) > mdist && Math.hypot(x, z) < MUNDO.R - 8) return { x, z };
     }
   }
@@ -262,9 +343,10 @@ function iaJefe(b, dt) {
     sfx('rugido'); sacudir(26);
     chapoteo(b.x, b.z, 26, 3);
   }
-  const haciaP = Math.atan2(P.pos.z - b.z, P.pos.x - b.x);
+  const haciaP = Math.atan2(blanco(b).z - b.z, blanco(b).x - b.x);
   const vel = d.vel * (1 + 0.18 * b.fase);
   if (b.atk) {
+    b.atk.t += dt;
     if (ATAQUES[b.atk.id].act(b, b.atk, dt)) {
       b.atk = null;
       b.aturdido = d.stun;
@@ -370,6 +452,7 @@ function peligroCirculo(x, z, r, delay, dmg, o = {}) {
   ESC.escena.add(mesh);
   const p = Object.assign({ tipo: 'circ', x, z, r, t: 0, delay, dmg, res: false, tr: 0, persist: 0, mesh, mat }, o);
   PELIGROS.push(p);
+  registrarZonaRed(p);
   sfx('telegrafo');
   return p;
 }
@@ -383,6 +466,7 @@ function peligroLinea(x1, z1, x2, z2, w, delay, dmg, o = {}) {
   ESC.escena.add(mesh);
   const p = Object.assign({ tipo: 'linea', x: x1, z: z1, x2, z2, w, t: 0, delay, dmg, res: false, tr: 0, persist: 0, mesh, mat }, o);
   PELIGROS.push(p);
+  registrarZonaRed(p);
   sfx('telegrafo');
   return p;
 }
@@ -504,7 +588,7 @@ const ATAQUES_JEFE = {
   tentacula: [{ id: 'tentaculos', w: 4, f: 0 }, { id: 'tinta', w: 2, f: 0 }, { id: 'abrazo', w: 3, f: 0 }, { id: 'tentaculosMax', w: 3, f: 1 }],
   leviatan: [{ id: 'chorro', w: 3, f: 0 }, { id: 'torbellino', w: 2, f: 0 }, { id: 'tentaculosLev', w: 3, f: 0 }, { id: 'rugido', w: 2, f: 1 }, { id: 'chorroDoble', w: 3, f: 1 }, { id: 'diluvio', w: 3, f: 2 }],
 };
-const mirar = (b, dt, v = 4) => { b.ang = turnToward(b.ang, Math.atan2(P.pos.z - b.z, P.pos.x - b.x), dt * v); };
+const mirar = (b, dt, v = 4) => { b.ang = turnToward(b.ang, Math.atan2(blanco(b).z - b.z, blanco(b).x - b.x), dt * v); };
 const avanzarJefe = (b, ang, v, dt) => {
   const nx = b.x + Math.cos(ang) * v * dt, nz = b.z + Math.sin(ang) * v * dt;
   if (H(nx, nz) < -1.1 && distCosta(nx, nz) > minDist(b) * 0.6) { b.x = nx; b.z = nz; return true; }
@@ -512,13 +596,13 @@ const avanzarJefe = (b, ang, v, dt) => {
 };
 const dmgJ = (b, m = 1) => Math.round(b.def.dmg * m * (1 + 0.1 * b.fase));
 const alrededor = (x, z, r) => { const a = rand(TAU), d = rand(r * 0.3, r); return { x: x + Math.cos(a) * d, z: z + Math.sin(a) * d }; };
-const haciaJ = (b) => Math.atan2(P.pos.z - b.z, P.pos.x - b.x);
+const haciaJ = (b) => Math.atan2(blanco(b).z - b.z, blanco(b).x - b.x);
 const lineaDesde = (b, ang, len, w, delay, dmg, o = {}) => peligroLinea(b.x, b.z, b.x + Math.cos(ang) * len, b.z + Math.sin(ang) * len, w, delay, dmg, o);
 
 const ATAQUES = {
   // ---- Don Pinza
-  pinzazo: { ini(b) { peligroCirculo(P.pos.x, P.pos.z, 4.2, 0.95, dmgJ(b)); b.alza = 1; }, act(b, a, dt) { mirar(b, dt); b.alza = a.t < 0.95 ? 1 : Math.max(0, 1 - (a.t - 0.95) * 6); if (a.t >= 0.95 && !a.golpe) { a.golpe = true; sacudir(14); sfx('impacto'); } return a.t >= 1.2; } },
-  doblePinza: { ini(b) { peligroCirculo(P.pos.x, P.pos.z, 3.8, 0.8, dmgJ(b, 0.85)); b.alza = 1; }, act(b, a, dt) { mirar(b, dt); if (a.t > 0.45 && !a.seg) { a.seg = true; peligroCirculo(P.pos.x, P.pos.z, 3.8, 0.85, dmgJ(b, 0.85)); } b.alza = a.t < 1.3 ? 1 : 0; return a.t >= 1.45; } },
+  pinzazo: { ini(b) { peligroCirculo(blanco(b).x, blanco(b).z, 4.2, 0.95, dmgJ(b)); b.alza = 1; }, act(b, a, dt) { mirar(b, dt); b.alza = a.t < 0.95 ? 1 : Math.max(0, 1 - (a.t - 0.95) * 6); if (a.t >= 0.95 && !a.golpe) { a.golpe = true; sacudir(14); sfx('impacto'); } return a.t >= 1.2; } },
+  doblePinza: { ini(b) { peligroCirculo(blanco(b).x, blanco(b).z, 3.8, 0.8, dmgJ(b, 0.85)); b.alza = 1; }, act(b, a, dt) { mirar(b, dt); if (a.t > 0.45 && !a.seg) { a.seg = true; peligroCirculo(blanco(b).x, blanco(b).z, 3.8, 0.85, dmgJ(b, 0.85)); } b.alza = a.t < 1.3 ? 1 : 0; return a.t >= 1.45; } },
   barrida: { ini(b, a) { a.ang = haciaJ(b); lineaDesde(b, a.ang, 18, 5.4, 1.0, dmgJ(b, 1.15)); b.alza = 1; }, act(b, a, dt) { b.ang = turnToward(b.ang, a.ang, dt * 6); b.alza = a.t < 1.0 ? 1 : 0; return a.t >= 1.25; } },
   furiaPinza: {
     ini(b) { const ang = haciaJ(b); for (let i = 0; i < 4; i++) peligroCirculo(b.x + Math.cos(ang) * (6 + i * 4.2), b.z + Math.sin(ang) * (6 + i * 4.2), 3.5, 0.7 + i * 0.28, dmgJ(b, 0.9)); b.alza = 1; },
@@ -534,7 +618,7 @@ const ATAQUES = {
   // ---- La Relámpago
   rayos: {
     ini(b, a) { a.n = b.fase ? 5 : 3; a.i = 0; },
-    act(b, a, dt) { mirar(b, dt); if (a.i < a.n && a.t >= a.i * 0.5) { peligroCirculo(P.pos.x + rand(-1.5, 1.5), P.pos.z + rand(-1.5, 1.5), 3.6, 0.9, dmgJ(b, 0.8), { rayo: true }); a.i++; } return a.t >= a.n * 0.5 + 1.0; },
+    act(b, a, dt) { mirar(b, dt); if (a.i < a.n && a.t >= a.i * 0.5) { peligroCirculo(blanco(b).x + rand(-1.5, 1.5), blanco(b).z + rand(-1.5, 1.5), 3.6, 0.9, dmgJ(b, 0.8), { rayo: true }); a.i++; } return a.t >= a.n * 0.5 + 1.0; },
   },
   latigazo: {
     ini(b, a) { a.ang = haciaJ(b); lineaDesde(b, a.ang, 22, 4.4, 0.9, dmgJ(b, 1.1), { rayo: true }); },
@@ -543,20 +627,20 @@ const ATAQUES = {
   campo: { ini(b) { peligroCirculo(b.x, b.z, 13.5, 1.35, dmgJ(b, 1.1), { rayo: true, campo: true }); }, act(b, a) { return a.t >= 1.55; } },
   tormenta: {
     ini(b, a) { peligroCirculo(b.x, b.z, 13.5, 1.2, dmgJ(b, 1.1), { rayo: true, campo: true }); a.fase2 = false; },
-    act(b, a, dt) { mirar(b, dt); if (a.t > 0.6 && !a.fase2) { a.fase2 = true; for (let i = 0; i < 4; i++) { const q = alrededor(P.pos.x, P.pos.z, 9); peligroCirculo(q.x, q.z, 3.3, 0.9 + i * 0.2, dmgJ(b, 0.75), { rayo: true }); } } return a.t >= 2.0; },
+    act(b, a, dt) { mirar(b, dt); if (a.t > 0.6 && !a.fase2) { a.fase2 = true; for (let i = 0; i < 4; i++) { const q = alrededor(blanco(b).x, blanco(b).z, 9); peligroCirculo(q.x, q.z, 3.3, 0.9 + i * 0.2, dmgJ(b, 0.75), { rayo: true }); } } return a.t >= 2.0; },
   },
   // ---- Doña Tentácula
   tentaculos: {
     ini(b, a) { a.n = 4; a.i = 0; },
-    act(b, a, dt) { mirar(b, dt, 2); if (a.i < a.n && a.t >= a.i * 0.22) { const q = a.i === 0 ? { x: P.pos.x, z: P.pos.z } : alrededor(P.pos.x, P.pos.z, 10); peligroCirculo(q.x, q.z, 3.4, 0.95, dmgJ(b, 0.75), { tent: { x: b.x, z: b.z, ancho: 1.3, col: '#a05fb8' } }); a.i++; } return a.t >= a.n * 0.22 + 1.05; },
+    act(b, a, dt) { mirar(b, dt, 2); if (a.i < a.n && a.t >= a.i * 0.22) { const q = a.i === 0 ? { x: blanco(b).x, z: blanco(b).z } : alrededor(blanco(b).x, blanco(b).z, 10); peligroCirculo(q.x, q.z, 3.4, 0.95, dmgJ(b, 0.75), { tent: { x: b.x, z: b.z, ancho: 1.3, col: '#a05fb8' } }); a.i++; } return a.t >= a.n * 0.22 + 1.05; },
   },
   tentaculosMax: {
     ini(b, a) { a.n = 7; a.i = 0; },
-    act(b, a, dt) { mirar(b, dt, 2); if (a.i < a.n && a.t >= a.i * 0.2) { const q = a.i % 3 === 0 ? { x: P.pos.x, z: P.pos.z } : alrededor(P.pos.x, P.pos.z, 12); peligroCirculo(q.x, q.z, 3.4, 0.9, dmgJ(b, 0.75), { tent: { x: b.x, z: b.z, ancho: 1.3, col: '#a05fb8' } }); a.i++; } return a.t >= a.n * 0.2 + 1.0; },
+    act(b, a, dt) { mirar(b, dt, 2); if (a.i < a.n && a.t >= a.i * 0.2) { const q = a.i % 3 === 0 ? { x: blanco(b).x, z: blanco(b).z } : alrededor(blanco(b).x, blanco(b).z, 12); peligroCirculo(q.x, q.z, 3.4, 0.9, dmgJ(b, 0.75), { tent: { x: b.x, z: b.z, ancho: 1.3, col: '#a05fb8' } }); a.i++; } return a.t >= a.n * 0.2 + 1.0; },
   },
   tinta: {
-    ini(b, a) { peligroCirculo(P.pos.x, P.pos.z, 11, 0.7, 0, { efecto: 'lento', dur: 7 }); a.t2 = false; },
-    act(b, a, dt) { mirar(b, dt, 2); if (a.t > 0.8 && !a.t2) { a.t2 = true; for (let i = 0; i < 3; i++) { const q = alrededor(P.pos.x, P.pos.z, 8); peligroCirculo(q.x, q.z, 3.3, 0.9 + i * 0.25, dmgJ(b, 0.7), { tent: { x: b.x, z: b.z, ancho: 1.2, col: '#8a4aa0' } }); } } return a.t >= 2.3; },
+    ini(b, a) { peligroCirculo(blanco(b).x, blanco(b).z, 11, 0.7, 0, { efecto: 'lento', dur: 7 }); a.t2 = false; },
+    act(b, a, dt) { mirar(b, dt, 2); if (a.t > 0.8 && !a.t2) { a.t2 = true; for (let i = 0; i < 3; i++) { const q = alrededor(blanco(b).x, blanco(b).z, 8); peligroCirculo(q.x, q.z, 3.3, 0.9 + i * 0.25, dmgJ(b, 0.7), { tent: { x: b.x, z: b.z, ancho: 1.2, col: '#8a4aa0' } }); } } return a.t >= 2.3; },
   },
   abrazo: {
     ini(b, a) { a.ang = haciaJ(b); lineaDesde(b, a.ang, 32, 8, 1.2, dmgJ(b, 1.0), { tent: { x: b.x, z: b.z, ancho: 2.0, col: '#a05fb8' } }); },
@@ -568,24 +652,24 @@ const ATAQUES = {
     ini(b, a) { a.ang = haciaJ(b); lineaDesde(b, a.ang, 60, 7, 1.0, dmgJ(b, 0.8)); a.s = false; },
     act(b, a, dt) { if (a.t > 0.5 && !a.s) { a.s = true; lineaDesde(b, haciaJ(b), 60, 7, 0.95, dmgJ(b, 0.8)); } mirar(b, dt, 1.5); return a.t >= 1.8; },
   },
-  torbellino: { ini(b) { peligroCirculo(P.pos.x, P.pos.z, 15, 1.5, dmgJ(b, 1.0)); }, act(b, a, dt) { mirar(b, dt, 1); return a.t >= 1.7; } },
+  torbellino: { ini(b) { peligroCirculo(blanco(b).x, blanco(b).z, 15, 1.5, dmgJ(b, 1.0)); }, act(b, a, dt) { mirar(b, dt, 1); return a.t >= 1.7; } },
   tentaculosLev: {
     ini(b, a) { a.n = 6; a.i = 0; },
-    act(b, a, dt) { mirar(b, dt, 1.5); if (a.i < a.n && a.t >= a.i * 0.2) { const q = a.i === 0 ? { x: P.pos.x, z: P.pos.z } : alrededor(P.pos.x, P.pos.z, 13); peligroCirculo(q.x, q.z, 3.8, 0.95, dmgJ(b, 0.65), { tent: { x: b.x, z: b.z, ancho: 2.0, col: '#2a5acc' } }); a.i++; } return a.t >= a.n * 0.2 + 1.05; },
+    act(b, a, dt) { mirar(b, dt, 1.5); if (a.i < a.n && a.t >= a.i * 0.2) { const q = a.i === 0 ? { x: blanco(b).x, z: blanco(b).z } : alrededor(blanco(b).x, blanco(b).z, 13); peligroCirculo(q.x, q.z, 3.8, 0.95, dmgJ(b, 0.65), { tent: { x: b.x, z: b.z, ancho: 2.0, col: '#2a5acc' } }); a.i++; } return a.t >= a.n * 0.2 + 1.05; },
   },
   rugido: { ini(b) { peligroCirculo(b.x, b.z, 26, 1.7, dmgJ(b, 0.9), { campo: true, rayo: true }); sfx('rugido'); }, act(b, a, dt) { mirar(b, dt, 1); return a.t >= 1.9; } },
   diluvio: {
     ini(b, a) { a.n = 9; a.i = 0; },
     act(b, a, dt) {
       mirar(b, dt, 1.5);
-      if (a.i < a.n && a.t >= a.i * 0.17) { const q = a.i % 3 === 0 ? { x: P.pos.x, z: P.pos.z } : alrededor(P.pos.x, P.pos.z, 14); peligroCirculo(q.x, q.z, 3.7, 0.9, dmgJ(b, 0.6), { tent: { x: b.x, z: b.z, ancho: 2.0, col: '#2a5acc' } }); a.i++; }
+      if (a.i < a.n && a.t >= a.i * 0.17) { const q = a.i % 3 === 0 ? { x: blanco(b).x, z: blanco(b).z } : alrededor(blanco(b).x, blanco(b).z, 14); peligroCirculo(q.x, q.z, 3.7, 0.9, dmgJ(b, 0.6), { tent: { x: b.x, z: b.z, ancho: 2.0, col: '#2a5acc' } }); a.i++; }
       if (a.t > 0.9 && !a.l) { a.l = true; lineaDesde(b, haciaJ(b), 60, 6.5, 0.9, dmgJ(b, 0.8)); }
       return a.t >= a.n * 0.17 + 1.1;
     },
   },
 };
 function prepararEmbestida(b, a, delay) {
-  const dx = P.pos.x - b.x, dz = P.pos.z - b.z, d = Math.hypot(dx, dz) || 1;
+  const dx = blanco(b).x - b.x, dz = blanco(b).z - b.z, d = Math.hypot(dx, dz) || 1;
   a.dir = Math.atan2(dz, dx);
   a.len = d + 10;
   a.delay = delay; a.dash = false; a.rec = 0;
@@ -617,21 +701,31 @@ function actuarEmbestida(b, a, dt) {
 // ---------------------------------------------------------------------------
 // Daño al jefe
 // ---------------------------------------------------------------------------
+// Cuánto daño hace de verdad un golpe (aturdido: x2; Don Pinza con el caparazón cerrado casi no lo siente)
+function danoReal(b, dmg, fuente) {
+  const stun = b.aturdido > 0;
+  let mult = 1;
+  if (stun) mult = 2; else if (b.def.id === 'pinza') mult = fuente === 'dina' ? 1 : fuente === 'linea' ? 0.6 : 0.5;
+  return { real: Math.max(1, Math.round(dmg * mult)), stun, mult };
+}
+// Aplica el daño: el anfitrión (o quien juega solo) le resta vida; otro jugador se lo informa al anfitrión.
+function aplicarDanoJefe(b, real, quien) {
+  if (esProxy()) { acumularDanoRed(b, real); return; }
+  b.hp -= real;
+  b.contrib = b.contrib || {};
+  b.contrib[quien] = (b.contrib[quien] || 0) + real;
+  if (b.hp <= 0) matarJefe(b);
+}
 function golpearJefe(b, dmg, fuente, x, z) {
   if (b.estado !== 'pelea' || b.oculto) return;
-  let mult = 1;
-  const stun = b.aturdido > 0;
-  if (stun) mult = 2;
-  else if (b.def.id === 'pinza' && fuente !== 'dina') mult = 0.5;
-  const real = Math.max(1, Math.round(dmg * mult));
-  b.hp -= real;
+  const { real, stun, mult } = danoReal(b, dmg, fuente);
   b.flash = 1;
   const px = x === undefined ? b.x : x, pz = z === undefined ? b.z : z;
   textoFlotante(px, 3 + b.def.radio * 0.4, pz, (stun ? '¡' : '') + real + (stun ? '!' : ''), stun ? '#ffe36b' : mult < 1 ? '#c8d3dc' : '#ffffff', stun ? 34 : 24, 1.0);
   chispas(px, 1.2, pz, stun ? '#ffe36b' : '#ffffff', stun ? 12 : 6, 5);
   sfx(stun ? 'impacto' : 'tirar');
   sacudir(stun ? 12 : 6);
-  if (b.hp <= 0) matarJefe(b);
+  aplicarDanoJefe(b, real, 'yo');
 }
 function jefesExplosion(x, z, R, dano) {
   for (const b of BOSSES) {
@@ -642,17 +736,18 @@ function jefesExplosion(x, z, R, dano) {
 }
 function golpearJefeLinea(b, dmg) {
   if (b.estado !== 'pelea') return;
-  const mult = b.aturdido > 0 ? 2 : (b.def.id === 'pinza' ? 0.6 : 1);
-  b.hp -= dmg * mult;
+  const { real, mult } = danoReal(b, dmg, 'linea');
   b.flash = Math.max(b.flash, 0.35);
   if (Math.random() < 0.25) textoFlotante(b.x + rand(-2, 2), 2.5 + b.def.radio * 0.3, b.z + rand(-2, 2), Math.round(dmg * mult), '#bfe9ff', 20, 0.8);
-  if (b.hp <= 0) matarJefe(b);
+  aplicarDanoJefe(b, real, 'yo');
 }
 
 // Pelea con la caña: mantener la tensión en verde le saca vida
 function actualizarPeleaJefe(dt) {
   const L = LINEA, s = L.pelea, b = L.jefe;
-  if (!b || b.estado !== 'pelea') { soltarTodo(); return; }
+  // con otro jugador de anfitrión el jefe tarda unos instantes en pasar a "pelea": se espera su aviso
+  const esperaAnfitrion = esProxy() && b && b.estado === 'mordiendo' && J.t - (L.tEnganche || -9) < 2.5;
+  if (!b || (b.estado !== 'pelea' && !esperaAnfitrion)) { soltarTodo(); return; }
   const tip = puntaCana();
   let pull = 0.4, modo = 'tiron';
   if (b.atk) { if (b.atk.t < 0.6) { pull = 0.55; modo = 'aviso'; } else { pull = 1.15; modo = 'corrida'; } } else if (b.aturdido > 0) { pull = 0.12; modo = 'descanso'; } else if (b.vel > 3) { pull = 0.55; modo = 'tiron'; }
@@ -682,39 +777,71 @@ function actualizarPeleaJefe(dt) {
 // ---------------------------------------------------------------------------
 // Muerte, cuerpo y botín
 // ---------------------------------------------------------------------------
+// Solo lo llama el anfitrión (o quien juega solo): decide quiénes se llevan el botín (los que pelearon de verdad)
 function matarJefe(b) {
   if (b.estado !== 'pelea') return;
   b.estado = 'muriendo'; b.muerteT = 0; b.hp = 0; b.atk = null; b.vel = 0; b.aturdido = 0; b.hooked = false; b.alza = 0; b.abierto = 0;
+  b.kid = (b.kid || 0) + 1;
+  const umbral = Math.max(1, b.hpMax * 0.03);
+  b.dignos = RED.activa ? Object.entries(b.contrib || {}).filter(([, v]) => v >= umbral).map(([k]) => (k === 'yo' ? miIdRed() : k)) : ['yo'];
+  alMorirJefe(b);
+}
+// En cada juego cuando el jefe muere: aviso, sonido y (si peleaste) estadísticas y botín dentro de unos segundos
+function alMorirJefe(b) {
   limpiarPeligros();
-  soltarTodo();
+  if (LINEA.jefe === b) soltarTodo();
   sfx('jefeMuere');
   sacudir(34);
-  musica('isla');
   const d = b.def;
-  const rec = (G.jefes[d.id] = G.jefes[d.id] || { kills: 0 });
-  rec.kills++; rec.visto = true;
-  G.stats.jefesMatados++;
+  const digno = !RED.activa || (b.dignos || []).includes(miIdRed());
+  b.botinPendiente = digno; b.botinEn = J.t + (d.tierra ? 3.0 : 2.6);
+  if (digno) {
+    const rec = (G.jefes[d.id] = G.jefes[d.id] || { kills: 0 });
+    rec.kills++; rec.visto = true;
+    G.stats.jefesMatados++;
+  } else toast(`${d.nombre} cayó, pero no peleaste: sin botín esta vez.`, '#ffe39a');
+  musica(enCombate() ? 'jefe' : 'isla');
   const v = h('div', 'banner-jefe vencido', `<b>¡VENCIDO!</b><span>${esc(d.nombre)}</span>`, $('#app'));
   setTimeout(() => v.classList.add('sale'), 2300);
   setTimeout(() => v.remove(), 2800);
+}
+// El botín propio: objetos, (en tierra) monedas y arma, y el cuerpo para vender
+function recompensasJefe(b) {
+  const d = b.def;
+  b.botinPendiente = false;
+  const partes = [];
+  if (d.tierra) { G.plata += d.plata; partes.push(fmtMoney(d.plata)); }
+  for (const [id, n] of d.botin) { darItem(id, n); partes.push(`${n} ${ITEMS[id].nombre}`); }
+  toast(`Botín de ${d.nombre}: ${partes.join(', ')}`, '#ffe36b');
+  if (d.tierra) {
+    G.cuerpos.push({ id: d.id });
+    toast(`Te llevás el cuerpo de ${d.nombre}: vendelo en la pescadería (${fmtMoney(d.precio)}).`, '#9be7ff');
+    const c = pecho();
+    lluviaMonedas(c.x, c.y, c.z, 24);
+    if (d.arma && !G.armas[d.arma]) {
+      G.armas[d.arma] = true; if (!G.armaSel) G.armaSel = d.arma;
+      G.cargador[d.arma] = ARMA[d.arma].cargador;
+      mostrarHallazgo({ titulo: `¡${ARMA[d.arma].nombre}!`, icono: 'cofre', texto: ARMA[d.arma].desc + ' Ya la tenés en la tecla 5.', plata: d.plata, oro: true });
+      sfx('tesoro');
+    } else sfx('mision');
+  } else {
+    b.cuerpoLocal = { t: 0 };
+    toast('Acercate a la costa y mantené Espacio (o la caña) para remolcar el cuerpo.', '#9be7ff');
+    sfx('mision');
+  }
+  revisarMisiones();
+  guardar();
 }
 function muriendoJefe(b, dt) {
   b.muerteT += dt;
   if (Math.random() < dt * 14) { const r = b.def.radio; const x = b.x + rand(-r, r), z = b.z + rand(-r, r); ondaAgua(x, z, 5, 1, 0.7, 1); chapoteo(x, z, 8, 1.6); if (Math.random() < 0.3) sfx('impacto'); }
   b.ang += Math.sin(b.muerteT * 9) * dt * 2;
-  if (b.muerteT >= 2.6) {
-    b.estado = 'cuerpo'; b.tCuerpo = 0;
-    const partes = [];
-    for (const [id, n] of b.def.botin) { darItem(id, n); partes.push(`${n} ${ITEMS[id].nombre}`); }
-    toast(`Botín de ${b.def.nombre}: ${partes.join(', ')}`, '#ffe36b');
-    toast('Acercate a la costa y mantené Espacio (o la caña) para remolcar el cuerpo.', '#9be7ff');
-    sfx('mision');
-    revisarMisiones();
-    guardar();
-  }
+  if (b.muerteT >= 2.6) { b.estado = 'muerto'; b.respawn = REAPARECE_JEFE; }
 }
+// Cada jugador con botín remolca su propio cuerpo (es solo suyo): flota 150 s
 function cuerpoJefe(b, dt) {
-  b.tCuerpo += dt;
+  const c = b.cuerpoLocal;
+  c.t += dt;
   b.vel = 0;
   const reel = leerReel() && J.modo === 'jugando' && !J.panel;
   const dj = Math.hypot(P.pos.x - b.x, P.pos.z - b.z);
@@ -729,11 +856,11 @@ function cuerpoJefe(b, dt) {
     b.haulando = true;
     if (Math.random() < dt * 10) sfx('carretel', 0.5);
   }
-  if (b.tCuerpo > 150) { toast(`El cuerpo de ${b.def.nombre} se hundió...`, '#ffb3a8'); b.estado = 'muerto'; b.respawn = REAPARECE_JEFE; }
+  if (c.t > 150) { toast(`El cuerpo de ${b.def.nombre} se hundió...`, '#ffb3a8'); b.cuerpoLocal = null; }
 }
 function recogerCuerpo(b) {
   G.cuerpos.push({ id: b.def.id });
-  b.estado = 'muerto'; b.respawn = REAPARECE_JEFE;
+  b.cuerpoLocal = null; b.haulando = false;
   toast(`¡Recogiste el cuerpo de ${b.def.nombre}! Llevalo a la pescadería (${fmtMoney(b.def.precio)}).`, '#ffe36b');
   sfx('captura', 4);
   const c = pecho();
@@ -746,7 +873,7 @@ function recogerCuerpo(b) {
 function actualizarCuerdaRemolque() {
   if (!BOSS3D.cuerda) BOSS3D.cuerda = crearTubo(ESC.escena);
   let ver = false;
-  for (const b of BOSSES) if (b.estado === 'cuerpo' && b.haulando) { BOSS3D.cuerda.poner(puntaCana(), { x: b.x, y: 0.6, z: b.z }, 1.2, 0.015, null); ver = true; }
+  for (const b of BOSSES) if (b.cuerpoLocal && b.haulando) { BOSS3D.cuerda.poner(puntaCana(), { x: b.x, y: 0.6, z: b.z }, 1.2, 0.015, null); ver = true; }
   BOSS3D.cuerda.m.visible = ver;
 }
 const BOSS3D = { cuerda: null, avisoT: -99 };

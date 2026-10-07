@@ -176,12 +176,12 @@ function crearJefeTierra(def) {
     def, mod, tierra: true, estado: 'dormido', x: l.x, z: l.z, ang: Math.atan2(l.z - (ARSENAL.is ? ARSENAL.is.z : 0), l.x - (ARSENAL.is ? ARSENAL.is.x : 0)) + Math.PI,
     vel: 0, hp: def.hp, hpMax: def.hp, t: rand(100), fase0: rand(TAU), respawn: 0, fase: 0, aturdido: 0, cd: 0, atk: null, flash: 0, alza: 0, abierto: 0,
     oculto: false, aire: 0, y: alturaSuelo(l.x, l.z), muerteT: 0, hooked: false, haulando: false, emerge: 1,
+    vida: 1, kid: 0, contrib: {}, cebo: null, blanco: null, blancoId: null, cuerpoLocal: null, botinPendiente: false, botinEn: 0, dignos: [],
   };
   BOSSES.push(b);
   return b;
 }
 
-function jefeTierraHpMax(def) { return Math.round(def.hp * (1 + 0.2 * Math.min(5, jefeKills(def.id)))); }
 function reiniciarJefeTierra(b) {
   if (b.estado === 'muerto' || b.estado === 'muriendo') return;
   b.estado = 'reinicio'; b.atk = null; b.aturdido = 0; b.alza = 0; b.abierto = 0; b.oculto = false; b.aire = 0;
@@ -194,9 +194,8 @@ function actualizarJefeTierra(b, dt) {
   switch (b.estado) {
     case 'dormido': {
       b.vel = 0;
-      const dj = Math.hypot(P.pos.x - b.x, P.pos.z - b.z);
-      if (J.modo === 'jugando' && dj < d.aggro && Math.abs(P.pos.y - b.y) < (d.id === 'draco' ? 11 : 16)) despertarJefeTierra(b);
-      else if (dj < d.aggro * 2.2 && !(G.jefes[d.id] && G.jefes[d.id].visto)) { /* todavía no lo viste */ }
+      const q = blancoCercano(b, d.aggro, d.id === 'draco' ? 11 : 16);
+      if (q) despertarJefeTierra(b, q);
       break;
     }
     case 'pelea': iaJefeTierra(b, dt); break;
@@ -214,18 +213,16 @@ function actualizarJefeTierra(b, dt) {
     default:
   }
 }
-function despertarJefeTierra(b) {
+function despertarJefeTierra(b, q) {
   const d = b.def;
-  b.estado = 'pelea'; b.cd = 2.0; b.fase = 0; b.aturdido = 0.6; b.atk = null;
-  b.hp = Math.min(b.hp, b.hpMax) > 0 ? b.hp : b.hpMax;
+  b.estado = 'pelea'; b.cd = 2.0; b.fase = 0; b.aturdido = 0.6; b.atk = null; b.contrib = {};
+  b.hpMax = hpMaxJefe(d, jugadoresCerca(b, d.aggro + 25)); b.hp = b.hpMax;
+  if (q) { b.blancoId = q.id; b.blanco = q.pos; }
   (G.jefes[d.id] = G.jefes[d.id] || { kills: 0 }).visto = true;
-  sfx('rugido'); sacudir(22);
-  musica('jefe');
-  bannerJefe(d);
-  toast(`¡${d.nombre} se despertó!`, '#ff9d8a');
+  if (Math.hypot(b.x - P.pos.x, b.z - P.pos.z) < 300) { sfx('rugido'); sacudir(22); musica('jefe'); bannerJefe(d); toast(`¡${d.nombre} se despertó!`, '#ff9d8a'); }
 }
 function reaparecerJefeTierra(b) {
-  b.hpMax = jefeTierraHpMax(b.def); b.hp = b.hpMax;
+  b.hpMax = hpMaxJefe(b.def); b.hp = b.hpMax; b.vida = (b.vida || 1) + 1; b.contrib = {}; b.blanco = null; b.blancoId = null;
   const l = b.def.lair;
   b.estado = 'dormido'; b.x = l.x; b.z = l.z; b.fase = 0; b.aturdido = 0; b.atk = null; b.alza = 0; b.abierto = 0; b.aire = 0; b.oculto = false; b.muerteT = 0;
   b.y = alturaSuelo(l.x, l.z);
@@ -248,9 +245,10 @@ const ATAQUES_TIERRA = {
 function iaJefeTierra(b, dt) {
   const d = b.def, l = d.lair;
   b.aturdido = Math.max(0, b.aturdido - dt);
-  const dj = Math.hypot(P.pos.x - b.x, P.pos.z - b.z);
-  // se rinde si te alejás o te desmayás
-  if (J.modo !== 'jugando' || dj > d.suelta || Math.hypot(P.pos.x - l.x, P.pos.z - l.z) > d.suelta + 30) { toast(`${d.nombre} perdió el interés y volvió a su guarida.`, '#ffe39a'); reiniciarJefeTierra(b); musica('isla'); return; }
+  // se rinde si todos se alejan o se desmayan
+  const q = elegirBlancoJefe(b, d.suelta);
+  if (!q || Math.hypot(q.pos.x - l.x, q.pos.z - l.z) > d.suelta + 30) { toast(`${d.nombre} perdió el interés y volvió a su guarida.`, '#ffe39a'); reiniciarJefeTierra(b); musica(enCombate() ? 'jefe' : 'isla'); return; }
+  const dj = Math.hypot(q.pos.x - b.x, q.pos.z - b.z);
   const k = b.hp / b.hpMax;
   const fase = d.id === 'draco' ? (k < 0.33 ? 2 : k < 0.66 ? 1 : 0) : (k < 0.5 ? 1 : 0);
   if (fase > b.fase) {
@@ -260,10 +258,11 @@ function iaJefeTierra(b, dt) {
     const c = d.id === 'draco' ? 16 : 10;
     peligroCirculo(b.x, b.z, c, 1.4, dmgJ(b, 0.7), { campo: true });
   }
-  const haciaP = Math.atan2(P.pos.z - b.z, P.pos.x - b.x);
+  const haciaP = Math.atan2(q.pos.z - b.z, q.pos.x - b.x);
   const vel = d.vel * (1 + 0.15 * b.fase);
   b.abierto = Math.max(0, b.abierto - dt * 1.5);
   if (b.atk) {
+    b.atk.t += dt;
     if (ATAQUES_T[b.atk.id].act(b, b.atk, dt)) {
       b.atk = null; b.aturdido = d.stun; b.alza = 0; b.abierto = 0; b.oculto = false;
       b.cd = rand(1.3, 2.2) * (1 - 0.14 * b.fase); b.vel = 0;
@@ -286,10 +285,10 @@ function comenzarAtaqueTierra(b) {
 // Ataques: ini() arma los avisos; act() devuelve true cuando termina
 const ATAQUES_T = {
   // ---- Don Gorila
-  puno: { ini(b) { peligroCirculo(P.pos.x, P.pos.z, 4.6, 0.95, dmgJ(b)); b.alza = 1; }, act(b, a, dt) { mirar(b, dt, 5); b.alza = a.t < 0.95 ? 1 : Math.max(0, 1 - (a.t - 0.95) * 6); if (a.t >= 0.95 && !a.golpe) { a.golpe = true; sacudir(14); sfx('golpeG'); } return a.t >= 1.25; } },
+  puno: { ini(b) { peligroCirculo(blanco(b).x, blanco(b).z, 4.6, 0.95, dmgJ(b)); b.alza = 1; }, act(b, a, dt) { mirar(b, dt, 5); b.alza = a.t < 0.95 ? 1 : Math.max(0, 1 - (a.t - 0.95) * 6); if (a.t >= 0.95 && !a.golpe) { a.golpe = true; sacudir(14); sfx('golpeG'); } return a.t >= 1.25; } },
   golpeSuelo: { ini(b) { peligroCirculo(b.x, b.z, 11, 1.2, dmgJ(b, 1.05)); b.alza = 1; }, act(b, a, dt) { b.alza = a.t < 1.2 ? 1 : Math.max(0, 1 - (a.t - 1.2) * 5); if (a.t >= 1.2 && !a.golpe) { a.golpe = true; sacudir(20); sfx('tierra'); for (let i = 0; i < 12; i++) polvo(b.x + rand(-5, 5), alturaSuelo(b.x, b.z), b.z + rand(-5, 5)); } return a.t >= 1.5; } },
   salto: {
-    ini(b, a) { a.tx = P.pos.x; a.tz = P.pos.z; a.x0 = b.x; a.z0 = b.z; peligroCirculo(a.tx, a.tz, 8, 1.35, dmgJ(b, 1.1)); b.alza = 0.7; },
+    ini(b, a) { a.tx = blanco(b).x; a.tz = blanco(b).z; a.x0 = b.x; a.z0 = b.z; peligroCirculo(a.tx, a.tz, 8, 1.35, dmgJ(b, 1.1)); b.alza = 0.7; },
     act(b, a, dt) {
       const k = clamp((a.t - 0.35) / 0.95, 0, 1);
       if (k > 0) { b.x = lerp(a.x0, a.tx, k); b.z = lerp(a.z0, a.tz, k); b.aire = Math.sin(k * Math.PI) * 5.5; b.ang = turnToward(b.ang, Math.atan2(a.tz - a.z0, a.tx - a.x0), dt * 6); }
@@ -300,14 +299,14 @@ const ATAQUES_T = {
   embestidaT: { ini(b, a) { prepararEmbestidaT(b, a, 0.9); }, act(b, a, dt) { return actuarEmbestidaT(b, a, dt); } },
   lluviaRocas: {
     ini(b, a) { a.n = 7; a.i = 0; },
-    act(b, a, dt) { mirar(b, dt, 3); b.alza = 0.6; if (a.i < a.n && a.t >= a.i * 0.2) { const q = a.i % 3 === 0 ? { x: P.pos.x, z: P.pos.z } : alrededor(P.pos.x, P.pos.z, 11); peligroCirculo(q.x, q.z, 3.3, 0.95, dmgJ(b, 0.7)); a.i++; } return a.t >= a.n * 0.2 + 1.1; },
+    act(b, a, dt) { mirar(b, dt, 3); b.alza = 0.6; if (a.i < a.n && a.t >= a.i * 0.2) { const q = a.i % 3 === 0 ? { x: blanco(b).x, z: blanco(b).z } : alrededor(blanco(b).x, blanco(b).z, 11); peligroCirculo(q.x, q.z, 3.3, 0.95, dmgJ(b, 0.7)); a.i++; } return a.t >= a.n * 0.2 + 1.1; },
   },
   rugidoG: { ini(b) { peligroCirculo(b.x, b.z, 16, 1.6, dmgJ(b, 0.9), { campo: true }); b.abierto = 1; sfx('rugido'); }, act(b, a, dt) { b.abierto = 1; mirar(b, dt, 1); return a.t >= 1.9; } },
   // ---- La Reina Escorpión
-  tenazas: { ini(b) { peligroCirculo(P.pos.x, P.pos.z, 4.2, 0.8, dmgJ(b, 0.9)); b.abierto = 1; b.alza = 0.6; }, act(b, a, dt) { mirar(b, dt, 5); if (a.t > 0.45 && !a.seg) { a.seg = true; peligroCirculo(P.pos.x, P.pos.z, 4.2, 0.85, dmgJ(b, 0.9)); } b.abierto = a.t < 1.3 ? 1 : 0; return a.t >= 1.45; } },
+  tenazas: { ini(b) { peligroCirculo(blanco(b).x, blanco(b).z, 4.2, 0.8, dmgJ(b, 0.9)); b.abierto = 1; b.alza = 0.6; }, act(b, a, dt) { mirar(b, dt, 5); if (a.t > 0.45 && !a.seg) { a.seg = true; peligroCirculo(blanco(b).x, blanco(b).z, 4.2, 0.85, dmgJ(b, 0.9)); } b.abierto = a.t < 1.3 ? 1 : 0; return a.t >= 1.45; } },
   aguijon: { ini(b, a) { a.ang = haciaJ(b); lineaDesde(b, a.ang, 22, 3.6, 0.85, dmgJ(b, 1.1)); b.alza = 1; }, act(b, a, dt) { b.ang = turnToward(b.ang, a.ang, dt * 6); b.alza = a.t < 0.85 ? 1 : 0; if (a.t >= 0.85 && !a.golpe) { a.golpe = true; sfx('aguijon'); sacudir(10); } return a.t >= 1.15; } },
   excavar: {
-    ini(b, a) { a.tx = P.pos.x; a.tz = P.pos.z; peligroCirculo(a.tx, a.tz, 6.8, 1.55, dmgJ(b, 1.15)); a.hundido = false; },
+    ini(b, a) { a.tx = blanco(b).x; a.tz = blanco(b).z; peligroCirculo(a.tx, a.tz, 6.8, 1.55, dmgJ(b, 1.15)); a.hundido = false; },
     act(b, a, dt) {
       if (a.t > 0.25 && !a.hundido) { a.hundido = true; b.oculto = true; sfx('tierra'); for (let i = 0; i < 10; i++) polvo(b.x + rand(-2, 2), alturaSuelo(b.x, b.z), b.z + rand(-2, 2)); }
       if (b.oculto && a.t < 1.5) { const k = (a.t - 0.25) / 1.25; b.x = lerp(b.x, a.tx, Math.min(1, dt * 3)); b.z = lerp(b.z, a.tz, Math.min(1, dt * 3)); if (Math.random() < dt * 14) polvo(b.x + rand(-1, 1), alturaSuelo(b.x, b.z), b.z + rand(-1, 1)); void k; }
@@ -317,7 +316,7 @@ const ATAQUES_T = {
   },
   veneno: {
     ini(b, a) { a.n = 3; a.i = 0; },
-    act(b, a, dt) { mirar(b, dt, 4); b.alza = 0.8; if (a.i < a.n && a.t >= 0.3 + a.i * 0.3) { const q = a.i === 0 ? { x: P.pos.x, z: P.pos.z } : alrededor(P.pos.x, P.pos.z, 8); peligroCirculo(q.x, q.z, 4.2, 0.9, Math.round(dmgJ(b, 0.25)), { efecto: 'veneno', dur: 7 }); a.i++; } return a.t >= 1.8; },
+    act(b, a, dt) { mirar(b, dt, 4); b.alza = 0.8; if (a.i < a.n && a.t >= 0.3 + a.i * 0.3) { const q = a.i === 0 ? { x: blanco(b).x, z: blanco(b).z } : alrededor(blanco(b).x, blanco(b).z, 8); peligroCirculo(q.x, q.z, 4.2, 0.9, Math.round(dmgJ(b, 0.25)), { efecto: 'veneno', dur: 7 }); a.i++; } return a.t >= 1.8; },
   },
   estampida: {
     ini(b, a) { a.ang = haciaJ(b); for (const o of [-0.38, 0, 0.38]) lineaDesde(b, a.ang + o, 24, 3.4, 1.0, dmgJ(b, 0.95)); b.alza = 1; },
@@ -325,7 +324,7 @@ const ATAQUES_T = {
   },
   tormentaArena: {
     ini(b, a) { a.n = 7; a.i = 0; },
-    act(b, a, dt) { mirar(b, dt, 3); b.alza = 0.7; if (a.i < a.n && a.t >= a.i * 0.18) { const q = a.i % 3 === 0 ? { x: P.pos.x, z: P.pos.z } : alrededor(P.pos.x, P.pos.z, 10); peligroCirculo(q.x, q.z, 3.5, 0.9, dmgJ(b, 0.7)); a.i++; } return a.t >= a.n * 0.18 + 1.05; },
+    act(b, a, dt) { mirar(b, dt, 3); b.alza = 0.7; if (a.i < a.n && a.t >= a.i * 0.18) { const q = a.i % 3 === 0 ? { x: blanco(b).x, z: blanco(b).z } : alrededor(blanco(b).x, blanco(b).z, 10); peligroCirculo(q.x, q.z, 3.5, 0.9, dmgJ(b, 0.7)); a.i++; } return a.t >= a.n * 0.18 + 1.05; },
   },
   // ---- Draco
   aliento: {
@@ -343,11 +342,11 @@ const ATAQUES_T = {
   },
   bolasFuego: {
     ini(b, a) { a.n = 3; a.i = 0; b.abierto = 1; },
-    act(b, a, dt) { mirar(b, dt, 3); b.abierto = a.t < 0.9 ? 1 : 0; if (a.i < a.n && a.t >= a.i * 0.32) { const q = a.i === 0 ? { x: P.pos.x, z: P.pos.z } : alrededor(P.pos.x, P.pos.z, 9); peligroCirculo(q.x, q.z, 4.6, 0.95, dmgJ(b, 0.7), { efecto: 'fuego', dur: 3.5, impacto: true }); a.i++; } return a.t >= a.n * 0.32 + 1.15; },
+    act(b, a, dt) { mirar(b, dt, 3); b.abierto = a.t < 0.9 ? 1 : 0; if (a.i < a.n && a.t >= a.i * 0.32) { const q = a.i === 0 ? { x: blanco(b).x, z: blanco(b).z } : alrededor(blanco(b).x, blanco(b).z, 9); peligroCirculo(q.x, q.z, 4.6, 0.95, dmgJ(b, 0.7), { efecto: 'fuego', dur: 3.5, impacto: true }); a.i++; } return a.t >= a.n * 0.32 + 1.15; },
   },
   coletazo: { ini(b) { peligroCirculo(b.x, b.z, 12, 0.95, dmgJ(b, 0.85)); }, act(b, a, dt) { b.ang += dt * (a.t < 0.95 ? 3 : 0); return a.t >= 1.2; } },
   aterrizaje: {
-    ini(b, a) { a.tx = P.pos.x; a.tz = P.pos.z; a.x0 = b.x; a.z0 = b.z; peligroCirculo(a.tx, a.tz, 10.5, 1.9, dmgJ(b, 1.15)); sfx('fuego'); },
+    ini(b, a) { a.tx = blanco(b).x; a.tz = blanco(b).z; a.x0 = b.x; a.z0 = b.z; peligroCirculo(a.tx, a.tz, 10.5, 1.9, dmgJ(b, 1.15)); sfx('fuego'); },
     act(b, a, dt) {
       const sube = clamp(a.t / 0.7, 0, 1), cae = clamp((a.t - 1.4) / 0.5, 0, 1);
       const k = clamp((a.t - 0.5) / 1.2, 0, 1);
@@ -359,7 +358,7 @@ const ATAQUES_T = {
   },
   meteoros: {
     ini(b, a) { a.n = 9; a.i = 0; },
-    act(b, a, dt) { mirar(b, dt, 2); b.abierto = 0.6; if (a.i < a.n && a.t >= a.i * 0.17) { const l = b.def.lair; const q = a.i % 3 === 0 ? { x: P.pos.x, z: P.pos.z } : a.i % 3 === 1 ? alrededor(P.pos.x, P.pos.z, 10) : alrededor(l.x, l.z, l.r * 1.4); peligroCirculo(q.x, q.z, 4.2, 0.95, dmgJ(b, 0.6), { impacto: true }); a.i++; } return a.t >= a.n * 0.17 + 1.15; },
+    act(b, a, dt) { mirar(b, dt, 2); b.abierto = 0.6; if (a.i < a.n && a.t >= a.i * 0.17) { const l = b.def.lair; const q = a.i % 3 === 0 ? { x: blanco(b).x, z: blanco(b).z } : a.i % 3 === 1 ? alrededor(blanco(b).x, blanco(b).z, 10) : alrededor(l.x, l.z, l.r * 1.4); peligroCirculo(q.x, q.z, 4.2, 0.95, dmgJ(b, 0.6), { impacto: true }); a.i++; } return a.t >= a.n * 0.17 + 1.15; },
   },
   anillo: {
     ini(b, a) { a.n = 10; a.i = 0; b.abierto = 1; sfx('fuego'); },
@@ -367,7 +366,7 @@ const ATAQUES_T = {
   },
 };
 function prepararEmbestidaT(b, a, delay) {
-  const dx = P.pos.x - b.x, dz = P.pos.z - b.z, dd = Math.hypot(dx, dz) || 1;
+  const dx = blanco(b).x - b.x, dz = blanco(b).z - b.z, dd = Math.hypot(dx, dz) || 1;
   a.dir = Math.atan2(dz, dx); a.len = Math.min(34, dd + 10); a.delay = delay; a.dash = false; a.rec = 0;
   lineaDesde(b, a.dir, a.len, 5.2, delay, dmgJ(b));
 }
@@ -393,24 +392,7 @@ function muriendoJefeTierra(b, dt) {
   b.muerteT += dt; b.vel = 0; b.aturdido = 0; b.atk = null; b.alza = 0; b.oculto = false;
   if (Math.random() < dt * 14) { const r = b.def.radio; polvo(b.x + rand(-r, r), alturaSuelo(b.x, b.z), b.z + rand(-r, r)); chispas(b.x + rand(-r, r), alturaSuelo(b.x, b.z) + rand(0.5, 3), b.z + rand(-r, r), '#ffb23a', 3, 4); }
   b.aire = Math.max(0, b.aire - dt * 12);
-  if (b.muerteT >= 3.0) {
-    const d = b.def;
-    let txt = [];
-    G.plata += d.plata; txt.push(fmtMoney(d.plata));
-    for (const [id, n] of d.botin) { darItem(id, n); txt.push(`${n} ${ITEMS[id].nombre}`); }
-    toast(`Botín de ${d.nombre}: ${txt.join(', ')}`, '#ffe36b');
-    const c = pecho();
-    lluviaMonedas(c.x, c.y, c.z, 24);
-    if (d.arma && !G.armas[d.arma]) {
-      G.armas[d.arma] = true; if (!G.armaSel) G.armaSel = d.arma;
-      G.cargador[d.arma] = ARMA[d.arma].cargador;
-      mostrarHallazgo({ titulo: `¡${ARMA[d.arma].nombre}!`, icono: 'cofre', texto: ARMA[d.arma].desc + ' Ya la tenés en la tecla 5.', plata: d.plata, oro: true });
-      sfx('tesoro');
-    } else sfx('mision');
-    revisarMisiones();
-    guardar();
-    b.estado = 'muerto'; b.respawn = REAPARECE_TIERRA;
-  }
+  if (b.muerteT >= 3.0) { b.estado = 'muerto'; b.respawn = REAPARECE_TIERRA; }
 }
 
 function estrellasTierra(b, y) {

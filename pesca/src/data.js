@@ -185,13 +185,13 @@ const JEFES = [
     botin: [['elixir', 3], ['corona', 1]], danoLinea: 1 },
   // Nivel 2: jefes de tierra de la Isla Arsenal. No se pescan: se pelean con armas, arpón y dinamita.
   // aggro = a cuántos metros se despierta; suelta = a cuántos metros se da por vencido y vuelve a su guarida.
-  { id: 'gorila', tierra: true, nivel: 2, forma: 'gorila', nombre: 'Don Gorila', apodo: 'el Rey de la Selva', hp: 9000, precio: 60000, plata: 45000, radio: 2.8, alto: 4.0, vel: 6.5, dmg: 30, stun: 2.0, aggro: 36, suelta: 85, lugar: 'la selva de la Isla Arsenal', color: '#7a6652',
+  { id: 'gorila', tierra: true, nivel: 2, forma: 'gorila', nombre: 'Don Gorila', apodo: 'el Rey de la Selva', hp: 9000, precio: 60000, plata: 8000, radio: 2.8, alto: 4.0, vel: 6.5, dmg: 30, stun: 2.0, aggro: 36, suelta: 85, lugar: 'la selva de la Isla Arsenal', color: '#7a6652',
     intro: 'Un gorila del tamaño de una casa. Defiende su claro a golpes.', consejo: 'Salta y golpea el suelo: salí del círculo rojo. Cuando se cansa, dale con todo.',
     botin: [['botiquin', 2], ['cartuchos', 12]] },
-  { id: 'escorpion', tierra: true, nivel: 2, forma: 'escorpion', nombre: 'La Reina Escorpión', apodo: 'la Dueña del Pedregal', hp: 16000, precio: 130000, plata: 110000, radio: 3.4, alto: 1.7, vel: 8, dmg: 36, stun: 1.8, aggro: 34, suelta: 85, lugar: 'el pedregal de la Isla Arsenal', color: '#c28a3a',
+  { id: 'escorpion', tierra: true, nivel: 2, forma: 'escorpion', nombre: 'La Reina Escorpión', apodo: 'la Dueña del Pedregal', hp: 16000, precio: 130000, plata: 20000, radio: 3.4, alto: 1.7, vel: 8, dmg: 36, stun: 1.8, aggro: 34, suelta: 85, lugar: 'el pedregal de la Isla Arsenal', color: '#c28a3a',
     intro: 'Cava bajo la arena y sale justo donde estás parado.', consejo: 'Cuando se entierra, mirá el círculo: va a salir ahí. Después queda aturdida un buen rato.',
     botin: [['balas', 40], ['elixir', 1]], arma: 'subfusil' },
-  { id: 'draco', tierra: true, nivel: 2, forma: 'dragon', nombre: 'Draco', apodo: 'el Dragón del Volcán', hp: 32000, precio: 320000, plata: 300000, radio: 5.2, alto: 4.6, vel: 7, dmg: 46, stun: 1.7, aggro: 30, suelta: 95, lugar: 'la cumbre del volcán', color: '#c0392b',
+  { id: 'draco', tierra: true, nivel: 2, forma: 'dragon', nombre: 'Draco', apodo: 'el Dragón del Volcán', hp: 32000, precio: 320000, plata: 50000, radio: 5.2, alto: 4.6, vel: 7, dmg: 46, stun: 1.7, aggro: 30, suelta: 95, lugar: 'la cumbre del volcán', color: '#c0392b',
     intro: 'Duerme sobre la lava desde antes de que hubiera isla.', consejo: 'Su aliento barre en línea y las bolas de fuego dejan brasas. En la última fase llueven meteoros.',
     botin: [['cohetes', 4], ['elixir', 3]], arma: 'bazuca' },
 ];

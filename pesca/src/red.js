@@ -195,6 +195,7 @@ async function conectarRed() {
   RED.sala = S; RED.tipo = S.tipo; RED.estado = 'conectada';
   for (const tema of TEMAS_RED) S.escuchar(tema, (m) => alEventoRed(tema, m));
   RED.ultPose = ''; RED.tPub = 0;
+  reiniciarRedJefes();
   presenciaInicial();
   return true;
 }
@@ -203,6 +204,8 @@ function desconectarRed() {
   RED.sala = null; RED.tipo = null; RED.activa = false; RED.yo = null; RED.hostId = null; RED.anfitrion = true; RED.estado = 'apagada';
   RED.pares = []; RED.chat.length = 0; RED.avisos.length = 0;
   for (const id of [...RED.remotos.keys()]) quitarRemoto(id);
+  reiniciarRedJefes();
+  tomarJefesComoAnfitrion(true);
 }
 // Lo primero que se publica: quién soy y cómo me veo
 function presenciaInicial() {
@@ -310,7 +313,7 @@ function actualizarMulti(dt) {
   for (const q of pares) {
     const p = q.p || {};
     if (p.v !== RED.version || p.j !== 1) continue;
-    if (host === null || String(q.id) < host) host = String(q.id);
+    if (p.lh === 1 && (host === null || String(q.id) < host)) host = String(q.id);
     if (q.esYo) continue;
     vivos.add(q.id);
     let r = RED.remotos.get(q.id);
@@ -318,7 +321,7 @@ function actualizarMulti(dt) {
     if (r.p !== p) { r.p = p; alCambiarPresencia(r, p, ahora); }
   }
   for (const id of [...RED.remotos.keys()]) if (!vivos.has(id)) { const r = RED.remotos.get(id); toast(`${r.nombre || 'Alguien'} se fue de la isla.`, '#c8d3dc'); quitarRemoto(id); }
-  const nuevoHost = host !== null ? host : (RED.yo === null ? null : String(RED.yo));
+  const nuevoHost = host;
   RED.hostId = nuevoHost;
   const eraAnfitrion = RED.anfitrion;
   RED.anfitrion = !RED.activa || nuevoHost === null || String(RED.yo) === nuevoHost;
@@ -331,7 +334,11 @@ function alCambiarPresencia(r, p, ahora) {
   r.color = clamp(finito(p.c) | 0, 0, COLORES_CAMISA.length - 1);
   r.nivel = finito(p.k) | 0;
   const pose = parsePose(p.p);
-  if (pose) { pose.t = ahora; r.muestras.push(pose); if (r.muestras.length > 6) r.muestras.shift(); r.pose = pose; }
+  if (pose) {
+    pose.t = ahora; r.muestras.push(pose); if (r.muestras.length > 6) r.muestras.shift(); r.pose = pose;
+    if (!r.posBlanco) r.posBlanco = { x: pose.x, y: pose.y, z: pose.z };
+    r.posBlanco.x = pose.x; r.posBlanco.y = pose.y; r.posBlanco.z = pose.z;
+  }
   // chat y emotes también llegan por presencia (si se perdió el evento). La primera presencia que veo no repite lo viejo.
   const primera = !r.inicial;
   r.inicial = true;
@@ -366,18 +373,19 @@ function presenciaAnfitrion() {
 // Hora y clima compartidos: el anfitrión publica, los demás se acercan
 function actualizarMundoRedBase(dt) {
   const S = RED.sala;
-  if (!S || !RED.activa) return;
+  if (!S || !RED.activa) { actualizarMundoRedJefes(dt); return; }
   if (RED.anfitrion) {
     RED.tHost -= dt;
     if (RED.tHost <= 0) { RED.tHost = 1.0; S.presencia({ tm: [r2(J.hora), r2(J.clima.objetivo), r2(J.clima.lluvia)] }); }
-    return;
+  } else {
+    const hp = presenciaAnfitrion();
+    const tm = hp && hp.tm;
+    if (Array.isArray(tm) && tm.length >= 3) {
+      const dh = ((finito(tm[0]) - J.hora + 36) % 24) - 12;
+      J.hora = (J.hora + dh * Math.min(1, dt * 0.8) + 24) % 24;
+      J.clima.objetivo = clamp(finito(tm[1]), 0, 1);
+      J.clima.tClima = 999;
+    }
   }
-  const hp = presenciaAnfitrion();
-  const tm = hp && hp.tm;
-  if (Array.isArray(tm) && tm.length >= 3) {
-    const dh = ((finito(tm[0]) - J.hora + 36) % 24) - 12;
-    J.hora = (J.hora + dh * Math.min(1, dt * 0.8) + 24) % 24;
-    J.clima.objetivo = clamp(finito(tm[1]), 0, 1);
-    J.clima.tClima = 999;
-  }
+  actualizarMundoRedJefes(dt);
 }

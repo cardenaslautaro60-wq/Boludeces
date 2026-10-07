@@ -37,7 +37,7 @@ function crearMira() {
   PJ.marca.add(p2);
 }
 
-const enCombate = () => BOSSES.some((b) => b.estado === 'pelea' || b.estado === 'atraido' || b.estado === 'mordiendo');
+const enCombate = () => BOSSES.some((b) => (b.estado === 'pelea' || b.estado === 'atraido' || b.estado === 'mordiendo') && Math.hypot(b.x - P.pos.x, b.z - P.pos.z) < 260);
 
 function velocidadBase() {
   let v = apretada('ShiftLeft', 'ShiftRight') ? VEL_CORRER : VEL_CAMINAR;
@@ -450,8 +450,8 @@ function desmayarse() {
   J.modo = 'desmayo';
   G.stats.muertes++;
   soltarTodo();
-  for (const b of BOSSES) jefeRetirarse(b);
-  PELIGROS.length = 0;
+  if (!RED.activa || jugadoresEnSala() <= 1) for (const b of BOSSES) jefeRetirarse(b);
+  limpiarPeligros();
   if (P.modo === 'bote' && typeof bajarDelBote === 'function') bajarDelBote(true);
   soltarLock();
   mostrarDesmayo();

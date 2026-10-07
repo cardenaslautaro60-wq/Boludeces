@@ -91,7 +91,7 @@ function aterrizar() {
   }
   if (G.carnadaArmada && tiene('carnada')) {
     const j = jefeBuscarCebo(LINEA.x, LINEA.z);
-    if (j) { LINEA.jefe = j; sacarItem('carnada'); G.carnadaArmada = false; j.estado = 'atraido'; mensaje('¡Algo enorme se acerca a tu carnada!', '#ff9d8a'); sfx('jefeCerca'); sacudir(6); return; }
+    if (j) { LINEA.jefe = j; sacarItem('carnada'); G.carnadaArmada = false; jefeCebado(j); mensaje('¡Algo enorme se acerca a tu carnada!', '#ff9d8a'); sfx('jefeCerca'); sacudir(6); return; }
     if (!LINEA.avisoJefe) { LINEA.avisoJefe = true; mensaje('Ningún jefe se acerca. Probá más cerca de su sombra.', '#ffe39a'); }
   }
   const c = candidatosPique();
