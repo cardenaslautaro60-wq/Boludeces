@@ -487,8 +487,58 @@ h3 { margin: 12px 0 6px; font: 19px var(--f-tit); color: var(--madera-osc); lett
   .captura { width: 200px; }
   .c-img { width: 84px; height: 84px; }
 }
+/* pantallas bajas (teléfono acostado, ventanas chicas): el título se compacta para que el bloque en línea quede a la vista */
+@media (max-height: 520px) {
+  .tit-caja { padding: 6px 16px; width: min(640px, 96vw); }
+  .tit-logo { font-size: 26px; line-height: 1; }
+  .tit-caja h1 { font-size: clamp(34px, 9vw, 50px); }
+  .tit-sub { margin: 4px 0 8px; font-size: 14px; }
+  .tit-botones { flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 8px; }
+  .tit-botones .btn { min-width: 0; padding: 7px 16px; }
+  .tit-botones .btn.grande { font-size: 18px; padding: 8px 20px; }
+  .tit-pie { margin-top: 8px; font-size: 12px; }
+  .tit-red { margin-top: 8px; padding: 6px 10px 4px; }
+}
 @media (pointer: coarse) {
   .hotbar { bottom: auto; top: 50%; left: 8px; transform: translateY(-50%); flex-direction: column; background: rgba(20,12,6,.35); }
   .atajos .btn-ic { width: 40px; height: 40px; }
+}
+/* teléfono acostado (táctil y bajo): todo más chico y repartido por los bordes para que nada se pise */
+@media (pointer: coarse) and (max-height: 520px) {
+  .hud-izq { width: 150px; top: 6px; left: max(8px, env(safe-area-inset-left)); gap: 4px; }
+  .barra .ic { width: 22px; height: 22px; font-size: 13px; border-width: 2px; }
+  .barra .rell { height: 15px; border-width: 2px; }
+  .barra .txt { font-size: 10px; }
+  .chip { font-size: 11px; padding: 1px 8px 1px 6px; }
+  .mision { max-width: 150px; padding: 3px 7px; border-width: 2px; border-left-width: 6px; }
+  .mision .m-tit { font-size: 12px; }
+  .hotbar { top: auto; bottom: 8px; left: max(8px, env(safe-area-inset-left)); transform: none; display: grid; grid-template-columns: repeat(2, auto); gap: 4px; padding: 4px; }
+  .slot { width: 38px; height: 38px; border-width: 2px; }
+  .slot .s-ic { font-size: 18px; }
+  .slot .s-tecla { display: none; }
+  .hud-der { display: grid; grid-template-columns: auto auto; grid-template-areas: 'plata plata' 'reloj reloj' 'mini atajos'; justify-items: end; align-items: start; gap: 4px 6px; top: 6px; right: max(8px, env(safe-area-inset-right)); }
+  .plata { grid-area: plata; font-size: 15px; padding: 1px 10px 1px 5px; border-width: 2px; }
+  .reloj { grid-area: reloj; font-size: 11px; padding: 1px 8px; }
+  #mini { grid-area: mini; width: 84px; height: 84px; }
+  .atajos { grid-area: atajos; flex-wrap: wrap; justify-content: flex-end; width: 72px; gap: 4px; }
+  .atajos .btn-ic { width: 32px; height: 32px; font-size: 16px; border-width: 2px; border-radius: 10px; }
+  .touch { bottom: 8px; transform: scale(.74); transform-origin: right bottom; }
+  .chat { left: 104px; bottom: 8px; width: min(300px, 38vw); }
+  .chat-log { max-height: 110px; }
+  .emo-bar { bottom: 8px; padding: 4px 8px; gap: 4px; }
+  .emo-bar button { width: 38px; height: 38px; font-size: 20px; }
+  .jug-lista { top: 64px; left: 164px; min-width: 180px; max-width: 220px; }
+  #hud:has(.tension:not([hidden])) .chat { display: none; } /* peleando, la barra de tensión manda */
+  .tension { bottom: 8px; left: 44%; width: min(420px, 48vw); padding: 5px 10px 6px; }
+  .t-nombre { font-size: 14px; margin-bottom: 2px; }
+  .t-dist { margin: 1px 0 6px; }
+  .t-barra { height: 18px; }
+  .aviso-int { bottom: 92px; left: 44%; font-size: 14px; }
+  #toasts { top: 6px; width: min(420px, 50vw); gap: 3px; }
+  .toast { font-size: 13px; padding: 4px 12px; }
+  #hud:has(.jefe-barra:not([hidden])) #toasts { top: 56px; }
+  .jefe-barra { top: 6px; width: min(400px, 48vw); }
+  .jefe-barra .nombre { font-size: 17px; }
+  #avisos { top: 30%; right: 100px; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation-duration: .01ms !important; } }

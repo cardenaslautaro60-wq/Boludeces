@@ -14,14 +14,22 @@ const IN = {
 const TECLAS_JUEGO = new Set(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab', 'ShiftLeft', 'ShiftRight']);
 let joyId = null, lookId = null, joyOrigen = null, lookPrev = null;
 
+// Si el navegador no deja capturar el mouse (marco sin permiso), se mira arrastrando con el botón derecho. Un solo error no alcanza para
+// decidirlo: Chrome también rechaza un pedido que llega justo después de salir con Esc.
+let fallosLock = 0;
+function falloLock() {
+  if (++fallosLock < 3 || IN.sinLock) return;
+  IN.sinLock = true;
+  try { toast('El navegador no deja capturar el mouse: mantené el clic derecho y arrastrá para mirar.', '#ffe39a'); } catch (e) { /* sin HUD todavía */ }
+}
 function pedirLock() {
   if (IN.tactil || J.panel || J.modo !== 'jugando') return;
   const cv = $('#cv');
   if (document.pointerLockElement === cv) return;
   try {
     const r = cv.requestPointerLock && cv.requestPointerLock();
-    if (r && r.catch) r.catch(() => { IN.sinLock = true; });
-  } catch (e) { IN.sinLock = true; }
+    if (r && r.catch) r.catch(falloLock);
+  } catch (e) { falloLock(); }
 }
 function soltarLock() { try { if (document.pointerLockElement) document.exitPointerLock(); } catch (e) { /* nada */ } }
 
@@ -39,10 +47,11 @@ function iniciarInput(canvas) {
   canvas.addEventListener('wheel', (e) => { e.preventDefault(); IN.rueda += Math.sign(e.deltaY); }, { passive: false });
   document.addEventListener('pointerlockchange', () => {
     IN.bloqueado = document.pointerLockElement === canvas;
+    if (IN.bloqueado) fallosLock = 0;
     // si se perdió el lock jugando (Esc), se abre la pausa
     if (!IN.bloqueado && J.modo === 'jugando' && !J.panel && !IN.soltando && !IN.sinLock) abrirPanel('pausa');
   });
-  document.addEventListener('pointerlockerror', () => { IN.sinLock = true; });
+  document.addEventListener('pointerlockerror', falloLock);
   document.addEventListener('mousemove', (e) => {
     if (IN.bloqueado) { IN.dx -= e.movementX * IN.sens; IN.dy -= e.movementY * IN.sens; }
   });

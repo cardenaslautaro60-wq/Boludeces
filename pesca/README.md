@@ -77,7 +77,9 @@ juntos**.
   tienen más vida cuanta más gente pelea (+65 % por jugador extra cerca) y **cada jugador que aportó al menos el 3 % del daño cobra
   su propio botín**. Quien no peleó, no cobra.
 - **Si el anfitrión se va**, el siguiente toma el mando sin cortar la pelea; quien entra tarde recibe el estado actual.
-- Las partidas siguen siendo **individuales**: plata, mochila y progreso son de cada uno y se guardan en su navegador.
+- Las partidas siguen siendo **individuales**: plata, mochila y progreso son de cada uno y se guardan en su navegador. (Dos pestañas
+  del mismo navegador comparten el guardado y se lo pisan: sirve para probar el multijugador, no para jugar de verdad así.)
+- Todo lo que llega de otros jugadores se trata como dato no confiable: se valida y los textos se muestran siempre como texto.
 
 ### Tres formas de conectarse
 

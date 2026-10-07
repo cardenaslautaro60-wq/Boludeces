@@ -58,7 +58,7 @@ function actualizarRemotos(dt) {
   const ahora = performance.now();
   for (const r of RED.remotos.values()) {
     if (!r.rig) crearAvatar(r);
-    else if (r.etq && r.etq.firstChild && $('b', r.etq).textContent !== r.nombre) $('b', r.etq).textContent = r.nombre;
+    else if (r.etq && r.etq.firstChild) { const nom = (r.ausente ? '💤 ' : '') + r.nombre; if ($('b', r.etq).textContent !== nom) $('b', r.etq).textContent = nom; }
     const q = poseInterpolada(r, ahora);
     const rig = r.rig, g = rig.grupo;
     if (!q) { g.visible = false; ocultarEtq(r); continue; }
@@ -237,7 +237,7 @@ function renderLista() {
   filas.push(yo);
   for (const r of RED.remotos.values()) {
     const d = r.pose ? Math.round(Math.hypot(r.pose.x - P.pos.x, r.pose.z - P.pos.z)) : 0;
-    filas.push(`<div class="jl-f"><i style="background:${COLORES_CAMISA[r.color]}"></i><b></b><span>${d} m${String(r.id) === String(RED.hostId) ? ' · anfitrión' : ''}</span><em>${r.pose ? Math.round(r.pose.hp) : 100}%</em></div>`);
+    filas.push(`<div class="jl-f"><i style="background:${COLORES_CAMISA[r.color]}"></i><b></b><span>${d} m${String(r.id) === String(RED.hostId) ? ' · anfitrión' : ''}${r.ausente ? ' · ausente' : ''}</span><em>${r.pose ? Math.round(r.pose.hp) : 100}%</em></div>`);
   }
   L.innerHTML = `<h4>🌐 En la isla · ${jugadoresEnSala()}</h4>${filas.join('')}<small>${esc(RED.tipo === 'room' ? 'Canal del Artifact' : RED.tipo === 'ws' ? 'Servidor propio' : 'Pestañas de este navegador')}${RED.cfg.sala ? ' · sala ' + esc(RED.cfg.sala) : ''}</small>`;
   const bs = $$('b', L);

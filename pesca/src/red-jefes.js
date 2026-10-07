@@ -294,6 +294,6 @@ function reiniciarRedJefes() {
 if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
     if (!RED.sala) return;
-    if (document.hidden) { RJ.listo = false; RJ.adoptado = false; ponerPresencia({ lh: null }); } else { RJ.listo = false; RJ.adoptado = false; RJ.tConexion = 0; }
+    if (document.hidden) { RJ.listo = false; RJ.adoptado = false; ponerPresencia({ lh: null, af: 1 }); } else { RJ.listo = false; RJ.adoptado = false; RJ.tConexion = 0; ponerPresencia({ af: null }); }
   });
 }

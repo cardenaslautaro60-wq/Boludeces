@@ -366,6 +366,7 @@ function alCambiarPresencia(r, p, ahora) {
   r.nombre = nombreSeguro(p.n) || 'Pescador';
   r.color = clamp(finito(p.c) | 0, 0, COLORES_CAMISA.length - 1);
   r.nivel = finito(p.k) | 0;
+  r.ausente = p.af === 1; // pestaña oculta: su juego está frenado
   const pose = parsePose(p.p);
   if (pose) {
     pose.t = ahora; r.muestras.push(pose); if (r.muestras.length > 6) r.muestras.shift(); r.pose = pose;
