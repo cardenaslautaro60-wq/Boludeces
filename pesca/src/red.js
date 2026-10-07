@@ -160,15 +160,16 @@ function cableWS(url) {
 // ---------------------------------------------------------------------------
 const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 // ¿Qué transportes hay? (se consulta al abrir el título y al empezar a jugar)
-async function detectarTransportes() {
+async function detectarTransportes(maxMs = 2500) {
   const T = RED.transportes;
+  // el canal del Artifact puede tardar en contestar (hasta ~10 s): mientras no conteste no se da por perdido
   try {
-    if (typeof window.claude === 'object' && window.claude && typeof window.claude.use === 'function' && T.room === null) {
-      const r = await Promise.race([window.claude.use('room'), espera(2500).then(() => null)]);
-      T.room = r || false;
-    }
+    if (T.room === null && typeof window.claude === 'object' && window.claude && typeof window.claude.use === 'function') {
+      RED.pideRoom = RED.pideRoom || window.claude.use('room');
+      const r = await Promise.race([RED.pideRoom, espera(maxMs).then(() => undefined)]);
+      if (r !== undefined) T.room = r || false;
+    } else if (T.room === null) T.room = false;
   } catch (e) { T.room = false; }
-  if (T.room === null) T.room = false;
   // el servidor propio (pesca/servidor.mjs) avisa de sí mismo dentro de la página que sirve
   T.ws = !!(window.__RED_SERVIDOR && /^https?:$/.test(location.protocol));
   return T;
@@ -180,7 +181,7 @@ function parametrosRed() {
 async function conectarRed() {
   if (RED.sala) return true;
   RED.estado = 'conectando';
-  const T = await detectarTransportes();
+  const T = await detectarTransportes(10000);
   const prm = parametrosRed();
   const nombreSala = nombreSeguro(prm.sala || RED.cfg.sala).toLowerCase().replace(/\s+/g, '-') || 'isla';
   let S = null;

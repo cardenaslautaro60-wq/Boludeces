@@ -289,3 +289,11 @@ function reiniciarRedJefes() {
   RJ.adoptado = false; RJ.tConexion = 0; RJ.listo = false;
   for (const b of BOSSES) { b.vidaVista = undefined; b.kidVisto = undefined; b.snapInicial = undefined; b.sx = undefined; }
 }
+
+// Una pestaña oculta no corre el juego: si era el anfitrión, cede el lugar; al volver, copia el mundo de quien siguió y recién ahí vuelve a poder serlo
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (!RED.sala) return;
+    if (document.hidden) { RJ.listo = false; RJ.adoptado = false; ponerPresencia({ lh: null }); } else { RJ.listo = false; RJ.adoptado = false; RJ.tConexion = 0; }
+  });
+}

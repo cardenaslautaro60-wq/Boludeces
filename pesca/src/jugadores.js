@@ -287,19 +287,19 @@ function actualizarBotonesRed() { if (MPV.botones) for (const b of MPV.botones) 
 async function armarBloqueRed(t) {
   cargarCfgRed();
   const blq = h('div', 'tit-red', '', $('.tit-caja', t));
-  blq.innerHTML = `<h4>🌐 Jugar con amigos</h4>
-    <label class="sw"><input type="checkbox" id="rd-on" ${RED.cfg.online ? 'checked' : ''}><i></i><span>Jugar en línea (mundo compartido)</span></label>
+  blq.innerHTML = `<div class="rd-cab"><h4>🌐 Jugar con amigos</h4>
+    <label class="sw"><input type="checkbox" id="rd-on" ${RED.cfg.online ? 'checked' : ''}><i></i><span>En línea (mundo compartido)</span></label></div>
     <div class="rd-campos"><input id="rd-nombre" type="text" maxlength="16" placeholder="Tu nombre" value="${esc(RED.cfg.nombre)}" autocomplete="off">
-    <input id="rd-sala" type="text" maxlength="16" placeholder="Código de sala (opcional)" value="${esc(RED.cfg.sala)}" autocomplete="off"></div>
-    <div class="rd-colores">${COLORES_CAMISA.map((c, i) => `<button class="rd-col ${i === RED.cfg.color ? 'on' : ''}" data-c="${i}" style="background:${c}" title="Color de camisa"></button>`).join('')}</div>
-    <p class="rd-est" id="rd-est">Buscando conexión…</p>`;
+    <input id="rd-sala" type="text" maxlength="16" placeholder="Sala (opcional)" value="${esc(RED.cfg.sala)}" autocomplete="off"></div>
+    <div class="rd-fila"><div class="rd-colores">${COLORES_CAMISA.map((c, i) => `<button class="rd-col ${i === RED.cfg.color ? 'on' : ''}" data-c="${i}" style="background:${c}" title="Color de camisa"></button>`).join('')}</div>
+    <p class="rd-est" id="rd-est">Buscando conexión…</p></div>`;
   const sinEstado = () => { const s = $('#rd-est', blq); return s; };
   const guardar2 = () => { RED.cfg.nombre = nombreSeguro($('#rd-nombre', blq).value) || RED.cfg.nombre; RED.cfg.sala = nombreSeguro($('#rd-sala', blq).value).toLowerCase().replace(/\s+/g, '-'); RED.cfg.online = $('#rd-on', blq).checked; guardarCfgRed(); };
   for (const id of ['#rd-on', '#rd-nombre', '#rd-sala']) $(id, blq).addEventListener('change', guardar2);
   for (const id of ['#rd-nombre', '#rd-sala']) $(id, blq).addEventListener('keydown', (e) => e.stopPropagation());
   blq.addEventListener('click', (e) => { const b = e.target.closest('.rd-col'); if (b) { RED.cfg.color = +b.dataset.c; $$('.rd-col', blq).forEach((x) => x.classList.toggle('on', x === b)); guardarCfgRed(); sfx('click'); } });
   blq.guardar = guardar2;
-  const T = await detectarTransportes();
+  const T = await detectarTransportes(10000);
   const est = sinEstado();
   if (!est || !est.isConnected) return;
   est.textContent = T.room ? 'Conectado al canal del Artifact: jugás con quien tenga la página abierta.' : T.ws ? 'Servidor propio detectado: jugás con quien entre a esta dirección.' : T.bc ? 'Sin servidor: solo se ven las pestañas de este navegador.' : 'No hay conexión disponible.';

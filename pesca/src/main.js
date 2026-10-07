@@ -74,8 +74,16 @@ function mostrarTitulo() {
   </div>`;
   const c = $('#tt-cont', t);
   if (c) c.addEventListener('click', () => { sfx('click'); empezarJuego(true); });
-  $('#tt-nueva', t).addEventListener('click', () => {
-    if (hay && !confirm('¿Empezar de nuevo? Se borra tu partida guardada.')) return;
+  // el visor del Artifact no muestra confirm(): la confirmación va en el propio botón
+  let armado = 0;
+  const nueva = $('#tt-nueva', t);
+  nueva.addEventListener('click', () => {
+    if (hay && !armado) {
+      armado = setTimeout(() => { armado = 0; nueva.textContent = 'Nueva partida'; nueva.classList.remove('rojo'); nueva.classList.add('gris'); }, 4000);
+      nueva.textContent = '¿Seguro? Se borra tu partida'; nueva.classList.remove('gris'); nueva.classList.add('rojo'); sfx('error');
+      return;
+    }
+    clearTimeout(armado);
     sfx('click'); empezarJuego(false);
   });
   $('#tt-ayuda', t).addEventListener('click', () => { iniciarAudio(); sfx('click'); abrirPanel('ayuda'); });
