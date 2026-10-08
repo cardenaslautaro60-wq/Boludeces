@@ -13,12 +13,15 @@ const h = (tag, cls, parent, html) => {
 const TIPS = [
   'En Comodoro el viento sopla del Oeste. Las motos y los colectivos lo sienten más.',
   'Escribí HESOYAM durante el juego si andás corto de salud y de guita.',
-  'Comer en El Chori del Viento te cura, pero engorda al Gordopin.',
+  'Comer en El Chori del Viento te cura, pero engorda al Pin.',
   'En la Chapa y Pintura de Don Tito te pintan el auto y la cana se olvida de vos.',
   'Apretá TAB para cambiar entre el Gordopin y el Petroca.',
   'Hay 24 bolsitas de La Anómala enganchadas en los alambrados. Juntalas todas.',
   'Subite a un remís y apretá 2 para laburar de remisero.',
-  'En el semáforo de San Martín y Rivadavia el Gordopin hace malabares por monedas.',
+  'En el semáforo de San Martín y Rivadavia el Pin hace malabares por monedas.',
+  'Cuidado con los baches: en los barrios hay pozos que te desarman el auto.',
+  'Sintonizá ADNSUR Radio para enterarte de lo que pasa en la ciudad (y de lo que hiciste vos).',
+  'Si armás lío, el móvil de ADNSUR llega a cubrirlo en vivo.',
   'La Madriguera es la cancha de Newbery. En 2004 todavía era de tierra.',
   'Cuidado con los derrumbes del Chenque. Bah, en el juego no hay. Todavía.',
   'El canillita de la plaza San Martín vende El Patagónnico y sabe todos los chismes (y algún truco).',
@@ -54,7 +57,7 @@ export class Menus {
         <button data-a="controls">Controles</button>
         <button data-a="credits">Créditos</button>
       </div>
-      <div class="hint">Protagonizado por el Gordopin y el Petroca · Un juego de fans, hecho con cariño y viento</div>`;
+      <div class="hint">Protagonizado por el Pin y el Petroca · Un juego de fans, gratis y en el navegador, hecho con cariño y viento</div>`;
     s.style.background = 'linear-gradient(180deg, rgba(0,0,0,0.55), rgba(0,0,0,0.15) 40%, rgba(0,0,0,0.7))';
     s.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => this.mainAction(b.dataset.a)));
     this.main = s;
@@ -68,7 +71,8 @@ export class Menus {
     s.style.background = 'linear-gradient(180deg, rgba(0,0,0,0.6), rgba(0,0,0,0.1) 45%, rgba(0,0,0,0.75))';
     const touch = g.touch && g.touch.enabled;
     s.innerHTML = `<div class="logo"><span class="gta">GTA</span><span class="sj">San Jorge</span><span class="tag">Comodoro Rivadavia · 2004</span></div>
-      <div class="press">${touch ? 'TOCÁ LA PANTALLA' : 'APRETÁ CUALQUIER TECLA'}</div>`;
+      <div class="press">${touch ? 'TOCÁ LA PANTALLA' : 'APRETÁ CUALQUIER TECLA'}</div>
+      <div class="hint">Se juega acá, en el navegador: no hay nada para descargar</div>`;
     const go = (e) => {
       if (e) e.preventDefault();
       window.removeEventListener('keydown', go, true);
@@ -139,6 +143,7 @@ export class Menus {
         g.hud.showToast('Partida cargada', 2);
         g.cameraRig.snapBehind(Math.PI / 2);
       } else {
+        await this.welcome();
         g.missions.startIntro();
       }
       return;
@@ -147,6 +152,20 @@ export class Menus {
     if (a === 'media') this.openPane('media', this.main);
     if (a === 'controls') this.openPane('controls', this.main);
     if (a === 'credits') this.openPane('credits', this.main);
+  }
+
+  // Bienvenida al empezar: quién sos, que se juega acá mismo y qué hacer primero
+  welcome() {
+    const g = this.game;
+    const touch = g.touch && g.touch.enabled;
+    const ctl = touch
+      ? '<li>Joystick a la izquierda para moverte, deslizá a la derecha para mirar.</li><li>Botones a la derecha: saltar, pegar, subir al auto.</li><li>El botón de pausa abre el mapa y los <b>trucos</b>.</li>'
+      : '<li><kbd>W A S D</kbd> caminar y manejar · mouse para mirar (hacé clic para capturarlo).</li><li><kbd>F</kbd> subir y bajar del auto · clic para pegar · <kbd>Shift</kbd> saltar.</li><li><kbd>Esc</kbd> pausa, mapa y <b>trucos</b>.</li>';
+    const html = `<p>Sos <b>el Pin</b> (el Gordopin para los papeles): el malabarista del semáforo de San Martín y Rivadavia, hincha del Lobo. No es un virus: el payaso del semáforo sos vos.</p>
+      <p class="note">GTA San Jorge se juega acá, en el navegador. No hay nada para descargar ni instalar, y es gratis.</p>
+      <ul>${ctl}</ul>
+      <p>Primero mirá qué pasa en el semáforo. Después, seguí las indicaciones de abajo y el punto amarillo del radar.</p>`;
+    return this.choice('Comodoro, 2004', ['¡Dale, a la calle!'], html, 'welcome');
   }
 
   // ---------- Pausa ----------
@@ -319,7 +338,7 @@ export class Menus {
         <p class="note">Tocá uno y volvés al juego. En la computadora también se pueden escribir los códigos mientras jugás.</p>
         <h4>Autos</h4><div class="cheats">
           ${car('jilux', 'Jilux')}${car('falcon', 'Falcón')}${car('reno12', 'Renó 12')}${car('pijo504', 'Pijó 504')}${car('gool', 'Gool')}${car('duna', 'Fiaz Duna')}${car('fitito', 'Fitito 600')}
-          ${car('f100', 'F-100')}${car('empresa', 'Chata de empresa')}${car('remis', 'Remís')}${car('patrullero', 'Patrullero')}${car('colectivo', 'Colectivo')}${car('cisterna', 'Cisterna')}${car('enduro', 'Moto enduro')}${car('bmx', 'BMX')}</div>
+          ${car('f100', 'F-100')}${car('empresa', 'Chata de empresa')}${car('remis', 'Remís')}${car('patrullero', 'Patrullero')}${car('colectivo', 'Colectivo')}${car('cisterna', 'Cisterna')}${car('movil', 'Móvil de ADNSUR')}${car('enduro', 'Moto enduro')}${car('bmx', 'BMX')}</div>
         <h4>Armas y salud</h4><div class="cheats">
           ${btn('LXGIWYL', 'Armas del barrio')}${btn('BALASINFINITAS', 'Balas infinitas')}${btn('HESOYAM', 'Salud, chaleco y plata')}${btn('CHORIPAN', 'Salud completa')}${btn('PETRODOLARES', '$500.000')}${btn('AGUANTENEWBERY', 'La barra del Lobo')}</div>
         <h4>Policía</h4><div class="cheats">
@@ -453,13 +472,13 @@ export class Menus {
   }
 
   // ---------- Diálogo de opciones ----------
-  choice(title, options, subtitle = '') {
+  choice(title, options, subtitle = '', cls = '') {
     const g = this.game;
     return new Promise((resolve) => {
       if (this.choiceEl) this.choiceEl.remove();
       const wasLocked = g.controlsLocked;
       g.controlsLocked = true;
-      const s = h('div', 'choice', document.body);
+      const s = h('div', 'choice' + (cls ? ' ' + cls : ''), document.body);
       s.innerHTML = `<h3>${title}</h3>${subtitle ? `<p>${subtitle}</p>` : ''}<div class="opts"></div>`;
       const box = s.querySelector('.opts');
       const done = (i) => {

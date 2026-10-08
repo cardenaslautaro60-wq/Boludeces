@@ -1,6 +1,8 @@
 # GTA: San Jorge
 
-**Un GTA San Andreas en Comodoro Rivadavia, año 2004.** Protagonizado por el **Gordopin** y el **Petroca**.
+**Un GTA San Andreas en Comodoro Rivadavia, año 2004.** Protagonizado por **el Pin** (el Gordopin) y el **Petroca**.
+
+**Se juega en el navegador: no hay nada para descargar ni instalar.**
 
 Mundo abierto en 3D que corre en el navegador. Mapa de Comodoro estilizado, estética de la PS2, radios con música generada en el momento, misiones con cinemáticas y todo lo que tenía San Andreas, pasado por el viento patagónico.
 
@@ -22,7 +24,7 @@ Funciona en Chrome, Firefox, Edge y Safari con WebGL. En el celular aparecen con
 
 ## Los protagonistas
 
-- **El Gordopin**: malabarista del semáforo de San Martín y Rivadavia y fanático del Lobo (Club Atlético Jorge Newbery). Tiene su propia frase: *"A mí no me van a sacar nunca de la calle"*. Como CJ, engorda si come choripanes y adelgaza en el gimnasio.
+- **El Pin** (el Gordopin, para los papeles): malabarista del semáforo de San Martín y Rivadavia y fanático del Lobo (Club Atlético Jorge Newbery). Tiene su propia frase: *"A mí no me van a sacar nunca de la calle"*. Como CJ, engorda si come choripanes y adelgaza en el gimnasio.
 - **El Petroca**: petrolero con guita, camisa de jean, botas y anteojos negros. *"¡Buena petroca!"*. Te acompaña, tira desde el auto y podés jugar con él apretando **TAB**.
 
 ## La historia (7 misiones)
@@ -67,6 +69,22 @@ El mismo juego con otra cara: `realista.html` (o `dist/gta-san-jorge-realista.ht
 - **Monumentos reales** en su lugar (OpenStreetMap), con placa: San Martín a caballo, el busto de San Martín sobre el tronco petrificado con sus tres mástiles, el avión **IA-58 Pucará**, Caídos en Malvinas, el **Balancín de Km 5**, la **Centolla Gigante**, el Choique, el Monumento al Gaucho, Rómulo y Remo, el homenaje a los Colonos Galeses, la Cruz, San Cayetano y los monolitos.
 - **Más vida en la calle**: gente charlando en la vereda, la cola del colectivo con el cartel de la parada, pibes jugando a la pelota en las plazas y calles de barrio, **perros callejeros** que te siguen (y le ladran a los autos), **gaviotas** en la costa, y más autos y peatones.
 - **Estética PS2 con la luz de la realista**: cielo físico con nubes, sol con sombras, reflejos, agua que brilla, resplandor y faroles que iluminan la vereda de noche, sin las texturas fotográficas (anda mejor que la realista).
+
+## Lo que pidió la gente (octubre de 2026)
+
+Después de la nota de ADNSUR se leyeron los comentarios (ver `ideas/comentarios-de-la-gente.md`) y se sumó lo más pedido y lo que ayuda a que más gente juegue:
+
+- **Bienvenida al empezar**: quién sos (el Pin, el malabarista del semáforo: "no es un virus, el payaso sos vos"), los controles básicos y que **se juega en el navegador, sin descargar nada** (también en la pantalla de carga y en la de inicio).
+- **"El Pin"**: así le dicen en el juego, en la intro, en el HUD y en la calle ("¿jodeme que ese es el Pin?").
+- **Calles rotas**: baches y pozos en las calles de barrio (y algunos en las avenidas y la ruta). Se ven, el auto pega un salto, pierde velocidad y, si vas muy rápido, se rompe.
+- **La camiseta del Pin** ya no es tan blanca: está gastada y con manchas.
+- **Bandas de parodia**: *los Escarcha* (barrio San Martín) y *los Primavera* (Laprida), con nombres inventados, como Tenpesos o Don Crudo (no se usan apellidos de familias reales). Al entrar a un territorio aparece de quién es.
+- **Colectivos de 2004**: Patagonia Argentina y Diadema, con el cartel de la empresa y el destino.
+- **ADNSUR en el juego**:
+  - **El móvil de ADNSUR**: cuando hay un choque fuerte, una explosión, un tiroteo o una persecución con 3 estrellas o más, llega la chata de prensa; se bajan la cronista y el camarógrafo y salen **en vivo** (placa de "ADNSUR · EN VIVO" en pantalla). De vez en cuando también hacen una nota de los baches del barrio. Si los atacás, cortan la nota (y sale en las noticias).
+  - **ADNSUR Radio**: una radio nueva con el noticiero de Comodoro, que cuenta lo que pasó en la ciudad (incluido lo que hiciste vos) y noticias del 2004.
+  - Los periodistas son **personajes genéricos**: no se usan voces, caras ni nombres de periodistas reales sin su permiso. El noticiero va con subtítulos (o con la voz del navegador, si se elige en *Opciones*).
+  - En la pausa, *Trucos*, se puede hacer aparecer el móvil de ADNSUR.
 
 ## Lo que tiene de San Andreas
 
@@ -193,7 +211,8 @@ Datos del mapa © colaboradores de [OpenStreetMap](https://www.openstreetmap.org
 ```
 src/
   main.js            arranque y pantalla de carga
-  game/              bucle principal, jugador, cámara, IA, tránsito, policía, misiones, actividades
+  game/              bucle principal, jugador, cámara, IA, tránsito, policía, misiones, actividades,
+                     prensa.js (el móvil y el noticiero de ADNSUR)
   world/             datos del mapa, terreno, calles, ciudad, props, cielo y clima
   entities/          personajes y vehículos
   render/            texturas procedurales, partículas y filtro PS2

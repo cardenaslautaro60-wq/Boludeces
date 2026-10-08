@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { STYLE } from '../render/style.js';
+import { STYLE, lam } from '../render/style.js';
+import { signTexture } from '../render/textures.js';
 import { buildCarModel, CarMaterials } from './carmodels.js';
 import { clamp, lerp, approach, angleWrap, rand, pick } from '../util.js';
 
@@ -22,8 +23,22 @@ export const VTYPES = {
   colectivo: { name: 'Colectivo', style: 'bus', L: 11, W: 2.5, H: 3.1, mass: 9000, power: 4.5, maxSpeed: 26, grip: 4, steer: 1.3, brake: 9, colors: [0xe8c020, 0x2a6ab0, 0xf2f2f2] },
   cisterna: { name: 'Camión Cisterna', style: 'tanker', L: 9, W: 2.5, H: 3.3, mass: 12000, power: 4.2, maxSpeed: 27, grip: 4, steer: 1.3, brake: 8, colors: [0x1a1a1a] },
   bmx: { name: 'BMX', style: 'bike', L: 1.7, W: 0.5, H: 1.1, mass: 90, power: 5.5, maxSpeed: 13, grip: 7, steer: 2.8, brake: 10, bike: true, colors: [0x2a8ae0, 0xe02a2a, 0x2ae05a, 0xf2f2f2] },
+  // el móvil de prensa de ADNSUR (llega a cubrir choques, explosiones y persecuciones)
+  movil: { name: 'Móvil de ADNSUR', style: 'pickup', L: 5.25, W: 1.82, H: 1.8, mass: 1700, power: 10, maxSpeed: 41, grip: 5, steer: 1.95, brake: 14, offroad: true, press: true, colors: [0xf2f2f2] },
   enduro: { name: 'Moto Enduro', style: 'moto', L: 2.15, W: 0.75, H: 1.2, mass: 180, power: 13, maxSpeed: 44, grip: 6.5, steer: 2.6, brake: 15, bike: true, offroad: true, colors: [0xe86a1a, 0x1a8a3a, 0xe0e020, 0x2a4ab0] },
 };
+
+// Colectivos de 2004 (en esa época no existía Solbus): empresa y recorrido en el cartel
+export const BUS_LINES = [
+  { empresa: 'PATAGONIA ARGENTINA', destinos: ['CENTRO', 'KM 8', 'RADA TILLY', 'KM 5', 'CALETA CÓRDOVA'] },
+  { empresa: 'DIADEMA', destinos: ['DIADEMA', 'CENTRO', 'KM 3', 'PIETROBELLI', 'ROCA'] },
+];
+const decalMats = new Map();
+function decalMat(lines, opts) {
+  const key = JSON.stringify([lines, opts]);
+  if (!decalMats.has(key)) decalMats.set(key, lam({ map: signTexture(lines, opts), polygonOffset: true, polygonOffsetFactor: -2 }));
+  return decalMats.get(key);
+}
 
 // ---------- Construcción de modelos ----------
 const geoCache = new Map();
@@ -84,6 +99,8 @@ export class Vehicle {
       this.sirenB.position.set(-0.3, this.type.H + 0.16, this.model.roofZ);
       this.body.add(this.sirenR, this.sirenB);
     }
+    if (this.type.style === 'bus') this.addBusSigns(opts.line);
+    if (this.type.press) this.addPressGear();
     this.pos = new THREE.Vector3(opts.x || 0, 0, opts.z || 0);
     this.heading = opts.rot || 0;
     this.vx = 0; this.vz = 0; this.vy = 0; this.angVel = 0;
@@ -116,6 +133,47 @@ export class Vehicle {
     this.group.rotation.order = 'YXZ';
     game.scene.add(this.group);
     this.updateVisual(0);
+  }
+
+  // carteles del colectivo: empresa a los costados y destino adelante
+  addBusSigns(line) {
+    const T = this.type, hw = T.W / 2, hl = T.L / 2;
+    const L = line || pick(BUS_LINES);
+    this.busLine = L;
+    this.destino = pick(L.destinos);
+    const side = decalMat([L.empresa], { bg: '#f4f1e8', fg: '#1a2a5a', w: 512, h: 64, sizes: [40], borderColor: '#1a2a5a' });
+    for (const s of [-1, 1]) {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(5.2, 0.5), side);
+      m.position.set(s * (hw + 0.03), 1.05, 0.2);
+      m.rotation.y = s * Math.PI / 2;
+      this.body.add(m);
+    }
+    const dest = decalMat([this.destino], { bg: '#111111', fg: '#ffb020', w: 256, h: 48, sizes: [34], border: false });
+    const d = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 0.3), dest);
+    d.position.set(0, 2.85, hl + 0.03);
+    this.body.add(d);
+  }
+
+  // móvil de prensa: logos a los costados y en el capó, antena y parabólica en el techo
+  addPressGear() {
+    const T = this.type, hw = T.W / 2;
+    const logo = decalMat(['ADNSUR', 'MÓVIL DE PRENSA'], { bg: '#ffffff', fg: '#c01818', w: 512, h: 160, sizes: [78, 34], borderColor: '#c01818' });
+    for (const s of [-1, 1]) {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 0.6), logo);
+      m.position.set(s * (hw + 0.025), 0.9, -1.2);
+      m.rotation.y = s * Math.PI / 2;
+      this.body.add(m);
+    }
+    const grey = lam({ color: 0x9a9ea4 });
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.05, 1.6, 6), grey);
+    mast.position.set(0, T.H + 0.4, -1.6);
+    const dish = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 6, 0, Math.PI * 2, 0, Math.PI / 3), lam({ color: 0xe8e8e8, side: THREE.DoubleSide }));
+    dish.position.set(0, T.H + 1.2, -1.6);
+    dish.rotation.x = -Math.PI / 2.6;
+    const light = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.12, 0.25), new THREE.MeshBasicMaterial({ color: 0xffa020 }));
+    light.position.set(0, T.H + 0.06, this.model.roofZ || 0);
+    this.body.add(mast, dish, light);
+    this.pressLight = light;
   }
 
   setColor(c) {
@@ -260,6 +318,30 @@ export class Vehicle {
     } else {
       this.airTime += dt;
       this.maxAir = Math.max(this.maxAir, this.airTime);
+    }
+
+    // baches: un golpe seco, la suspensión se queja y el auto pierde un poco de velocidad
+    this.potT = Math.max(0, (this.potT || 0) - dt);
+    if (this.grounded && !inWater && this.potT === 0 && g.roads.potholeAt) {
+      const sp = Math.hypot(this.vx, this.vz);
+      if (sp > 3) {
+        const f = T.L * 0.32;
+        const hole = g.roads.potholeAt(this.pos.x + sin * f, this.pos.z + cos * f) || g.roads.potholeAt(this.pos.x - sin * f, this.pos.z - cos * f);
+        if (hole) {
+          this.potT = 0.35;
+          const k = clamp(sp / 20, 0.15, 1) * (T.bike ? 1.4 : T.mass > 3000 ? 0.5 : 1);
+          this.susp = -0.18 * k;
+          this.vy = Math.max(this.vy, 2.4 * k);
+          this.angVel += (Math.random() - 0.5) * 0.5 * k;
+          this.vx *= 1 - 0.06 * k; this.vz *= 1 - 0.06 * k;
+          if (sp > 16) this.damage((sp - 16) * 4);
+          g.audio && g.audio.thud(this.pos, 0.25 + 0.45 * k);
+          if (this.driver && this.driver.isPlayer) {
+            if (g.cameraRig) g.cameraRig.shake = Math.max(g.cameraRig.shake, 0.25 * k + 0.1);
+            g.onPothole && g.onPothole(this, sp);
+          }
+        }
+      }
     }
 
     // colisiones con el mundo

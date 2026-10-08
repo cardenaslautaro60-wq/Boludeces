@@ -24,6 +24,7 @@ import { Vida } from './vida.js';
 import { Saltos } from './saltos.js';
 import { Densidad } from './densidad.js';
 import { Cruces } from './cruces.js';
+import { Prensa } from './prensa.js';
 import { SaveSystem } from './save.js';
 import { Brain } from './ai.js';
 import { HUD } from '../ui/hud.js';
@@ -105,6 +106,7 @@ export class Game {
     this.cheats = new Cheats(this);
     this.npcs = new NPCs(this);
     this.events = new WorldEvents(this);
+    this.prensa = new Prensa(this);
     this.saves = new SaveSystem(this);
     this.menus = new Menus(this);
     this.touch = new Touch(this);
@@ -114,6 +116,7 @@ export class Game {
     this.saltos = new Saltos(this);
     this.densidad = new Densidad(this);
     this.cruces = new Cruces(this);
+    this.audio.newsSource = () => this.prensa.bulletin();
     this.audio.onTalk = (who, line) => { if (this.player && this.player.vehicle && !this.paused) this.hud.radioCaption(who, line, 8); };
     this.audio.onChase = (title) => {
       this.hud.radio.style.color = '#ff4a2a';
@@ -203,7 +206,7 @@ export class Game {
 
   createCharacters() {
     const c = SPAWNS.casa;
-    this.gordopin = new Ped(this, LOOKS.gordopin, { x: c.x, z: c.z, rot: c.rot, isPlayer: true, kind: 'story', name: 'Gordopin', persistent: true, health: 100 });
+    this.gordopin = new Ped(this, LOOKS.gordopin, { x: c.x, z: c.z, rot: c.rot, isPlayer: true, kind: 'story', name: 'Pin', persistent: true, health: 100 });
     this.gordopin.give('clavas');
     this.petroca = new Ped(this, LOOKS.petroca, { x: c.x + 2, z: c.z + 2, rot: c.rot, kind: 'story', name: 'Petroca', persistent: true, health: 130 });
     this.petroca.give('pistola', 60);
@@ -379,6 +382,7 @@ export class Game {
     if (killer === this.player || (killer && killer.isPlayer)) {
       this.stats.pedsKilled++;
       this.police.crime(ped.kind === 'cana' ? 'copKill' : 'kill', ped.pos);
+      this.prensa.report('muerto', ped.pos.x, ped.pos.z);
     }
     if (ped.money > 0 && !ped.persistent) this.pickups.spawnMoney(ped.pos.x, ped.pos.z, ped.money);
     if (!ped.persistent && ped.kind !== 'civil' && Math.random() < 0.5 && ped.weapon !== 'punos') this.pickups.spawnWeapon(ped.pos.x + 0.6, ped.pos.z, ped.weapon, 20);
@@ -429,6 +433,15 @@ export class Game {
       }
     }
     if (cause && cause.isPlayer) this.police.crime('explosion', { x, z });
+    const boom = this.vehicles.find((v) => v.dead && Math.hypot(v.pos.x - x, v.pos.z - z) < 3);
+    this.prensa.report('explosion', x, z, { auto: boom ? boom.type.name : 'vehículo' });
+  }
+
+  // Bache: la primera vez se avisa (y se cuentan para las estadísticas)
+  onPothole(v, sp) {
+    this.stats.baches = (this.stats.baches || 0) + 1;
+    if (this.stats.baches === 1) this.hud.showToast('¡Bache! Las calles de Comodoro, como siempre. Andá despacio en los barrios.', 4);
+    else if (sp > 18 && Math.random() < 0.3) sayLine(this.player, pick(['¡La puta, otro pozo!', '¡Arreglen las calles!', 'Se me fue la alineación...']), 2);
   }
 
   // ---------- Muerte / arresto ----------
@@ -545,6 +558,7 @@ export class Game {
     this.missions.update(dt);
     this.npcs.update(dt, this.input);
     this.events.update(dt);
+    this.prensa.update(dt);
     this.effects.update(dt, this.camera.position);
     this.props.update(this.time, dt, this.env, this.camera.position);
     this.world.water.userData.material.uniforms.uTime.value = this.time;
@@ -687,6 +701,10 @@ export class Game {
             if (impact > 6) this.effects.sparks((a.pos.x + b.pos.x) / 2, a.pos.y + 0.6, (a.pos.z + b.pos.z) / 2, 8);
             const pl = this.player;
             if ((a.driver === pl && b.type.police) || (b.driver === pl && a.type.police)) this.police.crime('copCarHit', a.pos);
+            if (impact > 14 && (a.driver === pl || b.driver === pl)) {
+              const other = a.driver === pl ? b : a;
+              this.prensa.report('choque', a.pos.x, a.pos.z, { auto: other.type.name });
+            }
             a.onHitVehicle && a.onHitVehicle(b, impact);
             b.onHitVehicle && b.onHitVehicle(a, impact);
           }

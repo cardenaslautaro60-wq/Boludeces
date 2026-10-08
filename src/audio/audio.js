@@ -13,6 +13,7 @@ const STATIONS = [
   { name: 'Tango del Viento AM 1210', style: 'tango', color: '#e84a4a' },
   { name: 'Novishok FM — thrash comodorense', style: 'novishok', color: '#ff3b2a' },
   { name: 'La Ciudad Perdida — con Santiago Sánchez', style: 'talk', color: '#8aff6a' },
+  { name: 'ADNSUR Radio — el noticiero de Comodoro', style: 'talk', news: true, color: '#ff4a4a' },
   { name: 'Radio apagada', style: 'off', color: '#aaaaaa' },
 ];
 
@@ -674,6 +675,14 @@ export class Audio {
 
   talk() {
     if (this.radioIdx < 0 || STATIONS[this.radioIdx].style !== 'talk') return;
+    if (STATIONS[this.radioIdx].news) {
+      // noticiero de ADNSUR: lo que pasa en el juego (sin voz grabada: subtítulo o voz del navegador)
+      const line = this.newsSource ? this.newsSource() : '';
+      this.onTalk && this.onTalk('ADNSUR', line);
+      const dur = this.say(line, 'cronista', null, 'radio');
+      this.talkTimer = setTimeout(() => this.talk(), dur ? (dur + 3 + Math.random() * 3) * 1000 : 9000 + line.length * 45);
+      return;
+    }
     this.talkIdx = ((this.talkIdx === undefined ? Math.floor(Math.random() * TALK.length) : this.talkIdx) + 1) % TALK.length;
     const line = TALK[this.talkIdx];
     this.onTalk && this.onTalk(SANTIAGO, line);

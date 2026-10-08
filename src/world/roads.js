@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { lam, STYLE } from '../render/style.js';
 import { META, MAP, FRAME as F, toAB } from './mapdata.js';
-import { pointSegDist, dist, clamp } from '../util.js';
+import { pointSegDist, dist, clamp, RNG } from '../util.js';
 import { LeanChunks } from './geom.js';
 
 // Pendiente máxima (metros por metro) de cada tipo de calle
@@ -202,6 +202,15 @@ export class RoadNetwork {
     const i = Math.round((a - this.maskA0) / this.maskC), j = Math.round((b - this.maskB0) / this.maskC);
     if (i < 0 || j < 0 || i >= this.maskW || j >= this.maskH) return 0;
     return this.mask[j * this.maskW + i];
+  }
+
+  // ¿hay un bache en este punto?
+  potholeAt(x, z) {
+    if (!this.potGrid) return null;
+    const list = this.potGrid.get(Math.floor(x / 16) * 100000 + Math.floor(z / 16));
+    if (!list) return null;
+    for (const p of list) if ((p.x - x) ** 2 + (p.z - z) ** 2 < p.r * p.r) return p;
+    return null;
   }
 
   edgesNear(x, z) {
@@ -421,6 +430,45 @@ export class RoadNetwork {
       }
     }
 
+    // Baches: "le faltaron las calles hechas m...". Más en las calles de barrio, algunos en las
+    // avenidas y pocos en la ruta; siempre en el mismo lugar (semilla fija por calle).
+    this.potholes = [];
+    this.potGrid = new Map();
+    const rough = (mat, x, z, r, yOff, rnd) => {
+      const lb = ch.get(x, z, mat);
+      const seg = 9, yc = gy(x, z, yOff);
+      const rr = [];
+      for (let k = 0; k < seg; k++) rr.push(r * (0.65 + rnd.next() * 0.55));
+      for (let k = 0; k < seg; k++) {
+        const a0 = (k / seg) * Math.PI * 2, a1 = ((k + 1) / seg) * Math.PI * 2, r0 = rr[k], r1 = rr[(k + 1) % seg];
+        const x0 = x + Math.cos(a0) * r0, z0 = z + Math.sin(a0) * r0, x1 = x + Math.cos(a1) * r1, z1 = z + Math.sin(a1) * r1;
+        lb.tri(x, yc, z, x / 4, z / 4, x1, gy(x1, z1, yOff), z1, x1 / 4, z1 / 4, x0, gy(x0, z0, yOff), z0, x0 / 4, z0 / 4);
+      }
+    };
+    const EVERY = { calle: 45, avenida: 90, ruta: 240 };
+    this.edges.forEach((e, i) => {
+      const every = EVERY[e.kind];
+      if (!every || e.len < 14) return;
+      if (e.kind === 'calle' && !e.urban) return;
+      const rnd = new RNG(7919 + i * 31);
+      const n = Math.floor(e.len / every + rnd.next());
+      const A = this.nodes[e.a];
+      for (let k = 0; k < n; k++) {
+        const t = rnd.range(6, e.len - 6);
+        // en la mano de un lado o del otro (por donde pasan las ruedas)
+        const off = rnd.sign() * e.width * rnd.range(0.12, 0.32);
+        const x = A.x + e.dx * t - e.dz * off, z = A.z + e.dz * t + e.dx * off;
+        const r = rnd.range(0.45, e.kind === 'calle' ? 1.1 : 0.85);
+        rough('bacheBorde', x, z, r * 1.35, Y + 0.02, rnd);
+        rough('bache', x, z, r, Y + 0.025, rnd);
+        const pot = { x, z, r };
+        this.potholes.push(pot);
+        const key = Math.floor(x / 16) * 100000 + Math.floor(z / 16);
+        if (!this.potGrid.has(key)) this.potGrid.set(key, []);
+        this.potGrid.get(key).push(pot);
+      }
+    });
+
     const po = (mat, f) => { mat.polygonOffset = true; mat.polygonOffsetFactor = f; mat.polygonOffsetUnits = f * 2; return mat; };
     const materials = {
       asphalt: po(lam({ map: textures.asphalt }), -1),
@@ -431,6 +479,8 @@ export class RoadNetwork {
       yellow: po(lam({ color: 0xd9a826 }), -3),
       patchA: po(lam({ map: textures.asphalt }), -2),
       patchD: po(lam({ map: textures.dirt }), -2),
+      bacheBorde: po(lam({ color: 0x3e3b38 }), -2.5),
+      bache: po(lam({ color: 0x100f0e }), -3),
     };
     if (STYLE.realista) {
       // fotos por posición en el mundo (las esquinas empalman con los tramos) y relieve
@@ -447,7 +497,7 @@ export class RoadNetwork {
       // pintura vial: un poco gastada y con brillo
       for (const k of ['white', 'solidW', 'yellow']) { materials[k].roughness = 0.6; }
     }
-    ch.build(materials, group, { order: { asphalt: 1, dirt: 1, paving: 1, patchA: 2, patchD: 2, white: 3, solidW: 3, yellow: 3 } });
+    ch.build(materials, group, { order: { asphalt: 1, dirt: 1, paving: 1, patchA: 2, patchD: 2, bacheBorde: 3, bache: 3, white: 3, solidW: 3, yellow: 3 } });
     this.materials = materials;
     return group;
   }

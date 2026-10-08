@@ -381,7 +381,7 @@ export class Missions {
             G.jugg = true;
             await c.say('', 'Comodoro Rivadavia, 2004. El barril sube, el Km 3 se llena de chatas nuevas... y el viento, como siempre, sopla.', 6);
             c.cam(at(-3.4, -3.2, 1.8), at(-2.8, -2.6, 1.7), V3(P.x, P.y + 1.7, P.z), 5);
-            await c.say('', `En el ${(S.name || 'semáforo de San Martín').replace(/^Semáforo/, 'semáforo')}, el Gordopin hace lo que mejor le sale.`, 4);
+            await c.say('', `En el ${(S.name || 'semáforo de San Martín').replace(/^Semáforo/, 'semáforo')}, el Pin (el Gordopin, para los papeles) hace lo que mejor le sale.`, 5);
             ten.group.visible = true; pul.group.visible = true;
             G.jugg = false;
             c.face(G, ten);
