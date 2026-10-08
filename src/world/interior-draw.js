@@ -480,7 +480,7 @@ export function buildDraw(game, ox, oy, oz) {
   }
 
   // ---- Lámparas naranjas del salón ----
-  for (const [x, z] of [[-5.2, 4.8], [-1.6, 3.0], [2.0, 3.0], [0.6, 6.0], [-1.8, 8.6], [3.6, 7.4], [-4.5, 8.4]]) {
+  for (const [x, z] of [[-5.2, 4.8], [-1.6, 3.0], [2.0, 3.0], [0.6, 6.0], [-1.8, 8.6], [3.4, 9.2], [-4.5, 8.4]]) {
     const sh = new THREE.ConeGeometry(0.22, 0.28, 10, 1, true); sh.translate(x, H - 1.1, z); add(pendant, sh);
     const bl = new THREE.SphereGeometry(0.09, 8, 6); bl.translate(x, H - 1.22, z); add(bulbOrange, bl);
     box(black, x - 0.005, H - 0.96, z - 0.005, x + 0.005, H, z + 0.005);
