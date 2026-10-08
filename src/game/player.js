@@ -70,11 +70,28 @@ export class PlayerController {
     const m = Math.hypot(mx, mz);
     if (m > 0.05) { p.moveX = mx / m; p.moveZ = mz / m; p.moveMag = Math.min(1, m); } else p.moveMag = 0;
     p.gait = input.is('walk') ? 0 : input.is('sprint') ? 2 : 1;
+    // como en Vice City y San Andreas: tocar repetido la tecla de correr (o de nadar) da un
+    // pique más rápido que dejarla apretada
+    if (input.was('sprint')) p.sprintBoost = Math.min(1, (p.sprintBoost || 0) + 0.3);
+    p.sprintBoost = Math.max(0, (p.sprintBoost || 0) - dt * 0.75);
     // salto con "buffer": si se aprieta un instante antes de tocar el piso, salta igual
     if (input.was('jump')) this.jumpBuf = 0.16;
     p.holdJump = input.is('jump');
     if (this.jumpBuf > 0) { if (p.jump()) this.jumpBuf = 0; else this.jumpBuf -= dt; }
+    // buceo (San Andreas): se nada hacia donde mira la cámara; con el salto apretado, se sube
+    if (p.swimming && p.diving) {
+      cam.aimDirection(tmp);
+      let up = m > 0.05 ? clamp(tmp.y * 1.8, -1, 1) * Math.max(0, a.y) : 0;
+      if (input.is('jump')) up = 1;
+      p.swimUp = up;
+    } else p.swimUp = 0;
     if (input.was('reload')) p.reload();
+    // en el agua y adentro de los locales no se usan armas
+    if (p.swimming || (g.interiors && g.interiors.inside)) {
+      p.aiming = false; this.lock = null;
+      if (input.was('enter')) { const v = this.nearestVehicle(5); if (v) { this.enterTarget = v; this.enterT = 0; } }
+      return;
+    }
 
     // armas
     // con joystick, apuntando, los gatillos cambian de blanco en vez de arma

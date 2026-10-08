@@ -383,6 +383,47 @@ export class Audio {
 
   // ---------- Radios procedurales ----------
   stationName(i) { return STATIONS[i] ? STATIONS[i].name : ''; }
+
+  // ---------- Show en vivo (Charly Amado en el Draw) ----------
+  // Pista armada en el momento y una "voz" sintetizada (vocales con formantes) que canta la
+  // melodía. Sale por el canal de música; onShowEnd avisa cuando termina cada tema.
+  startShow(style = 'balada') {
+    if (!this.enabled) return;
+    this.stopRadio(true);
+    this.bus = this.ctx.createGain();
+    this.bus.gain.value = 1;
+    this.bus.connect(this.musicBus);
+    this.radioIdx = -3;
+    this.newSong({ style });
+    this.nextNote = this.ctx.currentTime + 0.4;
+    this.step = 0;
+  }
+
+  stopShow() { if (this.radioIdx === -3) this.stopRadio(true); }
+
+  setShowLevel(v) { if (this.radioIdx === -3 && this.bus) this.bus.gain.setTargetAtTime(v, this.ctx.currentTime, 0.2); }
+
+  voz(t, note, dur, v = 1) {
+    const ctx = this.ctx, out = this.bus;
+    if (!out) return;
+    const f = this.midi(note);
+    const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f;
+    // vibrato que entra de a poco, como un cantante
+    const lfo = ctx.createOscillator(); lfo.frequency.value = 5.2;
+    const lg = ctx.createGain(); lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(f * 0.018, t + Math.min(0.35, dur * 0.6));
+    lfo.connect(lg).connect(o.frequency);
+    const V = [[800, 1150], [450, 800], [400, 2000], [350, 1700], [300, 870]][Math.floor(Math.random() * 5)];
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.16 * v, t + 0.05);
+    g.gain.setValueAtTime(0.16 * v, t + dur * 0.75); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    for (const [ff, gg] of [[V[0], 1], [V[1], 0.55], [2800, 0.18]]) {
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = ff; bp.Q.value = 7;
+      const fg = ctx.createGain(); fg.gain.value = gg * 2.2;
+      o.connect(bp).connect(fg).connect(g);
+    }
+    g.connect(out);
+    o.start(t); lfo.start(t); o.stop(t + dur + 0.05); lfo.stop(t + dur + 0.05);
+  }
   stationColor(i) { return STATIONS[i] ? STATIONS[i].color : '#fff'; }
 
   startRadio(i) {
@@ -461,6 +502,10 @@ export class Audio {
     if (st.style === 'folk') { s.bpm = r.range(58, 68); s.root = 45 + r.int(0, 4); s.scale = minor; s.prog = [0, 3, 4, 0]; s.sub = 6; }
     if (st.style === 'tango') { s.bpm = r.range(112, 122); s.root = 43 + r.int(0, 5); s.scale = minor; s.prog = r.pick([[0, 4, 4, 0], [0, 3, 4, 0], [0, 5, 3, 4]]); s.sub = 4; }
     if (st.style === 'talk') { s.bpm = 90; s.root = 48; s.scale = major; s.prog = [0, 3, 4, 0]; s.sub = 4; }
+    if (st.style === 'balada') { s.bpm = r.range(70, 80); s.root = 43 + r.int(0, 5); s.scale = major; s.prog = r.pick([[0, 5, 3, 4], [0, 4, 5, 3], [3, 4, 0, 5]]); s.sub = 4; s.bars = 32; }
+    if (st.style === 'rockshow') { s.bpm = r.range(120, 136); s.root = 40 + r.int(0, 7); s.scale = r.chance(0.5) ? major : minor; s.prog = r.pick([[0, 4, 5, 3], [5, 3, 0, 4], [0, 3, 4, 4]]); s.sub = 4; s.bars = 40; }
+    if (st.style === 'house') { s.bpm = r.range(122, 126); s.root = 41 + r.int(0, 6); s.scale = minor; s.prog = r.pick([[0, 5, 2, 6], [0, 3, 5, 4]]); s.sub = 4; s.bars = 40; }
+    if (st.style === 'reggaeton') { s.bpm = r.range(92, 98); s.root = 42 + r.int(0, 5); s.scale = minor; s.prog = r.pick([[0, 5, 2, 6], [0, 6, 5, 6], [0, 3, 5, 4]]); s.sub = 4; s.bars = 40; }
     if (st.style === 'thrash') { s.bpm = r.range(168, 186); s.root = 40; s.scale = [0, 1, 3, 5, 7, 8, 10]; s.prog = r.pick([[0, 0, 1, 0], [0, 5, 0, 6], [0, 0, 6, 5]]); s.sub = 4; s.bars = 64; }
     // motivo melódico de 2 compases
     s.motif = [];
@@ -578,6 +623,13 @@ export class Audio {
       const chordDeg = s.prog[bar % s.prog.length];
       const r = s.r;
       const intro = bar < 2;
+      if (bar >= s.bars && this.radioIdx === -3) {
+        // fin del tema en vivo: aplausos y el cantante habla
+        for (let k = 0; k < 14; k++) this.burst({ t: t + Math.random() * 1.6, dur: 0.05, freq: 1800 + Math.random() * 1500, q: 1.5, gain: 0.18, out: this.bus });
+        this.song = null;
+        this.onShowEnd && this.onShowEnd();
+        return;
+      }
       if (bar >= s.bars) {
         this.newSong(this.radioIdx === -2 ? { style: 'thrash' } : STATIONS[this.radioIdx]);
         this.step = 0;
@@ -658,12 +710,52 @@ export class Audio {
           }
           if (st % 2 === 0) this.inst('bass', t, root - 24 + (section === 3 ? riff[st] : 0), stepDur * 0.9);
         }
+      } else if (s.style === 'balada' || s.style === 'rockshow' || s.style === 'house' || s.style === 'reggaeton') {
+        this.showStep(s, t, st, bar, chordDeg, root, mel, stepDur, spb, intro);
       } else if (s.style === 'talk') {
         // música de fondo muy suave
         if (st === 0) this.inst('piano', t, root, spb * 3, 0.25);
       }
       this.nextNote += stepDur;
       this.step++;
+    }
+  }
+
+  // Un paso de la pista del show (16 semicorcheas por compás) con la voz cantando
+  showStep(s, t, st, bar, chordDeg, root, mel, stepDur, spb, intro) {
+    const r = s.r;
+    const chord = [0, 2, 4].map((k) => this.deg(s, chordDeg + k, 0));
+    const singing = !intro && bar < s.bars - 1 && (bar % 8) < 7;
+    if (s.style === 'balada') {
+      if (st === 0) this.drum('kick', t, 0.6);
+      if (st === 8 && !intro) this.drum('snare', t, 0.55);
+      if (st % 4 === 0) this.drum('hat', t, 0.35);
+      if (st === 0) this.inst('bass', t, root - 12, spb * 1.8, 0.8);
+      if (st === 8) this.inst('bass', t, this.deg(s, chordDeg + 4, -1), spb * 1.8, 0.7);
+      if (st % 2 === 0) this.inst('piano', t, chord[(st / 2) % 3] + 12 + (st >= 8 ? 12 : 0), spb * 0.9, 0.7);
+      if (singing && mel !== null && st % 4 === 0) this.voz(t, this.deg(s, mel, 2) - 12, stepDur * (st % 8 === 0 ? 5.5 : 3.5), 1);
+    } else if (s.style === 'rockshow') {
+      if (st === 0 || st === 8 || (st === 10 && r.chance(0.5))) this.drum('kick', t, 0.9);
+      if (st === 4 || st === 12) this.drum('snare', t, 1);
+      if (st % 2 === 0) this.drum('hat', t, 0.7);
+      if (st % 2 === 0) this.inst('power', t, root - 12, stepDur * 1.9, st % 4 === 0 ? 0.9 : 0.6);
+      if (st % 2 === 0) this.inst('bass', t, root - 24, stepDur * 1.8);
+      if (singing && mel !== null && st % 2 === 0) this.voz(t, this.deg(s, mel, 2) - 12, stepDur * 3, 1);
+    } else if (s.style === 'house') {
+      if (st % 4 === 0) this.drum('kick', t, 1);
+      if (st % 4 === 2) this.drum('ohat', t, 0.8);
+      if (st === 4 || st === 12) this.drum('clap', t, 0.7);
+      if (st % 4 === 2) this.inst('bass', t, root - 12, stepDur * 1.6);
+      if (st === 0 || st === 6 || st === 12) this.inst('stab', t, root, stepDur * 2.5, 0.8);
+      if (singing && mel !== null && st % 4 === 0 && bar % 4 < 3) this.voz(t, this.deg(s, mel, 2) - 12, stepDur * 3.6, 0.9);
+    } else {
+      // dembow
+      if (st % 4 === 0) this.drum('kick', t, 0.95);
+      if (st === 3 || st === 6 || st === 11 || st === 14) this.drum('snare', t, 0.75);
+      if (st % 2 === 0) this.drum('hat', t, 0.35);
+      if (st === 0 || st === 8) this.inst('bass', t, root - 12, spb * 1.4);
+      if (st === 3 || st === 11) chord.forEach((n) => this.inst('pluck', t, n + 12, stepDur * 1.5, 0.6));
+      if (singing && mel !== null && st % 2 === 0) this.voz(t, this.deg(s, mel, 2) - 12, stepDur * 1.8, 0.95);
     }
   }
 

@@ -22,6 +22,7 @@ import { NPCs } from './npcs.js';
 import { WorldEvents } from './events.js';
 import { Vida } from './vida.js';
 import { Prensa } from './prensa.js';
+import { Interiors } from './interiores.js';
 import { SaveSystem } from './save.js';
 import { Brain } from './ai.js';
 import { HUD } from '../ui/hud.js';
@@ -104,6 +105,7 @@ export class Game {
     this.npcs = new NPCs(this);
     this.events = new WorldEvents(this);
     this.prensa = new Prensa(this);
+    this.interiors = new Interiors(this);
     this.saves = new SaveSystem(this);
     this.menus = new Menus(this);
     this.touch = new Touch(this);
@@ -522,6 +524,8 @@ export class Game {
     const p = this.player;
     this.env.update(dt, this.camera.position, this.time);
     if (this.realSky) this.realSky.update(dt);
+    this.interiors.applyLight();
+    this.underwaterLook();
     this.controller.update(dt, this.input);
     // entidades
     for (let i = 0; i < this.peds.length; i++) {
@@ -540,12 +544,16 @@ export class Game {
     }
     this.collidePedsVehicles(dt);
     this.collideVehicles();
-    this.traffic.update(dt);
-    this.population.update(dt);
+    // adentro de un local la calle queda quieta (está 300 m más abajo)
+    if (!this.interiors.inside) {
+      this.traffic.update(dt);
+      this.population.update(dt);
+    }
     this.vida.update(dt);
     this.police.update(dt);
     this.pickups.update(dt);
     this.activities.update(dt);
+    this.interiors.update(dt);
     this.missions.update(dt);
     this.npcs.update(dt, this.input);
     this.events.update(dt);
@@ -563,7 +571,7 @@ export class Game {
     if (this.zoneT <= 0) {
       this.zoneT = 0.5;
       const pp = p.vehicle ? p.vehicle.pos : p.pos;
-      this.hud.showZone(this.world.zoneAt(pp.x, pp.z));
+      this.hud.showZone(this.interiors.inside ? this.interiors.inside.name : this.world.zoneAt(pp.x, pp.z));
     }
     // música de persecución: con 4 estrellas o más suena Novishok
     if (this.police.level >= 4) { this.chaseOffT = 0; if (!this.audio.chase) this.audio.startChase(); }
@@ -572,6 +580,28 @@ export class Game {
     this.hud.update(dt);
     this.audio.update(dt, this);
     this.menus.checkInGameKeys();
+  }
+
+  // Bajo el agua (buceando): niebla verde azulada y la superficie vista desde abajo
+  underwaterLook() {
+    const c = this.camera.position;
+    const under = c.y < -0.08 && this.terrain.heightAt(c.x, c.z) < -0.5;
+    if (!this.waterCeil) {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), new THREE.MeshBasicMaterial({ color: 0x2a7a88, transparent: true, opacity: 0.94, depthWrite: false, side: THREE.BackSide, fog: false }));
+      m.rotation.x = -Math.PI / 2;
+      m.renderOrder = 5;
+      m.visible = false;
+      this.scene.add(m);
+      this.waterCeil = m;
+    }
+    this.waterCeil.visible = under;
+    // desde abajo la superficie del mar se ve con ruido: se la reemplaza por el "techo" de agua
+    if (this.world.water) this.world.water.visible = !under;
+    if (!under) return;
+    this.waterCeil.position.set(c.x, -0.05, c.z);
+    const f = this.env.fog;
+    f.color.setRGB(0.05, 0.2, 0.24).multiplyScalar(0.35 + this.env.dayLight * 0.65);
+    f.near = 0.5; f.far = 26;
   }
 
   updateLighting() {
