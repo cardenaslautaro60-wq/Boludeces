@@ -440,7 +440,7 @@ export class Game {
   // Bache: la primera vez se avisa (y se cuentan para las estadísticas)
   onPothole(v, sp) {
     this.stats.baches = (this.stats.baches || 0) + 1;
-    if (this.stats.baches === 1) this.hud.showToast('¡Bache! La ruta, como siempre. Ojo a fondo.', 4);
+    if (this.stats.baches === 1) this.hud.showToast('¡Bache! La ruta, como siempre. Si vas rápido, te desarma el auto.', 4);
     else if (sp > 18 && Math.random() < 0.3) sayLine(this.player, pick(['¡La puta, otro pozo!', '¡Arreglen las calles!', 'Se me fue la alineación...']), 2);
   }
 
