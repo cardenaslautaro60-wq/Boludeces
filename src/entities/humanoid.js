@@ -234,6 +234,21 @@ function paintAtlas(L) {
       g.fillStyle = '#1c2f6b'; g.beginPath(); g.arc(fx + 22, y + h * 0.27, 7, 0, Math.PI * 2); g.fill();
       g.fillStyle = '#f4f4f4'; g.font = 'bold 8px Arial'; g.fillText('JN', fx + 16, y + h * 0.27 + 3);
       g.fillStyle = '#1c2f6b'; g.font = 'bold 44px Arial'; g.textAlign = 'center'; g.fillText('10', x + w * 0.75, y + h * 0.33); g.textAlign = 'left';
+      if (L.dirty) {
+        // la del Pin está gastada: manchas de grasa, de tierra y de chori, cuello percudido
+        const r = new RNG(404);
+        g.fillStyle = 'rgba(120,96,60,0.22)'; g.fillRect(x, y + 10, w, 6);
+        for (let k = 0; k < 40; k++) {
+          const sx = x + r.next() * w, sy = y + 14 + r.next() * (h - 18), sr = 3 + r.next() * 9;
+          g.fillStyle = `rgba(${80 + r.next() * 50 | 0},${60 + r.next() * 30 | 0},${35 + r.next() * 20 | 0},${0.25 + r.next() * 0.3})`;
+          g.beginPath(); g.ellipse(sx, sy, sr, sr * (0.5 + r.next() * 0.6), r.next() * 3, 0, 7); g.fill();
+        }
+        // abajo, donde se limpia las manos
+        const gr = g.createLinearGradient(0, y + h * 0.75, 0, y + h);
+        gr.addColorStop(0, 'rgba(110,90,60,0)'); gr.addColorStop(1, 'rgba(110,90,60,0.35)');
+        g.fillStyle = gr; g.fillRect(x, y + h * 0.75, w, h * 0.25);
+        noise(x, y, w, h, 0.08, 900, 2);
+      }
     } else if (kind === 'jean') {
       noise(x, y, w, h, 0.18, 2500, 1);
       g.strokeStyle = 'rgba(230,220,190,0.55)'; g.lineWidth = 1.5;
@@ -569,7 +584,7 @@ export class Humanoid {
     this.anim = { phase: 0, speed: 0, punch: 0, aim: 0, air: 0, sit: 0, dead: 0, swim: 0 };
     this.build();
     if (shadowTex) {
-      const sh = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.2), new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false, fog: true, opacity: STYLE.realista ? 0.5 : 1 }));
+      const sh = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.2), new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false, fog: true, opacity: STYLE.luz ? 0.5 : 1 }));
       sh.rotation.x = -Math.PI / 2;
       sh.position.y = 0.04;
       sh.renderOrder = 4;
@@ -776,8 +791,9 @@ export class Humanoid {
 // ---------- Apariencias ----------
 export const LOOKS = {
   gordopin: {
-    skin: 0xc99a74, hair: 0x1e140c, hairStyle: 'short', fat: 0.95, muscle: 0.1, height: 1.0,
-    shirt: 0xf4f4f4, shirtKind: 'banda', shirtHex: '#f4f4f4', shirtAccent: '#1c2f6b', sleeveHex: '#f4f4f4',
+    skin: 0x553624, hair: 0x0e0a08, hairStyle: 'short', fat: 0.95, muscle: 0.1, height: 1.0,
+    // la camiseta del Lobo, ya no tan blanca (la gente pidió que se parezca a la de verdad)
+    shirt: 0xc9bd9e, shirtKind: 'banda', shirtHex: '#c9bd9e', shirtAccent: '#1c2f6b', sleeveHex: '#c3b697', dirty: true,
     pants: 0x1e2433, pantsKind: 'jogging', stripe: '#1c2f6b', shoes: 0xeeeeee, stubble: true, smile: true,
   },
   petroca: {
@@ -815,6 +831,16 @@ function makeLook(kind, rnd) {
   if (kind === 'caleta') {
     L.shirt = 0xe8c020; L.shirtHex = '#e8c020'; L.shirtKind = 'plain'; L.hairStyle = pick(['cap', 'short']); L.hat = 0xe8c020; L.pants = 0x1e1e22; L.pantsKind = 'jogging'; L.stripe = '#e8c020';
   }
+  // Los Escarcha: celeste y blanco, gorro de lana (de "nieve")
+  if (kind === 'escarcha') {
+    L.shirt = 0x9cc8e8; L.shirtHex = '#9cc8e8'; L.shirtKind = rnd() < 0.5 ? 'campera' : 'plain'; L.hairStyle = 'beanie'; L.hat = 0xf2f2f2;
+    L.pants = 0x2a3a55; L.pantsKind = 'jogging'; L.stripe = '#9cc8e8'; L.longSleeves = true;
+  }
+  // Los Primavera: verde con gorra
+  if (kind === 'primavera') {
+    L.shirt = 0x3f9a4a; L.shirtHex = '#3f9a4a'; L.shirtKind = rnd() < 0.5 ? 'polo' : 'plain'; L.shirtAccent = '#f2e46a'; L.hairStyle = 'cap'; L.hat = 0x2f7a3a;
+    L.pants = 0x1e1e22; L.pantsKind = 'jogging'; L.stripe = '#f2e46a';
+  }
   if (kind === 'cana') {
     L.shirt = 0x2a3a5a; L.shirtHex = '#2a3a5a'; L.shirtKind = 'police'; L.longSleeves = true; L.pants = 0x1a2a4a; L.pantsKind = 'jogging'; L.stripe = '#1a2a4a';
     L.hairStyle = 'police'; L.hat = 0x1a2a4a; L.shoes = 0x111111; L.shoeKind = 'bota'; L.fat = rnd() * 0.4;
@@ -837,7 +863,7 @@ function makeLook(kind, rnd) {
 
 // Pool acotado de apariencias (así se reutilizan texturas y mallas)
 const POOL = {};
-const POOL_SIZE = { civil: 26, lobo: 5, cheto: 6, caleta: 5, cana: 5, petrolero: 6 };
+const POOL_SIZE = { civil: 26, lobo: 5, cheto: 6, caleta: 5, cana: 5, petrolero: 6, escarcha: 5, primavera: 5 };
 export function randomLook(kind = 'civil', rnd = Math.random) {
   if (!POOL_SIZE[kind]) return makeLook(kind, rnd);
   if (!POOL[kind]) {

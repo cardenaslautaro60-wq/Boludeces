@@ -230,7 +230,7 @@ export class Activities {
     if (!inside) { this.chapaDone = false; return; }
     if (this.chapaDone || v.speed > 2) return;
     this.chapaDone = true;
-    if (g.police.level === 0 && v.health > 950) { g.hud.showHelp('Don Tito: "Está impecable, pibe. Volvé cuando la choques."', 3); return; }
+    if (g.police.level === 0 && v.health > v.maxHealth * 0.95) { g.hud.showHelp('Don Tito: "Está impecable, pibe. Volvé cuando la choques."', 3); return; }
     if (g.money < 100) { g.hud.showHelp('Don Tito: "Son cien mangos. Sin guita no hay pintura."', 3); return; }
     this.respray(v);
   }
@@ -241,7 +241,7 @@ export class Activities {
     g.controlsLocked = true;
     await g.hud.fadeTo(true, 0.5);
     g.money -= 100;
-    v.health = 1000; v.fireT = 0;
+    v.health = v.maxHealth; v.fireT = 0;
     const cols = v.type.colors.length > 1 ? v.type.colors : [0xb03020, 0x2050a0, 0x208050, 0xe8e0d0, 0x202020, 0xd0a020];
     let c = pick(cols);
     if (c === v.color) c = pick(cols);

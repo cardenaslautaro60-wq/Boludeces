@@ -13,7 +13,8 @@ OVERPASS="${OVERPASS:-https://overpass.kumi.systems/api/interpreter}"
 BBOX="-45.99,-67.72,-45.69,-67.33"
 WIDE="-46.00,-67.75,-45.68,-67.30"
 
-q() { # q archivo consulta
+q() { # q archivo consulta (si ya está bajado, no lo vuelve a pedir)
+  [ -s "$DIR/$1" ] && head -c 40 "$DIR/$1" | grep -q '{' && return 0
   for i in 1 2 3 4; do
     curl -sS -m 300 -X POST --data-urlencode "data=$2" "$OVERPASS" -o "$DIR/$1" && head -c 40 "$DIR/$1" | grep -q '{' && return 0
     echo "reintentando $1..." >&2; sleep $((i * 15))
@@ -25,6 +26,9 @@ q roads.json "[out:json][timeout:240];way[\"highway\"~\"^(motorway|trunk|primary
 q feat.json "[out:json][timeout:240];(way[\"natural\"=\"coastline\"]($WIDE);node[\"place\"]($WIDE);nwr[\"natural\"=\"peak\"]($WIDE);nwr[\"amenity\"~\"^(hospital|police|bus_station|place_of_worship|townhall|university|casino|marketplace|fire_station)$\"]($BBOX);nwr[\"tourism\"~\"^(museum|viewpoint|attraction)$\"]($WIDE);nwr[\"leisure\"~\"^(stadium)$\"]($BBOX);way[\"aeroway\"~\"^(runway|aerodrome)$\"]($WIDE););out geom tags;"
 q admin.json "[out:json][timeout:240];relation[\"boundary\"=\"administrative\"][\"admin_level\"~\"^(8|9|10)$\"]($WIDE);out geom;"
 q extra.json "[out:json][timeout:240];(way[\"landuse\"~\"^(industrial|commercial|retail|cemetery|military|port)$\"]($BBOX);way[\"leisure\"~\"^(park|pitch|stadium|sports_centre|golf_course)$\"]($BBOX);node[\"amenity\"~\"^(fuel|school)$\"]($BBOX);way[\"amenity\"~\"^(fuel|school|hospital)$\"]($BBOX);node[\"power\"=\"generator\"](-45.99,-67.95,-45.60,-67.33);node[\"man_made\"~\"^(mast|tower|communications_tower|lighthouse|storage_tank|petroleum_well)$\"]($WIDE);way[\"man_made\"~\"^(storage_tank|pier|breakwater|groyne)$\"]($WIDE);way[\"building\"][\"name\"]($BBOX););out geom tags;"
+
+# monumentos, estatuas, bustos y memoriales (los de la versión compacta)
+q monuments.json "[out:json][timeout:240];(nwr[\"historic\"~\"^(monument|memorial|statue)$\"]($WIDE);nwr[\"tourism\"=\"artwork\"]($WIDE);nwr[\"man_made\"~\"^(obelisk|monument)$\"]($WIDE););out geom tags;"
 
 q bld_osm.json "[out:json][timeout:240];way[\"building\"]($BBOX);out geom tags;"
 q pois.json "[out:json][timeout:240];(nwr[\"shop\"]($BBOX);nwr[\"amenity\"~\"^(school|clinic|place_of_worship|police|fuel|bank|community_centre|pharmacy|cafe|hospital|fast_food|restaurant|ice_cream|kindergarten|library|bus_station|bar|post_office|townhall|cinema|marketplace|theatre)$\"]($BBOX);nwr[\"tourism\"~\"^(hotel|museum|attraction)$\"]($BBOX););out center tags;"

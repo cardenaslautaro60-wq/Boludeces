@@ -4,13 +4,26 @@
 // Opciones: --watch, --solo=ps2|realista, --artifact=ruta.html, --artifact-realista=ruta.html
 import * as esbuild from 'esbuild';
 import { readFileSync, writeFileSync, mkdirSync, existsSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 
 const watch = process.argv.includes('--watch');
 const solo = (process.argv.find((a) => a.startsWith('--solo=')) || '').slice(7);
 const VARIANTS = {
   ps2: { entry: 'src/main.js', out: 'build/game.js', html: 'index.html', dist: 'dist/gta-san-jorge.html' },
   realista: { entry: 'src/main-realista.js', out: 'build/game-realista.js', html: 'realista.html', dist: 'dist/gta-san-jorge-realista.html' },
+  // compacta: el mapa a media escala (comodoro-*-compacto.js) con la luz realista
+  compacto: { entry: 'src/main-compacto.js', out: 'build/game-compacto.js', html: 'compacto.html', dist: 'dist/gta-san-jorge-compacto.html', mapa: 'compacto' },
 };
+// Cambia los datos del mapa (comodoro-data.js / comodoro-sat.js) por los de otra escala
+const mapaPlugin = (sufijo) => ({
+  name: 'mapa-' + sufijo,
+  setup(build) {
+    build.onResolve({ filter: /comodoro-(data|sat)\.js$/ }, (args) => {
+      const f = join(args.resolveDir, args.path.replace(/\.js$/, '-' + sufijo + '.js'));
+      return existsSync(f) ? { path: f } : undefined;
+    });
+  },
+});
 const base = {
   bundle: true,
   format: 'iife',
@@ -21,7 +34,7 @@ const base = {
   logLevel: 'info',
   loader: { '.webp': 'dataurl', '.bin': 'binary', '.json': 'json' },
 };
-const optsFor = (v) => ({ ...base, entryPoints: [v.entry], outfile: v.out });
+const optsFor = (v) => ({ ...base, entryPoints: [v.entry], outfile: v.out, plugins: v.mapa ? [mapaPlugin(v.mapa)] : [] });
 
 // El video de intro (media/intro.mp4) va adentro de la página descargable y de la publicada
 function introScript() {
@@ -38,7 +51,7 @@ function single(v, full, outPath) {
   const css = readFileSync('src/style.css', 'utf8');
   const js = readFileSync(v.out, 'utf8').replace(/<\/script/gi, '<\\/script');
   const body = html.slice(html.indexOf('<body>') + 6, html.indexOf('</body>'))
-    .replace(/<script src="build\/game(-realista)?\.js"><\/script>/, '').replace(/<script src="media\/medios\.js"><\/script>/, '');
+    .replace(/<script src="build\/game(-\w+)?\.js"><\/script>/, '').replace(/<script src="media\/medios\.js"><\/script>/, '');
   const fonts = (html.match(/<link[^>]+fonts\.googleapis[^>]+>/g) || []).join('\n');
   const title = (html.match(/<title>[^<]*<\/title>/) || [''])[0];
   const intro = introScript();
@@ -59,7 +72,7 @@ async function artifact(v, outPath) {
   const cdn = `https://cdn.jsdelivr.net/npm/three@${pkg.version}`;
   const html = readFileSync(v.html, 'utf8');
   const css = readFileSync('src/style.css', 'utf8');
-  const body = html.slice(html.indexOf('<body>') + 6, html.indexOf('</body>')).replace(/<script src="build\/game(-realista)?\.js"><\/script>/, '').replace(/<script src="media\/medios\.js"><\/script>/, '');
+  const body = html.slice(html.indexOf('<body>') + 6, html.indexOf('</body>')).replace(/<script src="build\/game(-\w+)?\.js"><\/script>/, '').replace(/<script src="media\/medios\.js"><\/script>/, '');
   const fonts = (html.match(/<link[^>]+fonts\.googleapis[^>]+>/g) || []).join('\n');
   const title = (html.match(/<title>[^<]*<\/title>/) || [''])[0];
   // (three/addons/ es un alias del package.json; en el CDN la carpeta real es examples/jsm/)
@@ -86,4 +99,6 @@ if (watch) {
   if (art) await artifact(VARIANTS.ps2, art.slice('--artifact='.length));
   const artR = process.argv.find((a) => a.startsWith('--artifact-realista='));
   if (artR) await artifact(VARIANTS.realista, artR.slice('--artifact-realista='.length));
+  const artC = process.argv.find((a) => a.startsWith('--artifact-compacto='));
+  if (artC) await artifact(VARIANTS.compacto, artC.slice('--artifact-compacto='.length));
 }

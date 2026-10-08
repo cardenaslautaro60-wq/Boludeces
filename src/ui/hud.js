@@ -12,7 +12,7 @@ const el = (tag, cls, parent, html) => {
 };
 
 // Íconos de armas dibujados con canvas (estilo HUD de SA)
-function weaponIcon(id) {
+function weaponIcon(id, skin = 0xc9a07a) {
   const c = document.createElement('canvas');
   c.width = 64; c.height = 64;
   const g = c.getContext('2d');
@@ -21,8 +21,10 @@ function weaponIcon(id) {
   const shape = (fn) => { g.beginPath(); fn(); g.fill(); g.stroke(); };
   if (id === 'punos') {
     shape(() => { g.roundRect(-14, -10, 26, 20, 5); });
-    g.fillStyle = '#c9a07a'; shape(() => { g.roundRect(-14, -10, 26, 20, 5); });
-    g.strokeStyle = '#6a4a30'; for (let i = -8; i <= 8; i += 6) { g.beginPath(); g.moveTo(i, -10); g.lineTo(i, 2); g.stroke(); }
+    // el puño es del color de la piel de quien se maneja
+    const rgb = (k) => `rgb(${(skin >> 16 & 255) * k | 0},${(skin >> 8 & 255) * k | 0},${(skin & 255) * k | 0})`;
+    g.fillStyle = rgb(1); shape(() => { g.roundRect(-14, -10, 26, 20, 5); });
+    g.strokeStyle = rgb(0.55); for (let i = -8; i <= 8; i += 6) { g.beginPath(); g.moveTo(i, -10); g.lineTo(i, 2); g.stroke(); }
   } else if (id === 'clavas') {
     g.rotate(-0.6);
     shape(() => { g.ellipse(0, -6, 7, 16, 0, 0, Math.PI * 2); });
@@ -91,6 +93,9 @@ export class HUD {
     this.charTag = el('div', 'hud-char', root);
     this.prompt = el('div', 'hud-prompt', root);
     this.radioCap = el('div', 'hud-radiocap', root);
+    // placa de ADNSUR "en vivo" (cuando el móvil cubre algo cerca)
+    this.news = el('div', 'hud-news', root);
+    this.news.innerHTML = '<span class="tag">ADNSUR</span><span class="live">EN VIVO</span><span class="txt"></span>';
     this.timers = {};
     this.helpQueue = [];
     this.lastWeapon = null;
@@ -317,6 +322,11 @@ export class HUD {
     this.radioCap.classList.add('show');
     this.radioCapT = dur;
   }
+  newsFlash(text, dur = 8) {
+    this.news.querySelector('.txt').textContent = text;
+    this.news.classList.add('show');
+    this.newsT = dur;
+  }
   showToast(text, dur = 3) { this.toast.innerHTML = text; this.toast.classList.add('show'); this.toastT = dur; }
   letterbox(on) { this.bars.classList.toggle('on', !!on); this.root.classList.toggle('cinema', !!on); }
   fadeTo(black, dur = 0.6) {
@@ -378,9 +388,11 @@ export class HUD {
     });
     this.stars.style.visibility = w > 0 || (g.police && g.police.showEmpty) ? 'visible' : 'hidden';
     // arma
-    if (p.weapon !== this.lastWeapon) {
+    const skin = p.look && p.look.skin;
+    if (p.weapon !== this.lastWeapon || skin !== this.lastSkin) {
       this.lastWeapon = p.weapon;
-      this.weaponImg.src = weaponIcon(p.weapon);
+      this.lastSkin = skin;
+      this.weaponImg.src = weaponIcon(p.weapon, skin);
     }
     const W = WEAPONS[p.weapon];
     if (W && !W.melee) {
@@ -409,6 +421,7 @@ export class HUD {
     // temporizadores de texto
     const tick = (k, elx) => { if (this[k] > 0) { this[k] -= dt; if (this[k] <= 0) elx.classList.remove('show'); } };
     tick('radioCapT', this.radioCap);
+    tick('newsT', this.news);
     tick('helpT', this.help); tick('subT', this.sub); tick('bigT', this.big); tick('titleT', this.title); tick('toastT', this.toast);
     if (!(this.bigT > 0)) this.bigSub.classList.remove('show');
     this.charTag.textContent = g.playerName ? g.playerName() : '';

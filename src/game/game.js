@@ -20,6 +20,8 @@ import { Pickups } from './pickups.js';
 import { Cheats } from './cheats.js';
 import { NPCs } from './npcs.js';
 import { WorldEvents } from './events.js';
+import { Vida } from './vida.js';
+import { Prensa } from './prensa.js';
 import { SaveSystem } from './save.js';
 import { Brain } from './ai.js';
 import { HUD } from '../ui/hud.js';
@@ -50,7 +52,7 @@ export class Game {
       shadows: !(window.matchMedia && window.matchMedia('(pointer: coarse)').matches),
     };
     // la versión realista guarda sus opciones aparte (calidad, postproceso)
-    this.settingsKey = STYLE.realista ? 'gtasj-settings-real' : 'gtasj-settings';
+    this.settingsKey = { realista: 'gtasj-settings-real', compacto: 'gtasj-settings-compacto' }[STYLE.variante] || 'gtasj-settings';
     try { Object.assign(this.settings, JSON.parse(safeStorageGet(this.settingsKey) || '{}')); } catch (e) { /* default */ }
   }
 
@@ -72,13 +74,13 @@ export class Game {
     if (STYLE.realista) {
       progress(0.02, 'Revelando las fotos de Comodoro...');
       await STYLE.load(renderer);
-      STYLE.setupRenderer(renderer);
     }
+    if (STYLE.luz) STYLE.setupRenderer(renderer);
     this.env = new Environment(this.scene, renderer);
-    if (STYLE.realista) this.realSky = new STYLE.RealSky(this);
+    if (STYLE.luz) this.realSky = new STYLE.RealSky(this);
     // en la versión realista los autos reflejan el cielo de verdad (scene.environment)
-    carMaterials().setEnv(STYLE.realista ? null : makeEnvMap(renderer), 1.0);
-    this.post = STYLE.realista ? new STYLE.RealPost(this) : new Post(renderer);
+    carMaterials().setEnv(STYLE.luz ? null : makeEnvMap(renderer), 1.0);
+    this.post = STYLE.luz ? new STYLE.RealPost(this) : new Post(renderer);
     this.onResize();
     window.addEventListener('resize', () => this.onResize());
     this.audio = new Audio();
@@ -101,11 +103,14 @@ export class Game {
     this.cheats = new Cheats(this);
     this.npcs = new NPCs(this);
     this.events = new WorldEvents(this);
+    this.prensa = new Prensa(this);
     this.saves = new SaveSystem(this);
     this.menus = new Menus(this);
     this.touch = new Touch(this);
     this.input.onType = (s) => this.cheats.check(s);
     if (this.touch.enabled) { this.traffic.max = 10; this.traffic.maxParked = 8; this.population.max = 12; }
+    this.vida = new Vida(this);
+    this.audio.newsSource = () => this.prensa.bulletin();
     this.audio.onTalk = (who, line) => { if (this.player && this.player.vehicle && !this.paused) this.hud.radioCaption(who, line, 8); };
     this.audio.onChase = (title) => {
       this.hud.radio.style.color = '#ff4a2a';
@@ -136,8 +141,8 @@ export class Game {
   applySettings() {
     const s = this.settings;
     this.post.enabled = !!s.ps2;
-    if (this.post.setAO) this.post.setAO(s.quality >= 1 && !this.touch?.enabled);
-    this.setShadows(!!s.shadows);
+    if (this.post.setAO) this.post.setAO(s.quality >= 1 && !this.touch?.enabled && !this.lowAO);
+    this.setShadows(!!s.shadows && !this.lowShadows);
     this.renderScale = s.quality;
     this.onResize();
     this.audio.setVolumes(s.music, s.sfx);
@@ -158,27 +163,33 @@ export class Game {
       if (!o.material) return;
       for (const m of Array.isArray(o.material) ? o.material : [o.material]) m.needsUpdate = true;
     });
-    for (const v of this.vehicles || []) v.shadow.material.opacity = on ? (STYLE.realista ? 0.32 : 0.55) : 0.9;
+    for (const v of this.vehicles || []) v.shadow.material.opacity = on ? (STYLE.luz ? 0.32 : 0.55) : 0.9;
   }
 
-  // Resolución dinámica: si la máquina no llega a ~30 cuadros, baja la resolución de a poco
-  // (hasta 55 %) y la vuelve a subir cuando sobra
+  // Resolución dinámica: si la máquina no llega a ~30 cuadros, primero apaga la oclusión
+  // ambiental (lo más caro de la luz realista en gráficos integrados), después baja la
+  // resolución de a poco (hasta 55 %) y, si igual no alcanza, apaga las sombras. La resolución
+  // vuelve a subir cuando sobra; lo apagado queda apagado hasta recargar la página.
   adaptResolution(dt) {
     if (this.dynScale === undefined) { this.dynScale = 1; this.dynT = 0; }
     this.dynT += dt;
     const slow = this.fps < 27, fast = this.fps > 50;
     if (!slow && !fast) { this.dynT = 0; return; }
-    if (slow && this.dynT > 3 && this.dynScale > 0.55) {
+    if (slow && this.dynT > 3 && this.post.gtao) {
+      this.lowAO = true; this.post.setAO(false); this.dynT = 0;
+    } else if (slow && this.dynT > 3 && this.dynScale <= 0.55 && this.renderer.shadowMap.enabled) {
+      this.lowShadows = true; this.setShadows(false); this.dynT = 0;
+    } else if (slow && this.dynT > 3 && this.dynScale > 0.55) {
       this.dynScale = Math.max(0.55, this.dynScale - 0.1); this.dynT = 0; this.onResize();
     } else if (fast && this.dynT > 8 && this.dynScale < 1) {
       this.dynScale = Math.min(1, this.dynScale + 0.1); this.dynT = 0; this.onResize();
-    } else if ((slow && this.dynScale <= 0.55) || (fast && this.dynScale >= 1)) this.dynT = 0;
+    } else if ((slow && this.dynScale <= 0.55 && !this.renderer.shadowMap.enabled) || (fast && this.dynScale >= 1)) this.dynT = 0;
   }
 
   onResize() {
     const w = window.innerWidth, h = window.innerHeight;
     // el filtro PS2 dibuja a 3/4 de resolución a propósito; el realista no
-    const ps2 = this.post && this.post.enabled && !STYLE.realista;
+    const ps2 = this.post && this.post.enabled && !STYLE.luz;
     const scale = (this.renderScale || 1) * (this.dynScale || 1) * Math.min(window.devicePixelRatio || 1, 1.5) * (ps2 ? 0.75 : 1);
     this.renderer.setSize(w, h, false);
     this.renderer.setPixelRatio(this.post && this.post.enabled ? 1 : scale);
@@ -189,7 +200,7 @@ export class Game {
 
   createCharacters() {
     const c = SPAWNS.casa;
-    this.gordopin = new Ped(this, LOOKS.gordopin, { x: c.x, z: c.z, rot: c.rot, isPlayer: true, kind: 'story', name: 'Gordopin', persistent: true, health: 100 });
+    this.gordopin = new Ped(this, LOOKS.gordopin, { x: c.x, z: c.z, rot: c.rot, isPlayer: true, kind: 'story', name: 'Pin', persistent: true, health: 100 });
     this.gordopin.give('clavas');
     this.petroca = new Ped(this, LOOKS.petroca, { x: c.x + 2, z: c.z + 2, rot: c.rot, kind: 'story', name: 'Petroca', persistent: true, health: 130 });
     this.petroca.give('pistola', 60);
@@ -365,6 +376,7 @@ export class Game {
     if (killer === this.player || (killer && killer.isPlayer)) {
       this.stats.pedsKilled++;
       this.police.crime(ped.kind === 'cana' ? 'copKill' : 'kill', ped.pos);
+      this.prensa.report('muerto', ped.pos.x, ped.pos.z);
     }
     if (ped.money > 0 && !ped.persistent) this.pickups.spawnMoney(ped.pos.x, ped.pos.z, ped.money);
     if (!ped.persistent && ped.kind !== 'civil' && Math.random() < 0.5 && ped.weapon !== 'punos') this.pickups.spawnWeapon(ped.pos.x + 0.6, ped.pos.z, ped.weapon, 20);
@@ -415,6 +427,15 @@ export class Game {
       }
     }
     if (cause && cause.isPlayer) this.police.crime('explosion', { x, z });
+    const boom = this.vehicles.find((v) => v.dead && Math.hypot(v.pos.x - x, v.pos.z - z) < 3);
+    this.prensa.report('explosion', x, z, { auto: boom ? boom.type.name : 'vehículo' });
+  }
+
+  // Bache: la primera vez se avisa (y se cuentan para las estadísticas)
+  onPothole(v, sp) {
+    this.stats.baches = (this.stats.baches || 0) + 1;
+    if (this.stats.baches === 1) this.hud.showToast('¡Bache! La ruta, como siempre. Si vas rápido, te desarma el auto.', 4);
+    else if (sp > 18 && Math.random() < 0.3) sayLine(this.player, pick(['¡La puta, otro pozo!', '¡Arreglen las calles!', 'Se me fue la alineación...']), 2);
   }
 
   // ---------- Muerte / arresto ----------
@@ -521,12 +542,14 @@ export class Game {
     this.collideVehicles();
     this.traffic.update(dt);
     this.population.update(dt);
+    this.vida.update(dt);
     this.police.update(dt);
     this.pickups.update(dt);
     this.activities.update(dt);
     this.missions.update(dt);
     this.npcs.update(dt, this.input);
     this.events.update(dt);
+    this.prensa.update(dt);
     this.effects.update(dt, this.camera.position);
     this.props.update(this.time, dt, this.env, this.camera.position);
     this.world.water.userData.material.uniforms.uTime.value = this.time;
@@ -557,11 +580,11 @@ export class Game {
     const eCars = clamp((n - 0.25) * 1.6, 0, 1);
     const e = eCars * (this.env.blackout ? 0.04 : 1);
     // (en la realista la exposición de noche sube: las luces van más bajas para no saturar)
-    const k = STYLE.realista ? 0.45 : 1;
+    const k = STYLE.luz ? 0.45 : 1;
     mats.office.emissiveIntensity = e * 0.9 * k;
     for (const m of ['office2', 'office3', 'office4']) if (mats[m]) mats[m].emissiveIntensity = e * 0.9 * k;
     mats.house.emissiveIntensity = e * 0.8 * k;
-    if (mats.shop) mats.shop.emissiveIntensity = e * 1.1 * (STYLE.realista ? 0.4 : 1);
+    if (mats.shop) mats.shop.emissiveIntensity = e * 1.1 * (STYLE.luz ? 0.4 : 1);
     if (this.city.houses && this.city.houses.material) this.city.houses.material.emissiveIntensity = e * 0.8 * k;
     const cm = carMaterials();
     cm.setLights(eCars);
@@ -657,6 +680,10 @@ export class Game {
             if (impact > 6) this.effects.sparks((a.pos.x + b.pos.x) / 2, a.pos.y + 0.6, (a.pos.z + b.pos.z) / 2, 8);
             const pl = this.player;
             if ((a.driver === pl && b.type.police) || (b.driver === pl && a.type.police)) this.police.crime('copCarHit', a.pos);
+            if (impact > 14 && (a.driver === pl || b.driver === pl)) {
+              const other = a.driver === pl ? b : a;
+              this.prensa.report('choque', a.pos.x, a.pos.z, { auto: other.type.name });
+            }
             a.onHitVehicle && a.onHitVehicle(b, impact);
             b.onHitVehicle && b.onHitVehicle(a, impact);
           }

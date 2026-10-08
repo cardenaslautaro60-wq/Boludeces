@@ -45,9 +45,12 @@ export const PED_LINES = {
   hit: ['¡Eh, qué hacé\', loco!', '¡Ay, la puta madre!', '¡Pará, pará!', '¡Te voy a denunciar!', '¡Salí de acá, gil!'],
   car: ['¡Mirá por dónde manejás!', '¡Aprendé a manejar, bolú!', '¡Casi me pisás!', '¡Sacaste el registro en una rifa!'],
   flee: ['¡Socorro!', '¡Llamen a la cana!', '¡Corré, corré!', '¡Está loco este!'],
-  gordopin: ['¡Aguante el Lobo, Gordopin!', '¡Eh, Gordopin! ¡Hacé los malabares!', '¡Vamos Newbery!', '¡Buena, Gordo!'],
+  gordopin: ['¡Aguante el Lobo, Gordopin!', '¡Eh, Gordopin! ¡Hacé los malabares!', '¡Vamos Newbery!', '¡Buena, Gordo!', '¡Eh, Pin! ¡Sos vos!', '¿Jodeme que ese es el Pin?', '¡Pin, sacate una foto conmigo!', '¡Aguante el Pin!'],
   wind: ['¡Qué viento, la puta!', 'Se me voló la gorra...', 'Hoy sopla fuerte, eh.', 'Ni el perro sale con este viento.'],
   cheto: ['¿Y vos quién sos, negro?', 'Mi viejo es gerente de la petrolera.', 'Salí de mi playa.', 'Esto es Rada, no el Km 8.'],
+  // bandas inventadas (parodias: nada de apellidos de familias reales)
+  escarcha: ['Acá mandan los Escarcha, gordo.', 'Este barrio es nuestro. Rajá.', '¿Te perdiste, malabarista?', 'Los Escarcha no perdonan.'],
+  primavera: ['¡Eh! ¡Esto es territorio Primavera!', 'Volvé a tu semáforo, Pin.', '¿Qué mirás? ¿Querés problemas?', 'Los Primavera no se achican.'],
   cana: ['¡Alto, policía!', '¡Al suelo!', '¡Quieto ahí!', '¡Documentos!'],
 };
 
@@ -128,4 +131,47 @@ export const EVENT_TEXT = {
   aniversario: '¡Feliz aniversario, Comodoro! Fuegos artificiales en la Costanera. ¡Salgan a mirar!',
   caravana: 'Ganó el Lobo y la caravana de Newbery sale a festejar por las calles. ¡Bocinazo general!',
   piquete: 'Corte total de petroleros autoconvocados. Busquen un camino alternativo.',
+};
+
+// ADNSUR en el juego: el noticiero de la radio y el móvil que cubre lo que pasa en la calle
+// (src/game/prensa.js). Personajes genéricos (la cronista y el camarógrafo): no son periodistas
+// reales ni usan sus voces ni sus caras. Los textos son ficción.
+export const ADNSUR = {
+  radio: 'ADNSUR Radio — el noticiero de Comodoro',
+  apertura: [
+    'Buenas, Comodoro. Arranca el noticiero de ADNSUR, con lo que está pasando ahora en la ciudad.',
+    'Esto es ADNSUR. Las noticias de Comodoro, mientras pasan.',
+    'Volvemos con el informativo de ADNSUR. Si ves algo en la calle, avisanos.',
+  ],
+  generales: [
+    'El viento de hoy: ráfagas de cien kilómetros por hora en el Centro. Agarren bien las puertas de los autos.',
+    'Automovilistas reclaman por los baches de la ruta. "Ya no son pozos, son piletas", dijo un camionero.',
+    'El barril sigue arriba y en el Km 3 no alcanzan las chatas. Las concesionarias tienen lista de espera.',
+    'Corte de petroleros en la Ruta 3 a la altura del Km 8. Recomiendan salir con tiempo.',
+    'Confirmado: el clásico Newbery–Huracán se juega este domingo. Habrá operativo especial en La Madriguera.',
+    'En la plaza San Martín, un malabarista conocido como el Pin junta una multitud en el semáforo. Los automovilistas piden bis.',
+    'Los colectivos de Patagonia Argentina y Diadema anuncian demoras por el viento. Nada nuevo bajo el sol, ni bajo las nubes.',
+    'Otra vez sin luz en medio Comodoro. La cooperativa dice que fue el viento. El viento no hizo declaraciones.',
+    'Rada Tilly: piden no dejar las sombrillas clavadas en la playa. Ayer una llegó hasta Punta del Marqués.',
+    'Caleta Córdova: los pescadores volvieron con el cajón lleno y la sonrisa más grande todavía.',
+  ],
+  cierre: ['Seguimos informando. Esto fue ADNSUR.', 'ADNSUR: lo que pasa en Comodoro, lo contamos acá.'],
+  // la cronista, al aire desde el lugar del hecho
+  vivo: {
+    choque: ['Estamos en vivo desde {lugar}: un choque fuerte, uno más en esta zona.', 'Los vecinos dicen que el auto venía a toda velocidad.', 'Por suerte no hubo que lamentar... bueno, eso lo vamos a confirmar.'],
+    explosion: ['Impresionante lo que se ve en {lugar}: un vehículo explotó hace instantes.', 'Todavía sale humo. Les pedimos a los vecinos que no se acerquen.', 'Nadie sabe bien qué pasó. Seguimos averiguando.'],
+    muerto: ['Hecho de violencia en {lugar}. La policía ya está en camino.', 'Los testigos hablan de un gordo con camiseta del Lobo. No queremos sacar conclusiones.', 'Seguimos acá, en el lugar, para contarles todo.'],
+    persecucion: ['¡Estamos siguiendo en vivo una persecución por {lugar}!', 'La policía está detrás de un sospechoso que maneja como si fuera el dueño de la ciudad.', 'Le pedimos al camarógrafo que no lo pierda... ¡no lo pierdas!'],
+    bache: ['Estamos en la ruta, a la altura de {lugar}, donde un bache ya tiene nombre propio entre los camioneros.', 'Se tragó dos ruedas esta semana. Vialidad no responde.'],
+  },
+  // titulares que después repite la radio (y la placa de la tele)
+  titular: {
+    choque: 'Choque en {lugar}: un {auto} quedó destruido',
+    explosion: 'Explotó un {auto} en {lugar}',
+    muerto: 'Violencia en {lugar}: buscan a un sospechoso',
+    persecucion: 'Persecución policial por {lugar}',
+    fin: 'Terminó la persecución: el sospechoso se escapó',
+    arresto: 'Detuvieron al sospechoso de la persecución en {lugar}',
+    atacado: 'Atacaron al móvil de ADNSUR en {lugar}',
+  },
 };

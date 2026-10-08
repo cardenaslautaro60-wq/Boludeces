@@ -16,13 +16,21 @@ export class Population {
     const caleta = place('Caleta Córdova') || POI.depositoCrudo || { x: 0, z: 0 };
     const at = (o, fb) => (o ? { x: o.x, z: o.z } : fb);
     const mans = at(POI.mansionChetos, { x: 0, z: 0 });
+    // en la versión compacta los barrios son más chicos: los territorios también
+    const k = Math.max(0.6, META.escala || 1);
     this.turfs = [
-      { kind: 'cheto', x: mans.x, z: mans.z, r: 140, n: 6, weapon: ['bate', 'pistola'], hostile: true },
-      { kind: 'caleta', ...at(caleta, mans), r: 170, n: 6, weapon: ['bate', 'pistola'], hostile: true },
-      { kind: 'lobo', ...at(POI.madriguera, mans), r: 170, n: 5, weapon: ['bate'], hostile: false },
-      { kind: 'petrolero', ...at(POI.museo, mans), r: 200, n: 4, weapon: [], hostile: false },
-      { kind: 'petrolero', ...at(POI.yacimiento, mans), r: 160, n: 5, weapon: [], hostile: false },
+      { kind: 'cheto', name: 'los Chetos de Rada', x: mans.x, z: mans.z, r: 140 * k, n: 6, weapon: ['bate', 'pistola'], hostile: true },
+      { kind: 'caleta', name: 'los Caleteros', ...at(caleta, mans), r: 170 * k, n: 6, weapon: ['bate', 'pistola'], hostile: true },
+      { kind: 'lobo', name: 'la barra del Lobo', ...at(POI.madriguera, mans), r: 170 * k, n: 5, weapon: ['bate'], hostile: false },
+      { kind: 'petrolero', ...at(POI.museo, mans), r: 200 * k, n: 4, weapon: [], hostile: false },
+      { kind: 'petrolero', ...at(POI.yacimiento, mans), r: 160 * k, n: 5, weapon: [], hostile: false },
     ];
+    // Bandas que pidió la gente. Con nombres inventados (parodia, como Tenpesos o Don Crudo):
+    // no se usan apellidos de familias reales.
+    const esc = place('San Martín'), pri = place('Laprida');
+    if (esc) this.turfs.push({ kind: 'escarcha', name: 'los Escarcha', x: esc.x, z: esc.z, r: 130 * k, n: 5, weapon: ['bate', 'pistola'], hostile: true });
+    if (pri) this.turfs.push({ kind: 'primavera', name: 'los Primavera', x: pri.x, z: pri.z, r: 130 * k, n: 5, weapon: ['bate', 'pistola'], hostile: true });
+    this.inTurf = null;
   }
 
   count() { return this.game.peds.filter((p) => p.spawned && !p.removed).length; }
@@ -41,6 +49,13 @@ export class Population {
     }
     // ocultar conductores lejanos
     for (const p of g.peds) if (p.vehicle && !p.isPlayer) p.group.visible = dist(p.pos.x, p.pos.z, cam.x, cam.z) < 70;
+    // aviso al entrar a un territorio de banda
+    let here = null;
+    for (const t of this.turfs) if (t.name && dist(t.x, t.z, pp.x, pp.z) < t.r) { here = t; break; }
+    if (here !== this.inTurf) {
+      this.inTurf = here;
+      if (here && g.started && !(g.missions && g.missions.active)) g.hud.showToast(`Territorio de <b>${here.name}</b>${here.hostile ? ' · cuidado' : ''}`, 3);
+    }
     if (!this.enabled) return;
     this.spawnT -= dt;
     if (this.spawnT > 0) return;

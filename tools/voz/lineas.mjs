@@ -14,7 +14,7 @@ const add = (voice, text) => {
 };
 TALK.forEach((t) => add('santiago', t));
 Object.values(BUMPERS).flat().forEach((t) => add('santiago', t));
-Object.values(EVENT_TEXT).forEach((t) => add('locutora', t));
+Object.values(EVENT_TEXT).forEach((t) => add('locutor', t));
 for (const [id, L] of Object.entries(NPC_LINES)) for (const v of Object.values(L)) (Array.isArray(v) ? v : [v]).forEach((t) => add(id, t));
 TIPS.forEach((t) => { add('canillita', t); add('viejo', t); });
 STORIES.flat().forEach((t) => add('viejo', t));

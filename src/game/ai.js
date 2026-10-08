@@ -277,7 +277,7 @@ export class Brain {
       if (d < (this.aggroRange || 14)) {
         this.aggro += dt;
         if (this.aggro > (this.aggroDelay || 2.5)) { this.setMode('attack'); this.target = pl; }
-        else if (this.aggro < dt * 2 && chance(0.6)) sayLine(p, pick(p.kind === 'cheto' ? PED_LINES.cheto : ['¿Qué mirás?', 'Rajá de acá.', 'Este no es tu barrio.']));
+        else if (this.aggro < dt * 2 && chance(0.6)) sayLine(p, pick(PED_LINES[p.kind] && p.kind !== 'civil' ? PED_LINES[p.kind] : ['¿Qué mirás?', 'Rajá de acá.', 'Este no es tu barrio.']));
       } else this.aggro = Math.max(0, this.aggro - dt);
     }
   }

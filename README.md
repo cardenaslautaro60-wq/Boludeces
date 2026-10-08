@@ -1,6 +1,8 @@
 # GTA: San Jorge
 
-**Un GTA San Andreas en Comodoro Rivadavia, año 2004.** Protagonizado por el **Gordopin** y el **Petroca**.
+**Un GTA San Andreas en Comodoro Rivadavia, año 2004.** Protagonizado por **el Pin** (el Gordopin) y el **Petroca**.
+
+**Se juega en el navegador: no hay nada para descargar ni instalar.**
 
 Mundo abierto en 3D que corre en el navegador. Mapa de Comodoro estilizado, estética de la PS2, radios con música generada en el momento, misiones con cinemáticas y todo lo que tenía San Andreas, pasado por el viento patagónico.
 
@@ -8,6 +10,7 @@ Mundo abierto en 3D que corre en el navegador. Mapa de Comodoro estilizado, est�
 
 - **Rápido:** abrí `dist/gta-san-jorge.html` con doble clic. Es un solo archivo con todo adentro.
 - **Desde el repo:** abrí `index.html` (usa `build/game.js`, que ya viene compilado).
+- **Versión compacta:** `dist/gta-san-jorge-compacto.html` (o `compacto.html`): Comodoro a media escala, con monumentos reales, más vida en la calle y la luz de la realista (ver más abajo).
 - **Para desarrollar:**
 
   ```bash
@@ -21,7 +24,7 @@ Funciona en Chrome, Firefox, Edge y Safari con WebGL. En el celular aparecen con
 
 ## Los protagonistas
 
-- **El Gordopin**: malabarista del semáforo de San Martín y Rivadavia y fanático del Lobo (Club Atlético Jorge Newbery). Tiene su propia frase: *"A mí no me van a sacar nunca de la calle"*. Como CJ, engorda si come choripanes y adelgaza en el gimnasio.
+- **El Pin** (el Gordopin, para los papeles): malabarista del semáforo de San Martín y Rivadavia y fanático del Lobo (Club Atlético Jorge Newbery). Tiene su propia frase: *"A mí no me van a sacar nunca de la calle"*. Como CJ, engorda si come choripanes y adelgaza en el gimnasio.
 - **El Petroca**: petrolero con guita, camisa de jean, botas y anteojos negros. *"¡Buena petroca!"*. Te acompaña, tira desde el auto y podés jugar con él apretando **TAB**.
 
 ## La historia (7 misiones)
@@ -58,6 +61,31 @@ El mismo juego con otra cara: `realista.html` (o `dist/gta-san-jorge-realista.ht
 - **La noche**: estrellas, luz cálida de los faroles en la vereda, ventanas con interiores, vidrieras prendidas y los faros de los autos iluminando el asfalto.
 - Las calles del Centro y las avenidas tienen **carteles con el nombre de la calle** en las esquinas.
 
+## Versión compacta
+
+`compacto.html` (o `dist/gta-san-jorge-compacto.html`, un solo archivo): **Comodoro a media escala**, para recorrerlo más rápido y que se sienta lleno.
+
+- **Escala 0,5**: los recorridos son la mitad de largos (y el relieve, la mitad de alto). La gente, los autos y el ancho de las calles siguen a tamaño real; las casas y los edificios quedan a ~0,7 de su tamaño y los lugares clave (La Madriguera, la Catedral, la Terminal, los monumentos) a tamaño real. Entran unos 36.000 edificios reales.
+- **Monumentos reales** en su lugar (OpenStreetMap), con placa: San Martín a caballo, el busto de San Martín sobre el tronco petrificado con sus tres mástiles, el avión **IA-58 Pucará**, Caídos en Malvinas, el **Balancín de Km 5**, la **Centolla Gigante**, el Choique, el Monumento al Gaucho, Rómulo y Remo, el homenaje a los Colonos Galeses, la Cruz, San Cayetano y los monolitos.
+- **Más vida en la calle**: gente charlando en la vereda, la cola del colectivo con el cartel de la parada, pibes jugando a la pelota en las plazas y calles de barrio, **perros callejeros** que te siguen (y le ladran a los autos), **gaviotas** en la costa, y más autos y peatones.
+- **Estética PS2 con la luz de la realista**: cielo físico con nubes, sol con sombras, reflejos, agua que brilla, resplandor y faroles que iluminan la vereda de noche, sin las texturas fotográficas (anda mejor que la realista).
+
+## Lo que pidió la gente (octubre de 2026)
+
+Después de la nota de ADNSUR se leyeron los comentarios (ver `ideas/comentarios-de-la-gente.md`) y se sumó lo más pedido y lo que ayuda a que más gente juegue:
+
+- **Bienvenida al empezar**: quién sos (el Pin, el malabarista del semáforo: "no es un virus, el payaso sos vos"), los controles básicos y que **se juega en el navegador, sin descargar nada** (también en la pantalla de carga y en la de inicio).
+- **"El Pin"**: así le dicen en el juego, en la intro, en el HUD y en la calle ("¿jodeme que ese es el Pin?").
+- **Baches en la ruta**: muy pocos, solo en la ruta (uno cada kilómetro y medio, más o menos). Se ven, el auto pega un salto, pierde velocidad y, si vas muy rápido, se rompe.
+- **La camiseta del Pin** ya no es tan blanca: está gastada y con manchas.
+- **Bandas de parodia**: *los Escarcha* (barrio San Martín) y *los Primavera* (Laprida), con nombres inventados, como Tenpesos o Don Crudo (no se usan apellidos de familias reales). Al entrar a un territorio aparece de quién es.
+- **Colectivos de 2004**: Patagonia Argentina y Diadema, con el cartel de la empresa y el destino.
+- **ADNSUR en el juego**:
+  - **El móvil de ADNSUR**: cuando hay un choque fuerte, una explosión, un tiroteo o una persecución con 3 estrellas o más, llega la chata de prensa; se bajan la cronista y el camarógrafo y salen **en vivo** (placa de "ADNSUR · EN VIVO" en pantalla). De vez en cuando también hacen una nota de algún bache de la ruta. Si los atacás, cortan la nota (y sale en las noticias).
+  - **ADNSUR Radio**: una radio nueva con el noticiero de Comodoro, que cuenta lo que pasó en la ciudad (incluido lo que hiciste vos) y noticias del 2004.
+  - Los periodistas son **personajes genéricos**: no se usan voces, caras ni nombres de periodistas reales sin su permiso. El noticiero va con subtítulos (o con la voz del navegador, si se elige en *Opciones*).
+  - En la pausa, *Trucos*, se puede hacer aparecer el móvil de ADNSUR.
+
 ## Lo que tiene de San Andreas
 
 - Caminar, correr, saltar, nadar, pelear y disparar (puños, clavas de malabar, bate, pistola, escopeta, Uzi), con apuntado libre y autoapuntado.
@@ -89,6 +117,8 @@ En la versión publicada en claude.ai los archivos quedan guardados en el artifa
 | ![El Centro de noche](capturas/realista-noche.jpg) | ![Rada Tilly](capturas/realista-rada.jpg) |
 | ![Versión PS2: el Centro](capturas/ps2-centro.jpg) | ![Versión PS2: un barrio con La Madriguera](capturas/ps2-barrio.jpg) |
 | ![Fuegos artificiales del aniversario](capturas/ps2-fuegos.jpg) | ![Corte de ruta de petroleros](capturas/ps2-piquete.jpg) |
+| ![Compacta: San Martín a caballo](capturas/compacto-sanmartin.jpg) | ![Compacta: charla en la vereda](capturas/compacto-vereda.jpg) |
+| ![Compacta: Caídos en Malvinas, en la Costanera](capturas/compacto-malvinas.jpg) | ![Compacta: el Centro](capturas/compacto-centro.jpg) |
 
 ## Rendimiento
 
@@ -181,7 +211,8 @@ Datos del mapa © colaboradores de [OpenStreetMap](https://www.openstreetmap.org
 ```
 src/
   main.js            arranque y pantalla de carga
-  game/              bucle principal, jugador, cámara, IA, tránsito, policía, misiones, actividades
+  game/              bucle principal, jugador, cámara, IA, tránsito, policía, misiones, actividades,
+                     prensa.js (el móvil y el noticiero de ADNSUR)
   world/             datos del mapa, terreno, calles, ciudad, props, cielo y clima
   entities/          personajes y vehículos
   render/            texturas procedurales, partículas y filtro PS2
@@ -202,5 +233,14 @@ python3 tools/mapa/satelite.py tools/mapa/cache   # colores del suelo (src/world
 python3 tools/mapa/preview.py src/world/comodoro-data.js mapa.png   # vista previa en PNG
 npm run build
 ```
+
+La versión compacta usa los mismos datos con otra escala (el tercer argumento):
+
+```bash
+python3 tools/mapa/build_map.py tools/mapa/cache src/world/comodoro-data-compacto.js 0.5
+python3 tools/mapa/satelite.py tools/mapa/cache src/world/comodoro-data-compacto.js src/world/comodoro-sat-compacto.js
+```
+
+En Windows conviene correr Python con `PYTHONUTF8=1`. Si el servidor de Overpass por defecto no responde, `descargar.sh` acepta otro con `OVERPASS=https://maps.mail.ru/osm/tools/overpass/api/interpreter`.
 
 `build_map.py` pone la ciudad a escala real (y comprime solo los tramos vacíos), une las avenidas de doble mano, simplifica las rotondas, arma los barrios y guarda todo comprimido (unos 1,8 MB con las 60.000 casas). `satelite.py` reproyecta la foto satelital al marco del juego (un píxel cada 20 m, unos 150 KB en JPEG).

@@ -392,10 +392,10 @@ export class CarMaterials {
     const d = detailAtlas();
     this.detail = lam({ map: d.map, emissive: 0xffffff, emissiveMap: d.emissive, emissiveIntensity: 0.25, side: THREE.DoubleSide });
     // versión realista: vidrio polarizado espejado (no deja ver el interior vacío) y cromo de verdad
-    this.glass = STYLE.realista
+    this.glass = STYLE.luz
       ? new THREE.MeshPhysicalMaterial({ color: 0x0a0e12, metalness: 0, roughness: 0.03, transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide, clearcoat: 1, clearcoatRoughness: 0.02 })
       : new THREE.MeshStandardMaterial({ color: 0x18222c, metalness: 0.2, roughness: 0.06, transparent: true, opacity: 0.62, depthWrite: false, side: THREE.DoubleSide });
-    this.chrome = new THREE.MeshStandardMaterial({ color: 0xd8dadc, metalness: 1, roughness: STYLE.realista ? 0.1 : 0.2 });
+    this.chrome = new THREE.MeshStandardMaterial({ color: 0xd8dadc, metalness: 1, roughness: STYLE.luz ? 0.1 : 0.2 });
     this.wheel = lam({ vertexColors: true });
     this.burnt = lam({ color: 0x2a2624 });
   }
@@ -408,7 +408,7 @@ export class CarMaterials {
     let m = this.paints.get(color);
     if (!m) {
       // realista: pintura con barniz (clearcoat) que refleja el cielo nítido encima del color
-      m = STYLE.realista
+      m = STYLE.luz
         ? new THREE.MeshPhysicalMaterial({ color, metalness: 0.15, roughness: 0.42, clearcoat: 1, clearcoatRoughness: 0.05, envMapIntensity: 1 })
         : new THREE.MeshStandardMaterial({ color, metalness: 0.35, roughness: 0.34, envMap: this.env, envMapIntensity: 0.9 });
       this.paints.set(color, m);

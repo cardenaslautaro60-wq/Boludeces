@@ -157,7 +157,9 @@ export class Terrain {
     const weight = new Float32Array(this.h.length);
     for (const s of segments) {
       const [aa, ab] = toAB(s.ax, s.az), [ba, bb] = toAB(s.bx, s.bz);
-      const pad = s.width / 2 + 6;
+      // la grilla es de 14 m: para que la calle quede pareja de lado a lado hay que aplanar
+      // alrededor de un vértice entero de cada lado, y después suavizar el talud
+      const full = s.width / 2 + 7, pad = s.width / 2 + 17;
       const i0 = Math.max(0, Math.floor((Math.min(aa, ba) - pad - this.a0) / CELL));
       const i1 = Math.min(na - 1, Math.ceil((Math.max(aa, ba) + pad - this.a0) / CELL));
       const j0 = Math.max(0, Math.floor((Math.min(ab, bb) - pad - this.b0) / CELL));
@@ -170,7 +172,7 @@ export class Terrain {
           const t = clamp(((a - aa) * dx + (b - ab) * dy) / L2, 0, 1);
           const d = Math.hypot(aa + dx * t - a, ab + dy * t - b);
           if (d > pad) continue;
-          const w = 1 - smoothstep(s.width / 2 + 1, pad, d);
+          const w = 1 - smoothstep(full, pad, d);
           if (w <= 0) continue;
           const k = j * na + i;
           if (this.h[k] < 0.2) continue; // no rellenar el mar
@@ -184,6 +186,24 @@ export class Terrain {
         const w = Math.min(1, weight[k]);
         this.h[k] = lerp(this.h[k], target[k] / weight[k], w);
       }
+    }
+  }
+
+  // Nivela un rectángulo orientado (cancha, playón) a la altura h y lo empalma con el terreno de
+  // alrededor: lo que se construye plano encima no queda enterrado de un lado ni flotando del otro
+  levelRect(cx, cz, ax, az, hw, hd, h, blend = 18) {
+    const na = this.na;
+    const reach = Math.hypot(hw, hd) + CELL + blend;
+    const [ca, cb] = toAB(cx, cz);
+    const i0 = Math.max(0, Math.floor((ca - reach - this.a0) / CELL)), i1 = Math.min(na - 1, Math.ceil((ca + reach - this.a0) / CELL));
+    const j0 = Math.max(0, Math.floor((cb - reach - this.b0) / CELL)), j1 = Math.min(this.nb - 1, Math.ceil((cb + reach - this.b0) / CELL));
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const [x, z] = fromAB(this.a0 + i * CELL, this.b0 + j * CELL);
+      const u = Math.abs((x - cx) * ax + (z - cz) * az), v = Math.abs(-(x - cx) * az + (z - cz) * ax);
+      // un vértice entero de margen: así todos los triángulos que tocan el rectángulo quedan planos
+      const d = Math.hypot(Math.max(0, u - hw - CELL), Math.max(0, v - hd - CELL));
+      const w = 1 - smoothstep(0, blend, d);
+      if (w > 0) { const k = j * na + i; this.h[k] = lerp(this.h[k], h, w); }
     }
   }
 
@@ -460,7 +480,7 @@ export function buildWater(terrain) {
       }`,
   });
   // versión realista: agua PBR (refleja el cielo, brilla con el sol)
-  const matR = STYLE.realista ? STYLE.waterMaterial() : null;
+  const matR = STYLE.luz ? STYLE.waterMaterial() : null;
   // Malla fina solo cerca de la orilla (espuma y agua clara); el resto es un plano grande
   const step = 18;
   const a0 = terrain.a0, a1 = terrain.a0 + (terrain.na - 1) * CELL;

@@ -25,7 +25,7 @@ export class WorldEvents {
   announce(title, text, extra = '') {
     const g = this.game;
     g.hud.radioCaption && g.hud.radioCaption('Radio Comodoro · ' + title, text + extra, 8);
-    g.audio && g.audio.say && g.audio.say(text, 'locutora');
+    g.audio && g.audio.say && g.audio.say(text, 'locutor');
   }
 
   update(dt) {

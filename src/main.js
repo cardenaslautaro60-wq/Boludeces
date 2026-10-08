@@ -5,12 +5,13 @@ import { Game } from './game/game.js';
 const TIPS = [
   'En Comodoro el viento sopla del Oeste. Las motos y los colectivos lo sienten más.',
   'Escribí HESOYAM durante el juego si andás corto de salud y de guita.',
-  'Comer en El Chori del Viento te cura, pero engorda al Gordopin.',
+  'Comer en El Chori del Viento te cura, pero engorda al Pin.',
   'En la Chapa y Pintura de Don Tito te pintan el auto y la cana se olvida de vos.',
   'Apretá TAB para cambiar entre el Gordopin y el Petroca.',
   'Hay 24 bolsitas de La Anómala enganchadas en los alambrados. Juntalas todas.',
   'Subite a un remís y apretá 2 para laburar de remisero.',
-  'En el semáforo de San Martín y Rivadavia el Gordopin hace malabares por monedas.',
+  'En el semáforo de San Martín y Rivadavia el Pin hace malabares por monedas.',
+  'GTA San Jorge se juega en el navegador: no hay nada para descargar.',
   'La Madriguera es la cancha de Newbery. En 2004 todavía era de tierra.',
 ];
 
@@ -21,6 +22,7 @@ function loadingScreen() {
     <div class="load-tip"></div>
     <div class="logo"><span class="gta">GTA</span><span class="sj">San Jorge</span><span class="tag">Comodoro Rivadavia · 2004</span></div>
     <div class="load-msg">Cargando...</div>
+    <div class="load-note">Se juega acá, en el navegador. No hay nada para descargar.</div>
     <div class="load-bar"><i></i></div>`;
   document.body.appendChild(s);
   const tip = s.querySelector('.load-tip');

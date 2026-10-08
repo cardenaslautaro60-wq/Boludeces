@@ -381,7 +381,7 @@ export class Missions {
             G.jugg = true;
             await c.say('', 'Comodoro Rivadavia, 2004. El barril sube, el Km 3 se llena de chatas nuevas... y el viento, como siempre, sopla.', 6);
             c.cam(at(-3.4, -3.2, 1.8), at(-2.8, -2.6, 1.7), V3(P.x, P.y + 1.7, P.z), 5);
-            await c.say('', `En el ${(S.name || 'semáforo de San Martín').replace(/^Semáforo/, 'semáforo')}, el Gordopin hace lo que mejor le sale.`, 4);
+            await c.say('', `En el ${(S.name || 'semáforo de San Martín').replace(/^Semáforo/, 'semáforo')}, el Pin (el Gordopin, para los papeles) hace lo que mejor le sale.`, 5);
             ten.group.visible = true; pul.group.visible = true;
             G.jugg = false;
             c.face(G, ten);
@@ -565,7 +565,7 @@ export class Missions {
           const road = g.roads.nearestEdge(car.pos.x, car.pos.z - 60, 60);
           const ex = road ? road.x : car.pos.x, ez = road ? road.z : car.pos.z - 60;
           const enemy = c.spawnVehicle('gool', ex, ez, 0, { color: 0x7b2d8b });
-          enemy.health = 700;
+          enemy.health = enemy.maxHealth * 0.7;
           const shooters = [0, 1, 2].map((i) => {
             const q = c.spawnPed('cheto', ex, ez, {});
             q.give('uzi', 400); q.setWeapon('uzi');
@@ -747,7 +747,7 @@ export class Missions {
           });
           const D = POI.depositoCrudo;
           const truck = c.spawnVehicle('cisterna', D.x + 16, D.z + 12, Math.PI / 2);
-          truck.health = 1200;
+          truck.health = truck.maxHealth * 1.2;
           const guards = [];
           for (let i = 0; i < 4; i++) {
             const q = c.spawnPed('caleta', D.x - 5 + i * 5, D.z + 18 + (i % 2) * 3, {});
@@ -805,7 +805,7 @@ export class Missions {
           // el patrullero de Tenpesos sale de la comisaría
           const cm = M().comisaria;
           const car = c.spawnVehicle('patrullero', cm.x, cm.z + 6, Math.PI / 2);
-          car.health = 1600;
+          car.health = car.maxHealth * 1.6;
           car.siren = true;
           const ten = c.spawnPed('tenpesos', car.pos.x, car.pos.z, { name: 'Tenpesos', look: randomLook('tenpesos'), health: 200 });
           const pul = c.spawnPed('cana', car.pos.x, car.pos.z, { name: 'Pulenta' });
