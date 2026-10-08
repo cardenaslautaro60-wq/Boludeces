@@ -497,6 +497,9 @@ export class RoadNetwork {
       for (const k of ['white', 'solidW', 'yellow']) { materials[k].roughness = 0.6; }
     }
     ch.build(materials, group, { order: { asphalt: 1, dirt: 1, paving: 1, patchA: 2, patchD: 2, bacheBorde: 3, bache: 3, white: 3, solidW: 3, yellow: 3 } });
+    // la pintura y los parches no se ven de lejos: se dejan de dibujar antes que el asfalto
+    const near = new Map([[materials.white, 420], [materials.solidW, 420], [materials.yellow, 420], [materials.patchA, 480], [materials.patchD, 480], [materials.bache, 300], [materials.bacheBorde, 300]]);
+    for (const m of group.children) if (near.has(m.material)) m.userData.cullDist = near.get(m.material);
     this.materials = materials;
     return group;
   }

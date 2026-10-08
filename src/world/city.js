@@ -6,6 +6,7 @@ import { signTexture } from '../render/textures.js';
 import { RNG, clamp, pointSegDist } from '../util.js';
 import { pointInRing } from './zones.js';
 import { HouseInstances } from './houses.js';
+import { Sectores, CON_LOD } from './sectores.js';
 import { InstChunks } from './culling.js';
 
 const CURB = 0.22;
@@ -146,6 +147,8 @@ export class City {
     this.chunks = chunks;
     this.lean = new LeanChunks(420);
     this.houses = new HouseInstances(T);
+    // versión lejana de cada sector (carga por sectores)
+    this.sectores = new Sectores(T);
     const group = new THREE.Group();
     this.group = group;
 
@@ -171,10 +174,16 @@ export class City {
 
     const mats = this.materials(T);
     chunks.build(mats, group);
+    // las fachadas y techos de cada sector se prenden y apagan con su versión lejana
+    for (const m of group.children) if (m.userData.mat && CON_LOD.has(m.userData.mat)) m.userData.sector = true;
+    const nLean = group.children.length;
     this.lean.build(mats, group, { order: { sidewalk: 1, curbFace: 1, grass: 1 } });
-    group.add(this.houses.build(colliders));
+    // veredas y cordones: de lejos no se distinguen del piso
+    for (let i = nLean; i < group.children.length; i++) group.children[i].userData.cullDist = 560;
+    group.add(this.houses.build(colliders, this.sectores));
     this.buildFrontFences(group);
-    for (const s of this.signs) group.add(s);
+    // los carteles no se leen de lejos
+    for (const s of this.signs) { s.userData.cullDist = 320; group.add(s); }
     scene.add(group);
     this.materialsList = mats;
     return group;
@@ -321,11 +330,13 @@ export class City {
       const along = opts.ridgeX !== undefined ? opts.ridgeX : (x1 - x0) >= (z1 - z0);
       const rise = opts.rise || Math.min(x1 - x0, z1 - z0) * 0.22;
       rg.gable(x0, x1, z0, z1, top, rise, hexColor(opts.roofColor || 0xa33a2a), along, 0.45);
+      this.sectores.box(this.fr, x0, x1, z0, z1, base, top, opts.color || 0xd8d2c4, mat, { gable: true, rise, along, hex: opts.roofColor || 0xa33a2a });
       this.addCollider(x0, x1, z0, z1, base, top + rise, opts.tag || 'building');
       return { top: top + rise, floor, base };
     }
     const rg = this.chunkFor(chunks, cx, cz, 'roofFlat');
     rg.top(x0, x1, z0, z1, top, hexColor(opts.roofColor || 0xaaaaaa), 4);
+    this.sectores.box(this.fr, x0, x1, z0, z1, base, top + (floors > 1 && (mat.startsWith('office') || mat === 'brick') ? 0.7 : 0), opts.color || 0xd8d2c4, mat, { hex: opts.roofColor || 0xaaaaaa });
     if (floors > 1 && (mat.startsWith('office') || mat === 'brick')) {
       const pg = this.chunkFor(chunks, cx, cz, 'plain');
       pg.walls(x0 - 0.15, x1 + 0.15, z0 - 0.15, z1 + 0.15, top - 0.2, top + 0.7, color);

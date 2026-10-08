@@ -97,10 +97,14 @@ export class World {
     this.culler.addTree(city.group);
     this.culler.addTree(this.roadMesh);
     this.culler.addTree(props.group);
+    // carga por sectores: cerca el detalle, lejos una caja por edificio (sectores.js)
+    this.sectores = city.sectores;
+    this.sectores.build(g.scene);
+    this.sectores.claim(this.culler, (o) => o.userData.sector);
     // memoria: los acumuladores de la ciudad ya no hacen falta, y la geometría fija se
     // queda solo en la placa de video
     city.chunks = null; city.lean = null;
-    for (const r of [this.terrainMesh, this.roadMesh, city.group, props.group, this.water]) releaseAfterUpload(r);
+    for (const r of [this.terrainMesh, this.roadMesh, city.group, props.group, this.water, this.sectores.group]) releaseAfterUpload(r);
     this.zoneCache = { x: 1e9, z: 1e9, name: '' };
     this.timings.push(['fin', Math.round(performance.now() - t0), mem()]);
   }
@@ -312,7 +316,13 @@ export class World {
     const g = this.game;
     const fogFar = g.env && g.env.fog ? g.env.fog.far : 760;
     const touch = g.touch && g.touch.enabled;
-    const maxDist = Math.min(fogFar + 60, touch ? 480 : 1300) * (g.settings && g.settings.quality < 0.7 ? 0.8 : 1);
+    const low = g.settings && g.settings.quality < 0.7;
+    const maxDist = Math.min(fogFar + 60, touch ? 480 : 1300) * (low ? 0.8 : 1);
+    // edificios con todo el detalle hasta "near"; más allá, las cajas de cada sector (en el
+    // celular llegan hasta donde llega el terreno, así la ciudad no se corta a los 480 m)
+    const near = touch ? 280 : low ? 340 : 420;
+    const far = touch ? Math.min(fogFar + 60, maxDist + 200) : maxDist;
+    this.sectores.update(cam, near, far, this.culler, maxDist);
     this.culler.update(cam, maxDist, dt);
     g.terrain.updateLOD(cam, maxDist, dt);
   }

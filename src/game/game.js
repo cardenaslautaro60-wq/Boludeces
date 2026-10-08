@@ -595,6 +595,7 @@ export class Game {
     mats.house.emissiveIntensity = e * 0.8 * k;
     if (mats.shop) mats.shop.emissiveIntensity = e * 1.1 * (STYLE.luz ? 0.4 : 1);
     if (this.city.houses && this.city.houses.material) this.city.houses.material.emissiveIntensity = e * 0.8 * k;
+    if (this.world.sectores) this.world.sectores.setNight(e * 0.8 * k);
     const cm = carMaterials();
     cm.setLights(eCars);
     cm.setEnvIntensity(0.25 + this.env.dayLight * 0.8);
