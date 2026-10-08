@@ -155,6 +155,7 @@ export class City {
     for (const d of DECKS) this.reserve({ cx: d.cx, cz: d.cz, ax: d.ax, az: d.az, hw: d.hw, hd: d.hd });
     this.buildAreas(chunks, rng);
     this.buildSpecials(chunks, rng, T);
+    this.buildMonuments(chunks);
     this.buildPuerto(chunks, rng);
     this.buildOutside(chunks, rng, T);
     // edificios reales donde hay datos; si no, lotes inventados a lo largo de las calles
@@ -891,6 +892,8 @@ export class City {
     const t = this.terrain;
     const pw = Math.min(hl - 6, 34), pd = Math.min(hw - 6, 22);
     const y = t.heightAt(cx, cz) + 0.28;
+    // la cancha, las tribunas y el paredón son planos: el terreno se nivela abajo
+    t.levelRect(cx, cz, ax, az, pw + 9, pd + 11, y - 0.1);
     const gb = this.chunkFor(chunks, 0, 0, 'pitch');
     const n = 6;
     for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
@@ -942,6 +945,220 @@ export class City {
     POI.madriguera = { x: mx, z: mz, name: 'La Madriguera' };
     this.reserve({ cx, cz, ax, az, hw: X1 + 1, hd: Z1 + 1 });
     this.clearFrame();
+  }
+
+  // ------------------------------------------------------------------
+  // Monumentos reales (OpenStreetMap): San Martín a caballo, bustos, el Pucará, la Centolla,
+  // el Balancín de Km 5, Malvinas... Van en su lugar, a tamaño real, con una placa con el nombre
+  // y el frente hacia la calle.
+  // ------------------------------------------------------------------
+  buildMonuments(chunks) {
+    const list = META.monuments || [];
+    const R = this.roads, t = this.terrain;
+    const C = {
+      bronce: hexColor(0x5d6650), bronceO: hexColor(0x4a5240), piedra: hexColor(0xb3ab9c), granito: hexColor(0x8d8781),
+      blanco: hexColor(0xeeeae0), rojo: hexColor(0xb8432c), metal: hexColor(0x39434b), amarillo: hexColor(0xd9a826),
+      celeste: hexColor(0x7fb4dc), avion: hexColor(0x77806a), gris: hexColor(0x9a968e), madera: hexColor(0x6b5640),
+    };
+    // radio que ocupa cada tipo (para despejar casas y no caer arriba de la calle)
+    const RAD = { ecuestre: 4, busto: 3, avion: 3.5, centolla: 4.5, balancin: 4.5, choique: 3, cruz: 2.5, estatua: 3, loba: 3.2, malvinas: 4.5, monolito: 2.2, escultura: 3 };
+    this.monuments = [];
+    // figura humana (bronce): s = escala (1 = 1,8 m), en coordenadas locales
+    const figura = (gb, x, z, y, s, col, opts = {}) => {
+      const k = s * 1.8 / 1.8;
+      gb.box(x - 0.22 * k, x - 0.04 * k, y, y + 0.85 * k, z - 0.11 * k, z + 0.11 * k, col);
+      gb.box(x + 0.04 * k, x + 0.22 * k, y, y + 0.85 * k, z - 0.11 * k, z + 0.11 * k, col);
+      gb.box(x - 0.26 * k, x + 0.26 * k, y + 0.85 * k, y + 1.45 * k, z - 0.15 * k, z + 0.15 * k, col);
+      const up = opts.brazo ? 0.75 : 0;
+      gb.box(x - 0.38 * k, x - 0.27 * k, y + 0.85 * k, y + 1.42 * k, z - 0.08 * k, z + 0.08 * k, col);
+      gb.box(x + 0.27 * k, x + 0.38 * k, y + (0.85 + up) * k, y + (1.42 + up) * k, z - 0.08 * k, z + 0.08 * k, col);
+      gb.box(x - 0.11 * k, x + 0.11 * k, y + 1.47 * k, y + 1.75 * k, z - 0.12 * k, z + 0.12 * k, col);
+      if (opts.capa) gb.box(x - 0.3 * k, x + 0.3 * k, y + 0.6 * k, y + 1.45 * k, z + 0.15 * k, z + 0.22 * k, col);
+    };
+    const pedestal = (gb, w, d, y0, h, col = C.piedra) => {
+      gb.box(-w / 2 - 0.3, w / 2 + 0.3, y0 - 0.6, y0 + 0.35, -d / 2 - 0.3, d / 2 + 0.3, C.granito);
+      gb.box(-w / 2, w / 2, y0 + 0.35, y0 + h, -d / 2, d / 2, col);
+      gb.box(-w / 2 - 0.12, w / 2 + 0.12, y0 + h, y0 + h + 0.15, -d / 2 - 0.12, d / 2 + 0.12, col);
+      return y0 + h + 0.15;
+    };
+    const MODELOS = {
+      ecuestre: (gb, y) => {
+        const top = pedestal(gb, 2.8, 4.6, y, 3.0, C.granito);
+        const b = C.bronce, d = C.bronceO;
+        // caballo (mira a -z): cuerpo, pecho, anca, patas, cuello escalonado, cabeza, crin y cola
+        gb.box(-0.45, 0.45, top + 1.45, top + 2.35, -1.2, 1.1, b);
+        gb.box(-0.42, 0.42, top + 1.6, top + 2.3, -1.45, -1.2, b);
+        gb.box(-0.47, 0.47, top + 1.55, top + 2.4, 0.9, 1.35, b);
+        for (const [px, pz, lift] of [[-0.27, -1.05, 0], [0.27, -1.05, 0.45], [-0.27, 1.05, 0], [0.27, 1.05, 0]]) {
+          gb.box(px - 0.1, px + 0.1, top + lift, top + 1.55, pz - 0.11, pz + 0.11, b);
+          gb.box(px - 0.12, px + 0.12, top + lift, top + lift + 0.14, pz - 0.14, pz + 0.12, d);
+        }
+        gb.box(-0.25, 0.25, top + 2.1, top + 2.7, -1.55, -1.1, b);
+        gb.box(-0.22, 0.22, top + 2.5, top + 3.1, -1.85, -1.4, b);
+        gb.box(-0.19, 0.19, top + 2.85, top + 3.35, -2.05, -1.7, b);
+        gb.box(-0.16, 0.16, top + 2.78, top + 3.12, -2.7, -1.95, b);
+        gb.box(-0.12, -0.05, top + 3.3, top + 3.5, -1.95, -1.85, d);
+        gb.box(0.05, 0.12, top + 3.3, top + 3.5, -1.95, -1.85, d);
+        gb.box(-0.06, 0.06, top + 2.6, top + 3.4, -1.75, -1.15, d);
+        gb.box(-0.08, 0.08, top + 1.35, top + 2.25, 1.35, 1.55, d);
+        // San Martín sentado, con el brazo derecho en alto señalando adelante
+        gb.box(-0.24, 0.24, top + 2.35, top + 3.05, -0.25, 0.12, b);
+        gb.box(-0.13, 0.13, top + 3.08, top + 3.38, -0.17, 0.09, b);
+        gb.box(-0.27, 0.27, top + 3.36, top + 3.47, -0.11, 0.11, d);
+        for (const sx of [-1, 1]) {
+          gb.box(sx > 0 ? 0.45 : -0.62, sx > 0 ? 0.62 : -0.45, top + 1.9, top + 2.4, -0.4, 0.05, b);
+          gb.box(sx > 0 ? 0.47 : -0.6, sx > 0 ? 0.6 : -0.47, top + 1.35, top + 1.95, -0.15, 0.08, b);
+        }
+        gb.box(-0.36, -0.24, top + 2.45, top + 2.6, -0.85, -0.2, b);
+        gb.box(0.25, 0.37, top + 2.85, top + 3.7, -0.55, -0.2, b);
+        gb.box(-0.3, 0.3, top + 2.4, top + 3.0, 0.12, 0.22, d);
+        return top + 3.7;
+      },
+      busto: (gb, y, m) => {
+        // el de la avenida San Martín va sobre un tronco petrificado, con tres mástiles
+        const tronco = /tronco/i.test(m.nota || '');
+        const top = tronco ? (gb.cylinder(0, 0, 0.55, y - 0.3, y + 1.4, C.madera, 10), y + 1.4) : pedestal(gb, 1.1, 1.1, y, 1.6);
+        gb.box(-0.42, 0.42, top, top + 0.45, -0.22, 0.22, C.bronce);
+        gb.box(-0.17, 0.17, top + 0.45, top + 0.62, -0.15, 0.15, C.bronce);
+        gb.box(-0.16, 0.16, top + 0.6, top + 1.0, -0.18, 0.18, C.bronce);
+        if (tronco) for (const [px, h] of [[-2.2, 7], [0, 9], [2.2, 7]]) { gb.cylinder(px, 1.6, 0.06, y, y + h, C.blanco, 6); gb.box(px + 0.06, px + 1.5, y + h - 1, y + h - 0.1, 1.58, 1.62, px === 0 ? C.celeste : C.blanco); }
+        return top + 1.0;
+      },
+      avion: (gb, y) => {
+        // IA-58 Pucará sobre un pilar, en vuelo
+        gb.box(-0.5, 0.5, y - 0.5, y + 3.2, -0.5, 0.5, C.piedra);
+        const h = y + 3.6;
+        gb.box(-0.6, 0.6, h, h + 1.3, -7, 7, C.avion);
+        gb.box(-0.45, 0.45, h + 1.3, h + 1.8, -4.2, -1.6, hexColor(0x2a3440));
+        gb.box(-7.3, 7.3, h + 0.6, h + 0.85, -1.4, 0.6, C.avion);
+        for (const sx of [-2.4, 2.4]) { gb.box(sx - 0.42, sx + 0.42, h + 0.3, h + 1.1, -3.2, 1.4, C.avion); gb.box(sx - 0.05, sx + 0.05, h + 0.2, h + 1.2, -3.35, -3.25, hexColor(0x222222)); }
+        gb.box(-0.12, 0.12, h + 1.3, h + 3.4, 5.4, 6.9, C.avion);
+        gb.box(-2.6, 2.6, h + 3.0, h + 3.2, 5.8, 6.9, C.avion);
+        return h + 3.4;
+      },
+      centolla: (gb, y) => {
+        gb.box(-1.6, 1.6, y - 0.4, y + 0.3, -1.6, 1.6, C.granito);
+        gb.cylinder(0, 0, 1.25, y + 0.9, y + 1.8, C.rojo, 12);
+        for (let i = 0; i < 8; i++) {
+          const a = (i / 8) * Math.PI * 2 + 0.2, ca = Math.cos(a), sa = Math.sin(a);
+          for (let s = 0; s < 3; s++) {
+            const r0 = 1.1 + s * 0.85, x = ca * r0, z = sa * r0, yy = y + 1.5 - s * 0.45;
+            gb.box(x - 0.22, x + 0.22, yy - 0.2 - (s === 2 ? 0.7 : 0), yy + 0.2, z - 0.22, z + 0.22, C.rojo);
+          }
+        }
+        gb.box(-1.6, -0.9, y + 1.4, y + 2.0, -2.1, -1.4, C.rojo);
+        gb.box(0.9, 1.6, y + 1.4, y + 2.0, -2.1, -1.4, C.rojo);
+        return y + 2.2;
+      },
+      balancin: (gb, y) => {
+        // bomba de petróleo (cigüeña): base, caballete, balancín, cabeza y contrapesos
+        gb.box(-1.2, 1.2, y - 0.4, y + 0.5, -4.5, 4.5, C.gris);
+        gb.box(-0.9, -0.6, y + 0.5, y + 4.4, -0.3, 0.3, C.metal);
+        gb.box(0.6, 0.9, y + 0.5, y + 4.4, -0.3, 0.3, C.metal);
+        gb.box(-0.3, 0.3, y + 4.4, y + 4.9, -4.2, 3.0, C.amarillo);
+        gb.box(-0.35, 0.35, y + 3.4, y + 5.3, -4.8, -4.0, C.amarillo);
+        gb.box(-0.05, 0.05, y + 0.5, y + 3.5, -4.45, -4.35, C.metal);
+        gb.box(-0.8, 0.8, y + 1.0, y + 2.6, 2.6, 3.6, C.metal);
+        return y + 5.3;
+      },
+      choique: (gb, y) => {
+        const top = pedestal(gb, 1.8, 1.8, y, 0.8);
+        const c = hexColor(0x8a7d68);
+        gb.box(-0.6, 0.6, top + 1.1, top + 1.9, -0.9, 0.7, c);
+        gb.box(-0.12, 0.12, top + 1.8, top + 3.0, -1.0, -0.75, c);
+        gb.box(-0.14, 0.14, top + 2.9, top + 3.2, -1.25, -0.8, c);
+        for (const px of [-0.25, 0.25]) gb.box(px - 0.06, px + 0.06, top, top + 1.2, -0.1, 0.1, hexColor(0x5a5040));
+        return top + 3.2;
+      },
+      cruz: (gb, y) => {
+        gb.box(-1.2, 1.2, y - 0.4, y + 0.6, -1.2, 1.2, C.piedra);
+        gb.box(-0.25, 0.25, y + 0.6, y + 8.5, -0.25, 0.25, C.blanco);
+        gb.box(-2.0, 2.0, y + 5.8, y + 6.4, -0.22, 0.22, C.blanco);
+        return y + 8.5;
+      },
+      estatua: (gb, y) => {
+        const top = pedestal(gb, 1.6, 1.6, y, 2.2);
+        figura(gb, 0, 0, top, 1.25, C.bronce);
+        return top + 2.3;
+      },
+      loba: (gb, y) => {
+        const top = pedestal(gb, 2.6, 1.6, y, 1.6);
+        const c = C.bronce;
+        gb.box(-1.0, 1.0, top + 0.55, top + 1.05, -0.3, 0.3, c);
+        for (const px of [-0.8, 0.8]) for (const pz of [-0.18, 0.18]) gb.box(px - 0.08, px + 0.08, top, top + 0.6, pz - 0.08, pz + 0.08, c);
+        gb.box(-1.45, -0.95, top + 0.8, top + 1.25, -0.18, 0.18, c);
+        figura(gb, -0.25, 0.55, top, 0.28, C.bronceO);
+        figura(gb, 0.35, 0.55, top, 0.28, C.bronceO);
+        return top + 1.3;
+      },
+      malvinas: (gb, y) => {
+        // muro de granito con la silueta de las islas y el mástil con la bandera
+        gb.box(-3.2, 3.2, y - 0.4, y + 0.3, -1.4, 1.4, C.granito);
+        gb.box(-2.6, 2.6, y + 0.3, y + 2.6, -0.3, 0.3, C.granito);
+        gb.box(-1.6, -0.3, y + 1.3, y + 2.0, -0.34, -0.3, C.celeste);
+        gb.box(0.1, 1.5, y + 1.2, y + 2.1, -0.34, -0.3, C.celeste);
+        gb.cylinder(3.4, 0.8, 0.07, y, y + 9, C.blanco, 6);
+        gb.box(3.47, 5.3, y + 7.9, y + 8.25, 0.78, 0.82, C.celeste);
+        gb.box(3.47, 5.3, y + 8.25, y + 8.6, 0.78, 0.82, C.blanco);
+        gb.box(3.47, 5.3, y + 8.6, y + 8.95, 0.78, 0.82, C.celeste);
+        return y + 2.6;
+      },
+      monolito: (gb, y) => {
+        gb.box(-1.0, 1.0, y - 0.4, y + 0.4, -1.0, 1.0, C.granito);
+        for (let s = 0; s < 6; s++) { const w = 0.6 - s * 0.06; gb.box(-w, w, y + 0.4 + s * 0.6, y + 1.0 + s * 0.6, -w * 0.7, w * 0.7, C.piedra); }
+        return y + 4.0;
+      },
+      escultura: (gb, y) => {
+        const top = pedestal(gb, 1.8, 1.8, y, 0.9, C.granito);
+        for (let s = 0; s < 5; s++) { const a = s * 0.7, w = 0.9 - s * 0.12, x = Math.cos(a) * 0.3, z = Math.sin(a) * 0.3; gb.box(x - w, x + w * 0.4, top + s * 0.75, top + s * 0.75 + 0.7, z - 0.18, z + 0.18, s % 2 ? C.metal : C.rojo); }
+        return top + 3.8;
+      },
+    };
+    const skipped = [];
+    // ¿entra un monumento de radio r en (x, z)? (fuera del asfalto, en tierra firme y sin pisar nada)
+    const fits = (x, z, r) => {
+      if (t.heightAt(x, z) < 0.8) return 'agua';
+      if (R.clearance(x, z, 30) < r + 0.6) return 'calle';
+      if (!this.isFree({ cx: x, cz: z, ax: 1, az: 0, hw: r, hd: r })) return 'ocupado';
+      if (this.colliders.resolveCircle({ x, z }, r * 0.8, t.heightAt(x, z))) return 'edificio';
+      return null;
+    };
+    for (const m of list) {
+      const r = RAD[m.k] || 3;
+      let x = m.x, z = m.z, why = fits(x, z, r);
+      // si no entra justo ahí (cantero chico, casa al lado), se busca el lugar libre más cercano
+      for (let ring = 1; why && ring <= 10; ring++) {
+        for (let k = 0; k < 10 && why; k++) {
+          const a = (k / 10) * Math.PI * 2 + ring, d = ring * 3;
+          const nx = m.x + Math.cos(a) * d, nz = m.z + Math.sin(a) * d;
+          if (!fits(nx, nz, r)) { x = nx; z = nz; why = null; }
+        }
+      }
+      if (why) { skipped.push(m.k + ':' + m.n + ' (' + why + ')'); continue; }
+      const o = { cx: x, cz: z, ax: 1, az: 0, hw: r, hd: r };
+      // de frente a la calle más cercana (el frente local es -z)
+      let ax = 1, az = 0;
+      const nr = R.nearestEdge(x, z, 80);
+      if (nr) { const dx = nr.x - x, dz = nr.z - z, l = Math.hypot(dx, dz) || 1; az = dx / l; ax = -dz / l; }
+      this.setFrame(x, z, ax, az);
+      let y = Infinity;
+      for (const [lx, lz] of [[-r * 0.6, -r * 0.6], [r * 0.6, -r * 0.6], [-r * 0.6, r * 0.6], [r * 0.6, r * 0.6], [0, 0]]) y = Math.min(y, t.heightAt(...this.W(lx, lz)));
+      const gb = this.chunkFor(chunks, 0, 0, 'plain');
+      const h = (MODELOS[m.k] || MODELOS.monolito)(gb, y, m);
+      const cr = m.k === 'avion' ? 0.6 : Math.min(r * 0.55, 2);
+      this.addCollider(-cr, cr, -cr, cr, y - 1, Math.min(h, y + 4), 'monumento');
+      if (m.n) {
+        const w = clamp(m.n.length * 0.11, 1.4, 3.4);
+        // [cara del pedestal, altura de la placa]
+        const [side, hy] = { ecuestre: [2.3, 1.7], busto: [0.55, /tronco/i.test(m.nota || '') ? 0.7 : 1.0], avion: [0.5, 1.6], centolla: [1.6, 0], balancin: [4.5, 0.05], choique: [0.9, 0.55], cruz: [1.2, 0.1], estatua: [0.8, 1.2], loba: [0.8, 0.95], malvinas: [0.3, 0.75], monolito: [1.0, 0], escultura: [0.9, 0.55] }[m.k] || [1, 0.5];
+        const lines = m.n.length > 34 ? [m.n.slice(0, m.n.lastIndexOf(' ', 34)), m.n.slice(m.n.lastIndexOf(' ', 34) + 1)] : [m.n];
+        this.addSign(lines.map((s) => s.toUpperCase()), 0, y + hy, -side - 0.03, w, lines.length > 1 ? 0.6 : 0.36, Math.PI, { bg: '#2c2a24', fg: '#e8d9a8' });
+      }
+      this.reserve(o);
+      this.monuments.push({ name: m.n, kind: m.k, x, z });
+      this.clearFrame();
+    }
+    this.monumentsSkipped = skipped;
   }
 
   // ------------------------------------------------------------------
@@ -1496,7 +1713,7 @@ export class City {
     g.fillStyle = '#26282b'; g.fillRect(12, 0, 8, 128); g.fillRect(0, 0, 32, 8); g.fillRect(0, 120, 32, 8);
     g.fillStyle = '#26282b'; g.beginPath(); g.moveTo(16, 0); g.lineTo(9, 10); g.lineTo(23, 10); g.fill();
     const tex = new THREE.CanvasTexture(c); tex.wrapS = THREE.RepeatWrapping; tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
-    const barMat = lam({ map: tex, alphaTest: 0.5, side: THREE.DoubleSide, color: 0xffffff }, STYLE.realista ? { metalness: 0.6, roughness: 0.5 } : {});
+    const barMat = lam({ map: tex, alphaTest: 0.5, side: THREE.DoubleSide, color: 0xffffff }, STYLE.luz ? { metalness: 0.6, roughness: 0.5 } : {});
     barMat.onBeforeCompile = (sh) => {
       sh.vertexShader = sh.vertexShader.replace('#include <uv_vertex>', `vec2 uvI = uv;
 #ifdef USE_INSTANCING

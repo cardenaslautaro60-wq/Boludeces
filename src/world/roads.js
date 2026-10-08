@@ -4,6 +4,9 @@ import { META, MAP, FRAME as F, toAB } from './mapdata.js';
 import { pointSegDist, dist, clamp } from '../util.js';
 import { LeanChunks } from './geom.js';
 
+// Pendiente máxima (metros por metro) de cada tipo de calle
+const GRADE = { ruta: 0.07, avenida: 0.11, calle: 0.14, tierra: 0.2, peatonal: 0.14 };
+
 // Red vial real de Comodoro (OpenStreetMap): nodos y aristas rectas entre nodos.
 // Los nodos de grado 2 son solo de forma (curvas); los de grado 3+ son cruces.
 export class RoadNetwork {
@@ -86,31 +89,59 @@ export class RoadNetwork {
 
   // Alturas suavizadas de cada calle y segmentos para aplanar el terreno
   computeHeights(terrain) {
-    for (const n of this.nodes) n.h = terrain.heightAt(n.x, n.z);
-    // suavizar alturas de nodos con sus vecinos (evita escalones en calles cortas)
-    for (let it = 0; it < 2; it++) {
-      const hs = this.nodes.map((n) => {
-        if (!n.edges.length) return n.h;
-        let s = n.h * 2, w = 2;
-        for (const ei of n.edges) { const o = this.nodes[this.otherNode(this.edges[ei], n.id)]; s += o.h; w++; }
-        return s / w;
+    const nodes = this.nodes;
+    const land = nodes.map((n) => { n.h = terrain.heightAt(n.x, n.z); return n.h >= 0.3; });
+    // suavizar alturas de nodos con sus vecinos de tierra (calles largas sin escalones ni lomos)
+    for (let it = 0; it < 14; it++) {
+      const hs = nodes.map((n, i) => {
+        if (!n.edges.length || !land[i]) return n.h;
+        let s = 0, w = 0;
+        for (const ei of n.edges) { const j = this.otherNode(this.edges[ei], n.id); if (land[j]) { s += nodes[j].h; w++; } }
+        return w ? n.h * 0.5 + (s / w) * 0.5 : n.h;
       });
-      this.nodes.forEach((n, i) => { n.h = Math.max(hs[i], terrain.heightAt(n.x, n.z) < 0.3 ? n.h : 0.4); });
+      nodes.forEach((n, i) => { n.h = land[i] ? Math.max(hs[i], 0.4) : n.h; });
+    }
+    // pendiente máxima por tipo de calle: las barrancas se rellenan o se cortan en lugar de
+    // dejar subidas imposibles
+    const edgeGrade = (e) => GRADE[e.kind] || 0.14;
+    for (let it = 0; it < 40; it++) {
+      let moved = false;
+      for (const e of this.edges) {
+        if (!land[e.a] || !land[e.b]) continue;
+        const A = nodes[e.a], B = nodes[e.b];
+        const lim = edgeGrade(e) * e.len, d = B.h - A.h;
+        if (Math.abs(d) > lim + 0.02) {
+          const m = (Math.abs(d) - lim) * 0.35 * Math.sign(d);
+          A.h += m; B.h -= m; moved = true;
+        }
+      }
+      if (!moved) break;
     }
     const flat = [];
     for (const e of this.edges) {
-      const A = this.nodes[e.a], B = this.nodes[e.b];
+      const A = nodes[e.a], B = nodes[e.b];
       const nS = Math.max(1, Math.ceil(e.len / 12));
+      const coastal = !land[e.a] || !land[e.b];
       const hs = [];
       for (let k = 0; k <= nS; k++) {
         const t = k / nS;
         hs.push(terrain.heightAt(A.x + (B.x - A.x) * t, A.z + (B.z - A.z) * t));
       }
-      for (let it = 0; it < 4; it++) {
+      for (let it = 0; it < (coastal ? 4 : 18); it++) {
         const c = hs.slice();
         for (let k = 1; k < nS; k++) c[k] = (hs[k - 1] + hs[k] * 2 + hs[k + 1]) / 4;
         c[0] = A.h; c[nS] = B.h;
         for (let k = 0; k <= nS; k++) hs[k] = c[k];
+      }
+      if (!coastal && nS > 1) {
+        // dentro de cada tramo, sin pasarse de la pendiente máxima (ni de la recta entre los extremos)
+        const ds = e.len / nS, gm = edgeGrade(e);
+        for (let k = 1; k < nS; k++) {
+          const s = k * ds;
+          hs[k] = Math.min(Math.max(hs[k], A.h - gm * s, B.h - gm * (e.len - s)), A.h + gm * s, B.h + gm * (e.len - s));
+        }
+        for (let k = 1; k < nS; k++) hs[k] = Math.min(Math.max(hs[k], hs[k - 1] - gm * ds), hs[k - 1] + gm * ds);
+        for (let k = nS - 1; k > 0; k--) hs[k] = Math.min(Math.max(hs[k], hs[k + 1] - gm * ds), hs[k + 1] + gm * ds);
       }
       e.hs = hs;
       for (let k = 0; k < nS; k++) {

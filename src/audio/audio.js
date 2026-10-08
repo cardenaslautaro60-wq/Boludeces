@@ -133,6 +133,15 @@ export class Audio {
   punch(pos) { this.burst({ dur: 0.08, freq: 300, type: 'lowpass', gain: 0.8, pos }); this.tone({ freq: 90, freq2: 50, dur: 0.1, gain: 0.5, pos }); }
   swoosh(pos) { this.burst({ dur: 0.15, freq: 2500, q: 2, gain: 0.15, pos, attack: 0.05 }); }
   thud(pos, v = 0.5) { this.burst({ dur: 0.2, freq: 200, type: 'lowpass', gain: v, pos }); }
+  // ladrido de perro callejero (dos "guau" cortos)
+  ladrido(pos) {
+    if (!this.enabled) return;
+    const t = this.ctx.currentTime, f = 380 + Math.random() * 160;
+    for (const dt of [0, 0.22]) {
+      this.tone({ t: t + dt, freq: f, freq2: f * 0.55, dur: 0.12, type: 'sawtooth', gain: 0.22, pos, range: 90, attack: 0.01 });
+      this.burst({ t: t + dt, dur: 0.1, freq: f * 2.2, q: 2.5, gain: 0.25, pos, range: 90 });
+    }
+  }
   crash(pos, v = 0.6) {
     this.burst({ dur: 0.35, freq: 900, q: 0.5, type: 'lowpass', gain: v, pos, range: 150 });
     this.burst({ dur: 0.25, freq: 4000, q: 3, gain: v * 0.4, pos, range: 150 });
@@ -773,7 +782,7 @@ export class Audio {
       const v = this.bestVoice();
       if (v) u.voice = v;
       u.lang = v ? v.lang : 'es-AR';
-      const P = { santiago: 0.85, tenpesos: 0.6, petroca: 0.8, viejo: 0.7, gordopin: 1.1, rosa: 1.2, locutora: 1.15, narrador: 1 };
+      const P = { santiago: 0.55, tenpesos: 0.6, petroca: 0.8, viejo: 0.7, gordopin: 1.1, rosa: 1.2, locutor: 0.5, narrador: 1 };
       u.pitch = P[who] !== undefined ? P[who] : 0.95;
       u.rate = who === 'viejo' || who === 'rosa' ? 0.95 : 1.05;
       u.volume = channel === 'radio' ? this.volMusic : this.volSfx;

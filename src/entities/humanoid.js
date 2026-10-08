@@ -569,7 +569,7 @@ export class Humanoid {
     this.anim = { phase: 0, speed: 0, punch: 0, aim: 0, air: 0, sit: 0, dead: 0, swim: 0 };
     this.build();
     if (shadowTex) {
-      const sh = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.2), new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false, fog: true, opacity: STYLE.realista ? 0.5 : 1 }));
+      const sh = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.2), new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false, fog: true, opacity: STYLE.luz ? 0.5 : 1 }));
       sh.rotation.x = -Math.PI / 2;
       sh.position.y = 0.04;
       sh.renderOrder = 4;
@@ -776,7 +776,7 @@ export class Humanoid {
 // ---------- Apariencias ----------
 export const LOOKS = {
   gordopin: {
-    skin: 0xc99a74, hair: 0x1e140c, hairStyle: 'short', fat: 0.95, muscle: 0.1, height: 1.0,
+    skin: 0x553624, hair: 0x0e0a08, hairStyle: 'short', fat: 0.95, muscle: 0.1, height: 1.0,
     shirt: 0xf4f4f4, shirtKind: 'banda', shirtHex: '#f4f4f4', shirtAccent: '#1c2f6b', sleeveHex: '#f4f4f4',
     pants: 0x1e2433, pantsKind: 'jogging', stripe: '#1c2f6b', shoes: 0xeeeeee, stubble: true, smile: true,
   },

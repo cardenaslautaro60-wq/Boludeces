@@ -13,6 +13,8 @@ Uso:
   pip install piper-tts praat-parselmouth soundfile numpy
   node tools/voz/lineas.mjs > /tmp/lineas.json
   python3 tools/voz/generar.py /tmp/lineas.json carpeta/con/es_AR-daniela-high.onnx
+  python3 tools/voz/generar.py /tmp/lineas.json modelo.onnx --solo=santiago,locutor
+    (regraba solo esas voces; las demás frases quedan como estaban en voces.bin)
 """
 import io
 import json
@@ -29,13 +31,16 @@ from piper import PiperVoice
 from piper.config import SynthesisConfig
 
 OUT = os.path.join(os.path.dirname(__file__), '..', '..', 'src', 'audio')
-LINES = json.load(open(sys.argv[1]))
-MODEL = sys.argv[2]
+ARGS = [a for a in sys.argv[1:] if not a.startswith('--')]
+LINES = json.load(open(ARGS[0], encoding='utf-8'))
+MODEL = ARGS[1]
+SOLO = next((set(a[7:].split(',')) for a in sys.argv[1:] if a.startswith('--solo=')), None)
 
 # formantes (1 = sin cambio), tono medio en Hz (0 = sin cambio), rango de tono, duración, radio
 VOICES = {
-    'santiago': (0.85, 110, 1.0, 0.97, True),
-    'locutora': (1.0, 0, 1.0, 0.98, True),
+    # voces graves de radio: Santiago Sánchez y el locutor de los anuncios de Radio Comodoro
+    'santiago': (0.8, 86, 0.95, 0.99, True),
+    'locutor': (0.78, 80, 1.0, 1.0, True),
     'narrador': (1.0, 0, 0.9, 1.06, False),
     'gordopin': (0.88, 128, 1.1, 1.0, False),
     'petroca': (0.84, 102, 0.9, 1.0, False),
@@ -85,7 +90,20 @@ chunks = []
 index = {}
 off = 0
 total_s = 0
+# con --solo, las frases de las otras voces se copian tal cual de las grabaciones anteriores
+if SOLO:
+    OLD_BIN = open(os.path.join(OUT, 'voces.bin'), 'rb').read()
+    OLD_IDX = json.load(open(os.path.join(OUT, 'voces.json'), encoding='utf-8'))
 for i, L in enumerate(LINES):
+    if SOLO and L['voice'] not in SOLO and L['key'] in OLD_IDX:
+        o, n, secs = OLD_IDX[L['key']]
+        data = OLD_BIN[o:o + n]
+        pad4 = (-len(data)) % 4
+        chunks.append(data + b'\0' * pad4)
+        index[L['key']] = [off, len(data), secs]
+        off += len(data) + pad4
+        total_s += secs
+        continue
     fshift, pitch, prange, dur, radio = VOICES.get(L['voice'], VOICES['vecino'])
     d, sr = synth(L['text'], dur)
     snd = parselmouth.Sound(d, sampling_frequency=sr)

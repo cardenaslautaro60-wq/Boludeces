@@ -116,6 +116,8 @@ async function loadRealTextures(renderer) {
 }
 
 STYLE.realista = true;
+STYLE.luz = true;
+STYLE.variante = 'realista';
 STYLE.load = loadRealTextures;
 STYLE.RealPost = RealPost;
 STYLE.RealSky = RealSky;

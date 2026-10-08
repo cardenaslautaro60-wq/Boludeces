@@ -8,7 +8,7 @@ export class Cheats {
     this.keepWeapons = false;
     this.windImmune = false;
     this.list = {
-      HESOYAM: ['Salud, chaleco y $250.000', (g) => { const p = g.player; p.health = p.maxHealth; p.armor = 100; g.addMoney(250000); if (p.vehicle) { p.vehicle.health = 1000; p.vehicle.fireT = 0; } }],
+      HESOYAM: ['Salud, chaleco y $250.000', (g) => { const p = g.player; p.health = p.maxHealth; p.armor = 100; g.addMoney(250000); if (p.vehicle) { p.vehicle.health = p.vehicle.maxHealth; p.vehicle.fireT = 0; } }],
       BUENAPETROCA: ['La chata del Petroca y $10.000', (g) => { this.spawnNear('jilux', 0xb01818); g.addMoney(10000); }],
       AEZAKMI: ['Nunca buscado', (g) => { g.police.neverWanted = !g.police.neverWanted; g.police.clear(); }],
       ASNAEB: ['Sin nivel de búsqueda', (g) => g.police.clear()],

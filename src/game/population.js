@@ -16,12 +16,14 @@ export class Population {
     const caleta = place('Caleta Córdova') || POI.depositoCrudo || { x: 0, z: 0 };
     const at = (o, fb) => (o ? { x: o.x, z: o.z } : fb);
     const mans = at(POI.mansionChetos, { x: 0, z: 0 });
+    // en la versión compacta los barrios son más chicos: los territorios también
+    const k = Math.max(0.6, META.escala || 1);
     this.turfs = [
-      { kind: 'cheto', x: mans.x, z: mans.z, r: 140, n: 6, weapon: ['bate', 'pistola'], hostile: true },
-      { kind: 'caleta', ...at(caleta, mans), r: 170, n: 6, weapon: ['bate', 'pistola'], hostile: true },
-      { kind: 'lobo', ...at(POI.madriguera, mans), r: 170, n: 5, weapon: ['bate'], hostile: false },
-      { kind: 'petrolero', ...at(POI.museo, mans), r: 200, n: 4, weapon: [], hostile: false },
-      { kind: 'petrolero', ...at(POI.yacimiento, mans), r: 160, n: 5, weapon: [], hostile: false },
+      { kind: 'cheto', x: mans.x, z: mans.z, r: 140 * k, n: 6, weapon: ['bate', 'pistola'], hostile: true },
+      { kind: 'caleta', ...at(caleta, mans), r: 170 * k, n: 6, weapon: ['bate', 'pistola'], hostile: true },
+      { kind: 'lobo', ...at(POI.madriguera, mans), r: 170 * k, n: 5, weapon: ['bate'], hostile: false },
+      { kind: 'petrolero', ...at(POI.museo, mans), r: 200 * k, n: 4, weapon: [], hostile: false },
+      { kind: 'petrolero', ...at(POI.yacimiento, mans), r: 160 * k, n: 5, weapon: [], hostile: false },
     ];
   }
 

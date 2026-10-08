@@ -4,6 +4,7 @@
 Uso:
     tools/mapa/descargar.sh tools/mapa/cache
     python3 tools/mapa/build_map.py tools/mapa/cache src/world/comodoro-data.js
+    python3 tools/mapa/build_map.py tools/mapa/cache src/world/comodoro-data-compacto.js 0.5   (versión compacta)
 
 Escala: las zonas urbanas (Rada Tilly, el Centro con los barrios del sur y el Chenque hasta Km 3,
 Km 5, Km 8 y Caleta Córdova) conservan su forma real a escala 0,55; los tramos vacíos de ruta entre
@@ -28,6 +29,9 @@ from shapely.prepared import prep
 
 CACHE = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), 'cache')
 OUT = sys.argv[2] if len(sys.argv) > 2 else os.path.join(os.path.dirname(__file__), '..', '..', 'src', 'world', 'comodoro-data.js')
+# Escala general (1 = Comodoro a tamaño real; 0.5 = versión compacta, recorridos a la mitad).
+# La gente, los autos y el ancho de las calles no cambian; los edificios se achican menos (K_BLD).
+ESC = float(sys.argv[3]) if len(sys.argv) > 3 else 1.0
 
 # ---------------------------------------------------------------------------
 # Proyección y deformación
@@ -55,12 +59,12 @@ VX, VZ = UZ, -UX                       # tierra adentro (hacia el Oeste)
 # tramo casi vacío antes de Caleta, el mar abierto y el fondo de la meseta.
 # Tramos a lo largo de la costa: (desde a, pendiente)
 A_BP = [-12300, 10000, 13800, 15300]
-A_SL = [1.0, 0.35, 1.0]
+A_SL = [s * ESC for s in (1.0, 0.35, 1.0)]
 # Tramos tierra adentro: mar abierto, ciudad (hasta los barrios altos del oeste), meseta
 B_BP = [-3200, -1600, 7600, 9200]
-B_SL = [0.4, 1.0, 0.4]
-VS = 1.0           # escala vertical (el Chenque con su altura real)
-CORE_MIN = 0.9     # pendiente mínima (en los dos ejes) para considerar "zona urbana"
+B_SL = [s * ESC for s in (0.4, 1.0, 0.4)]
+VS = ESC           # escala vertical (con ESC = 1, el Chenque con su altura real)
+CORE_MIN = 0.9 * ESC  # pendiente mínima (en los dos ejes) para considerar "zona urbana"
 
 
 def _cum(bp, sl):
@@ -412,7 +416,7 @@ def allowed(hw, x, z, total_len, unpaved):
     if hw in ('trunk', 'motorway', 'primary', 'secondary'):
         return True
     if hw == 'tertiary':
-        return core or s >= 0.3
+        return core or s >= 0.3 * ESC
     if hw in ('residential', 'living_street', 'pedestrian'):
         return core
     if hw == 'unclassified':
@@ -981,6 +985,65 @@ for key, lst in cands.items():
         d['poly'] = [[round(a, 1), round(b, 1)] for a, b in poly]
     landmarks.append(d)
 print('  hitos', len(landmarks), sorted(l['k'] for l in landmarks))
+
+# Monumentos, bustos, memoriales y esculturas reales (OSM). El tipo decide el modelo en el juego;
+# el monumento conserva su tamaño real aunque el mapa esté a otra escala.
+monuments = []
+mon_path = os.path.join(CACHE, 'monuments.json')
+
+
+def monument_kind(t):
+    name = t.get('name', '')
+    low = (name + ' ' + t.get('note', '')).lower()
+    if t.get('artwork_type') == 'mural' or t.get('railway') or 'alarmas' in low:
+        return None
+    if 'ecuestre' in low:
+        return 'ecuestre'
+    if 'busto' in low or t.get('memorial') == 'bust':
+        return 'busto'
+    if 'avión' in low or 'avion' in low or 'pucará' in low:
+        return 'avion'
+    if 'centolla' in low:
+        return 'centolla'
+    if 'balancín' in low or 'balancin' in low:
+        return 'balancin'
+    if 'choique' in low:
+        return 'choique'
+    if 'cruz' in low:
+        return 'cruz'
+    if 'ermita' in low or t.get('memorial') == 'statue' or t.get('historic') == 'statue' or t.get('artwork_type') == 'statue':
+        return 'estatua'
+    if 'rómulo' in low or 'romulo' in low:
+        return 'loba'
+    if t.get('memorial') == 'war_memorial' or 'malvinas' in low or 'soldado' in low:
+        return 'malvinas'
+    if 'monolito' in low or t.get('man_made') in ('obelisk', 'monument') or t.get('memorial') == 'obelisk':
+        return 'monolito'
+    if t.get('tourism') == 'artwork':
+        return 'escultura' if name else None
+    if t.get('historic') in ('monument', 'memorial'):
+        return 'estatua' if name else 'monolito'
+    return None
+
+
+if os.path.exists(mon_path):
+    seen = set()
+    for e in load('monuments.json'):
+        t = e.get('tags', {})
+        kind = monument_kind(t)
+        pt = el_point(e)
+        if not kind or not pt or not inside_world(pt[0], pt[1], 60):
+            continue
+        X, Z = warp(*pt)
+        key = (round(X / 4), round(Z / 4))
+        if key in seen:
+            continue
+        seen.add(key)
+        d = {'n': t.get('name', ''), 'k': kind, 'x': round(X, 1), 'z': round(Z, 1)}
+        if t.get('note'):
+            d['nota'] = t['note'][:160]
+        monuments.append(d)
+print('  monumentos', len(monuments), sorted(m['k'] for m in monuments))
 runways = []
 for e in feat:
     t = e.get('tags', {})
@@ -1003,7 +1066,8 @@ import gzip
 from shapely.affinity import rotate as sh_rotate, scale as sh_scale, translate as sh_translate
 from shapely.strtree import STRtree
 
-K_BLD = 1.0
+# en la compacta los edificios quedan a ~0,7 de su tamaño (puertas y autos en proporción)
+K_BLD = 1.0 if ESC >= 1 else min(1 / ESC, 0.7 / ESC)
 SW_GAME = 2.6 + 0.35       # vereda + margen (city.js: SW)
 bld_files = sorted(glob.glob(os.path.join(CACHE, 'ms_*.csv.gz')))
 
@@ -1131,7 +1195,7 @@ for pg in raw:
     c = rect.centroid
     a, b = ab(c.x, c.y)
     X, Z = warp(c.x, c.y)
-    sc = min(1.0, math.sqrt(slope_a(a) * slope_b(b))) * K_BLD
+    sc = min(1.0, math.sqrt(slope_a(a) * slope_b(b)) * K_BLD)
     if h_game(X, Z) < 0.9:
         dropped['agua'] += 1
         continue
@@ -1408,6 +1472,7 @@ meta = {
     'frame': {'ux': UX, 'uz': UZ, 'vx': VX, 'vz': VZ, 'a0': A0, 'a1': A1, 'b0': B0, 'b1': B1},
     'heights': {'cell': HC, 'na': NA, 'nb': NB, 'scale': 0.1},
     'bands': {'a': {'bp': A_BP, 'sl': A_SL}, 'b': {'bp': B_BP, 'sl': B_SL}, 'vs': VS},
+    'escala': ESC,
     'sections': sections,
     'kinds': kinds,
     'names': names,
@@ -1417,6 +1482,7 @@ meta = {
     'areaNames': area_names,
     'places': places,
     'landmarks': landmarks,
+    'monuments': monuments,
     'fuel': [[round(x, 1), round(z, 1), n] for x, z, n in fuel],
     'piers': [[[round(x, 1), round(z, 1)] for x, z in p] for p in piers],
     'runways': runways,

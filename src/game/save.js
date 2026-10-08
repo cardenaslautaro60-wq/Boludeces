@@ -1,7 +1,9 @@
 import { safeStorageGet, safeStorageSet } from '../util.js';
+import { STYLE } from '../render/style.js';
 import { SPAWNS } from '../world/mapdata.js';
 
-const KEY = 'gtasj-save-1';
+// la versión compacta tiene otro mapa (otras coordenadas): guarda su partida aparte
+const key = () => (STYLE.variante === 'compacto' ? 'gtasj-save-compacto-1' : 'gtasj-save-1');
 
 export class SaveSystem {
   constructor(game) {
@@ -13,7 +15,7 @@ export class SaveSystem {
   collectBag(i) { this.bags.add(i); }
   bagCount() { return this.bags.size; }
 
-  exists() { return !!safeStorageGet(KEY); }
+  exists() { return !!safeStorageGet(key()); }
 
   snapshot() {
     const g = this.game;
@@ -35,11 +37,11 @@ export class SaveSystem {
 
   save() {
     const data = this.snapshot();
-    return safeStorageSet(KEY, JSON.stringify(data));
+    return safeStorageSet(key(), JSON.stringify(data));
   }
 
   load() {
-    const raw = safeStorageGet(KEY);
+    const raw = safeStorageGet(key());
     if (!raw) return false;
     let d;
     try { d = JSON.parse(raw); } catch (e) { return false; }

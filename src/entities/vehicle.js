@@ -3,6 +3,9 @@ import { STYLE } from '../render/style.js';
 import { buildCarModel, CarMaterials } from './carmodels.js';
 import { clamp, lerp, approach, angleWrap, rand, pick } from '../util.js';
 
+// Resistencia de un vehículo antes de prenderse fuego (los autos de Comodoro aguantan una buena)
+export const VEHICLE_HP = 1600;
+
 // Tipos de vehículos (parodias de los autos de la Argentina de los 2000)
 export const VTYPES = {
   fitito: { name: 'Fitito 600', style: 'tiny', L: 3.3, W: 1.42, H: 1.38, mass: 600, power: 6.5, maxSpeed: 27, grip: 5.5, steer: 2.3, brake: 13, colors: [0xe8e0a0, 0x9ac8d8, 0xd84a3a, 0xf2f2f2, 0x7a9a6a] },
@@ -68,7 +71,7 @@ export class Vehicle {
       return w;
     });
     // sombra
-    const sh = new THREE.Mesh(new THREE.PlaneGeometry(this.type.W + 0.8, this.type.L + 0.8), new THREE.MeshBasicMaterial({ map: game.textures.shadow, transparent: true, depthWrite: false, opacity: game.renderer.shadowMap.enabled ? (STYLE.realista ? 0.32 : 0.55) : 0.9 }));
+    const sh = new THREE.Mesh(new THREE.PlaneGeometry(this.type.W + 0.8, this.type.L + 0.8), new THREE.MeshBasicMaterial({ map: game.textures.shadow, transparent: true, depthWrite: false, opacity: game.renderer.shadowMap.enabled ? (STYLE.luz ? 0.32 : 0.55) : 0.9 }));
     sh.rotation.x = -Math.PI / 2;
     sh.position.y = 0.06;
     sh.renderOrder = 4;
@@ -87,7 +90,8 @@ export class Vehicle {
     this.pitch = 0; this.roll = 0; this.susp = 0;
     this.pos.y = game.terrain.groundAt(this.pos.x, this.pos.z);
     this.grounded = true;
-    this.health = opts.health || 1000;
+    this.maxHealth = opts.health || VEHICLE_HP;
+    this.health = this.maxHealth;
     this.fireT = 0;
     this.dead = false;
     this.sinking = 0;
@@ -291,10 +295,11 @@ export class Vehicle {
     }
     if (!this.dead && g.effects) {
       this.smokeT -= dt;
-      if (this.health < 420 && this.smokeT <= 0) {
-        this.smokeT = this.health < 250 ? 0.05 : 0.12;
+      const hpf = this.health / this.maxHealth;
+      if (hpf < 0.42 && this.smokeT <= 0) {
+        this.smokeT = hpf < 0.25 ? 0.05 : 0.12;
         const f = this.fwd;
-        g.effects.smoke(this.pos.x + f.x * this.type.L * 0.4, this.pos.y + this.type.H * 0.7, this.pos.z + f.z * this.type.L * 0.4, this.health < 250 ? 0.15 : 0.7);
+        g.effects.smoke(this.pos.x + f.x * this.type.L * 0.4, this.pos.y + this.type.H * 0.7, this.pos.z + f.z * this.type.L * 0.4, hpf < 0.25 ? 0.15 : 0.7);
       }
     }
     if (this.dead) this.deadT += dt;

@@ -8,6 +8,7 @@ Mundo abierto en 3D que corre en el navegador. Mapa de Comodoro estilizado, est�
 
 - **Rápido:** abrí `dist/gta-san-jorge.html` con doble clic. Es un solo archivo con todo adentro.
 - **Desde el repo:** abrí `index.html` (usa `build/game.js`, que ya viene compilado).
+- **Versión compacta:** `dist/gta-san-jorge-compacto.html` (o `compacto.html`): Comodoro a media escala, con monumentos reales, más vida en la calle y la luz de la realista (ver más abajo).
 - **Para desarrollar:**
 
   ```bash
@@ -58,6 +59,15 @@ El mismo juego con otra cara: `realista.html` (o `dist/gta-san-jorge-realista.ht
 - **La noche**: estrellas, luz cálida de los faroles en la vereda, ventanas con interiores, vidrieras prendidas y los faros de los autos iluminando el asfalto.
 - Las calles del Centro y las avenidas tienen **carteles con el nombre de la calle** en las esquinas.
 
+## Versión compacta
+
+`compacto.html` (o `dist/gta-san-jorge-compacto.html`, un solo archivo): **Comodoro a media escala**, para recorrerlo más rápido y que se sienta lleno.
+
+- **Escala 0,5**: los recorridos son la mitad de largos (y el relieve, la mitad de alto). La gente, los autos y el ancho de las calles siguen a tamaño real; las casas y los edificios quedan a ~0,7 de su tamaño y los lugares clave (La Madriguera, la Catedral, la Terminal, los monumentos) a tamaño real. Entran unos 36.000 edificios reales.
+- **Monumentos reales** en su lugar (OpenStreetMap), con placa: San Martín a caballo, el busto de San Martín sobre el tronco petrificado con sus tres mástiles, el avión **IA-58 Pucará**, Caídos en Malvinas, el **Balancín de Km 5**, la **Centolla Gigante**, el Choique, el Monumento al Gaucho, Rómulo y Remo, el homenaje a los Colonos Galeses, la Cruz, San Cayetano y los monolitos.
+- **Más vida en la calle**: gente charlando en la vereda, la cola del colectivo con el cartel de la parada, pibes jugando a la pelota en las plazas y calles de barrio, **perros callejeros** que te siguen (y le ladran a los autos), **gaviotas** en la costa, y más autos y peatones.
+- **Estética PS2 con la luz de la realista**: cielo físico con nubes, sol con sombras, reflejos, agua que brilla, resplandor y faroles que iluminan la vereda de noche, sin las texturas fotográficas (anda mejor que la realista).
+
 ## Lo que tiene de San Andreas
 
 - Caminar, correr, saltar, nadar, pelear y disparar (puños, clavas de malabar, bate, pistola, escopeta, Uzi), con apuntado libre y autoapuntado.
@@ -89,6 +99,8 @@ En la versión publicada en claude.ai los archivos quedan guardados en el artifa
 | ![El Centro de noche](capturas/realista-noche.jpg) | ![Rada Tilly](capturas/realista-rada.jpg) |
 | ![Versión PS2: el Centro](capturas/ps2-centro.jpg) | ![Versión PS2: un barrio con La Madriguera](capturas/ps2-barrio.jpg) |
 | ![Fuegos artificiales del aniversario](capturas/ps2-fuegos.jpg) | ![Corte de ruta de petroleros](capturas/ps2-piquete.jpg) |
+| ![Compacta: San Martín a caballo](capturas/compacto-sanmartin.jpg) | ![Compacta: charla en la vereda](capturas/compacto-vereda.jpg) |
+| ![Compacta: Caídos en Malvinas, en la Costanera](capturas/compacto-malvinas.jpg) | ![Compacta: el Centro](capturas/compacto-centro.jpg) |
 
 ## Rendimiento
 
@@ -202,5 +214,14 @@ python3 tools/mapa/satelite.py tools/mapa/cache   # colores del suelo (src/world
 python3 tools/mapa/preview.py src/world/comodoro-data.js mapa.png   # vista previa en PNG
 npm run build
 ```
+
+La versión compacta usa los mismos datos con otra escala (el tercer argumento):
+
+```bash
+python3 tools/mapa/build_map.py tools/mapa/cache src/world/comodoro-data-compacto.js 0.5
+python3 tools/mapa/satelite.py tools/mapa/cache src/world/comodoro-data-compacto.js src/world/comodoro-sat-compacto.js
+```
+
+En Windows conviene correr Python con `PYTHONUTF8=1`. Si el servidor de Overpass por defecto no responde, `descargar.sh` acepta otro con `OVERPASS=https://maps.mail.ru/osm/tools/overpass/api/interpreter`.
 
 `build_map.py` pone la ciudad a escala real (y comprime solo los tramos vacíos), une las avenidas de doble mano, simplifica las rotondas, arma los barrios y guarda todo comprimido (unos 1,8 MB con las 60.000 casas). `satelite.py` reproyecta la foto satelital al marco del juego (un píxel cada 20 m, unos 150 KB en JPEG).
