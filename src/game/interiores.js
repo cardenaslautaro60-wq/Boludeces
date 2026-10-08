@@ -7,7 +7,7 @@
 // local (así el minimapa sigue marcando dónde estás y no se cruza con nada de la ciudad).
 import * as THREE from 'three';
 import { Marker } from './activities.js';
-import { buildDraw, DRAW_TABLES, DRAW_TABLE } from '../world/interior-draw.js';
+import { buildDraw, DRAW_TABLES, DRAW_TABLE, DRAW_H } from '../world/interior-draw.js';
 import { META } from '../world/mapdata.js';
 import { Humanoid, randomLook } from '../entities/humanoid.js';
 import { STYLE } from '../render/style.js';
@@ -119,10 +119,26 @@ class PoolTable {
   }
 
   moving() { return this.balls.some((b) => b.on && (Math.abs(b.vx) + Math.abs(b.vz)) > 0.004); }
+
+  // Simular un tiro sobre una copia de la mesa (para que el rival elija): qué toca primero la
+  // blanca, qué bolas entran y si la blanca se va a la tronera
+  simulate(vx, vz) {
+    const S = Object.create(PoolTable.prototype);
+    S.hx = this.hx; S.hz = this.hz; S.pockets = this.pockets;
+    S.balls = this.balls.map((b) => ({ ...b }));
+    S.balls[0].vx = vx; S.balls[0].vz = vz;
+    S.track = true; S.firstHit = null; S.scratched = false; S.pottedOrder = [];
+    for (let i = 0; i < 400 && S.moving(); i++) S.step(1 / 30);
+    return S;
+  }
   left() { return this.balls.filter((b) => b.on && b.i !== 0).length; }
 
   step(dt) {
-    const B = this.balls, n = 4, h = dt / n;
+    const B = this.balls;
+    // más pasos cuanto más rápido va la bola más rápida (si no, a pocos cuadros por segundo se atraviesan)
+    let vmax = 0;
+    for (const b of B) if (b.on) vmax = Math.max(vmax, Math.abs(b.vx) + Math.abs(b.vz));
+    const n = Math.min(40, Math.max(4, Math.ceil(vmax * dt / (R * 0.5)))), h = dt / n;
     for (let s = 0; s < n; s++) {
       for (const b of B) {
         if (!b.on) continue;
@@ -132,7 +148,11 @@ class PoolTable {
         b.vx *= f; b.vz *= f;
         b.x += b.vx * h; b.z += b.vz * h;
         for (const [px, pz] of this.pockets) {
-          if ((b.x - px) ** 2 + (b.z - pz) ** 2 < 0.075 * 0.075) { b.on = false; b.vx = b.vz = 0; if (b.i === 0 && this.track) this.scratched = true; break; }
+          if ((b.x - px) ** 2 + (b.z - pz) ** 2 < 0.075 * 0.075) {
+            b.on = false; b.vx = b.vz = 0; this.drawn = false;
+            if (this.track) { if (b.i === 0) this.scratched = true; else this.pottedOrder && this.pottedOrder.push(b.i); }
+            break;
+          }
         }
         if (!b.on) continue;
         if (b.x > this.hx - R) { b.x = this.hx - R; b.vx = -Math.abs(b.vx) * 0.78; }
@@ -312,7 +332,7 @@ export class Interiors {
         }
       } else if (def.n === 8) {
         // mesa del fondo libre con un taco apoyado
-        const cue = cueMesh(); cue.position.set(def.x + 1.3, 0.8, def.z + 0.84); cue.rotation.set(-1.2, 0, 0.1); D.group.add(cue);
+        const cue = cueMesh(); cue.position.set(def.x + 1.3, 0.8, def.z + 0.84); cue.rotation.set(-2.55, 0, 0.1); D.group.add(cue);
         T.leaning = cue;
       }
       this.tables.push(T);
@@ -350,6 +370,7 @@ export class Interiors {
     g.cameraRig.snapBehind(p.heading);
     g.cameraRig.dist = 3;
     // el compañero entra con vos
+    this.companionIn = false;
     const c = g.companion;
     if (g.companionActive && c && !c.hidden && !c.vehicle && !c.dead && Math.hypot(c.pos.x - this.door.x, c.pos.z - this.door.z) < 30) {
       c.pos.set(O.x + D.spawn.x + 0.9, O.y + 0.02, O.z + D.spawn.z - 0.4); c.vx = c.vz = c.vy = 0; c.onGround = true;
@@ -393,6 +414,14 @@ export class Interiors {
     if (!this.inside) return;
     if (this.match) this.endPool();
     this.inside = null;
+    // quien haya quedado adentro (el compañero, si cambiaste de personaje o te teletransportaste) sale a la vereda
+    const O = this.origin, d = this.door;
+    for (const c of [g.gordopin, g.petroca]) {
+      if (!c || c === g.player || c.vehicle || Math.abs(c.pos.y - O.y) > 8) continue;
+      const x = d.x - this.inward.x * 1.6 + 0.8, z = d.z - this.inward.z * 1.6 + 0.8;
+      c.pos.set(x, g.world.footGround(x, z), z); c.vx = c.vz = c.vy = 0;
+    }
+    this.companionIn = false;
     const D = this.D;
     D.group.visible = false;
     for (const l of D.lights) l.visible = false;
@@ -426,9 +455,10 @@ export class Interiors {
     if (!a || !a.startShow) return;
     a.onShowEnd = () => this.songEnded();
     this.showStyle = style || this.showStyle || pick(['balada', 'rockshow', 'house', 'reggaeton']);
+    if (this.charly) { this.charly.st.sing = 1; this.charly.st.wave = false; }
     a.startShow(this.showStyle);
     this.talkT = 0;
-    this.announce();
+    if (a.radioIdx === -3) this.announce();
   }
 
   stopShow() {
@@ -512,7 +542,11 @@ export class Interiors {
     }
     // ¿se fue del local de otra forma (murió, lo arrestaron, truco)?
     const O = this.origin;
-    if (!this.busy && (p.dead || Math.abs(p.pos.y - O.y) > 8 || Math.abs(p.pos.x - O.x) > 40 || Math.abs(p.pos.z - O.z - 16) > 40)) { this.restore(); return; }
+    // (si muere adentro, el interior sigue a la vista hasta que reaparece en el hospital)
+    if (!this.busy && (Math.abs(p.pos.y - O.y) > 8 || Math.abs(p.pos.x - O.x) > 40 || Math.abs(p.pos.z - O.z - 16) > 40)) { this.restore(); return; }
+    // la cabeza no pasa del techo
+    const roof = O.y + DRAW_H - 1.85;
+    if (p.pos.y > roof && !p.climb) { p.pos.y = roof; if (p.vy > 0) p.vy = 0; }
     const D = this.D;
     D.update(dt, g.env);
     this.exitMarker.update(dt);
@@ -527,8 +561,11 @@ export class Interiors {
     const c = this.charly;
     if (this.talkT > 0) {
       this.talkT -= dt;
-      if (this.talkT <= 0) { c.st.wave = false; c.st.sing = 1; this.startShow(this.showStyle); this.announce(); }
+      if (this.talkT <= 0) this.startShow(this.showStyle);
     }
+    // si el show se cortó (pausa, persecución con música), Charly vuelve a arrancar
+    const au = g.audio;
+    if (au && au.enabled && au.startShow && !au.chase && !p.dead && au.radioIdx !== -3 && !(this.talkT > 0)) this.talkT = 1.2;
     const look = clamp(angleWrap(Math.atan2(lx - c.x, lz - c.z) + Math.PI / 2), -0.7, 0.7);
     c.rot = approachAngle(c.rot, -Math.PI / 2 + look, dt * 0.8);
     // volumen del show según la distancia al escenario
@@ -553,7 +590,7 @@ export class Interiors {
       const key = g.touch && g.touch.enabled ? 'HABLAR' : 'G';
       g.hud.setPrompt(near === 'bar' ? `<kbd>${key}</kbd> Pedir algo en la barra` : near === 'stage' ? `<kbd>${key}</kbd> Pedirle un tema a Charly` : near === 'pool' ? `<kbd>${key}</kbd> Jugar al pool` : null);
     }
-    if (near && g.input.was('action') && !g.menus.choiceEl) {
+    if (near && g.input.was('action') && !g.menus.choiceEl && !g.controlsLocked && !this.poolStarting) {
       g.hud.setPrompt(null); this.prompt = null;
       if (near === 'bar') this.barMenu(); else if (near === 'stage') this.stageMenu(); else this.poolMenu(free);
     }
@@ -584,17 +621,30 @@ export class Interiors {
 
   async startPool(T, rival, bet) {
     const g = this.game, p = g.player, D = this.D, O = this.origin, def = T.def;
+    if (this.poolStarting || this.match) return;
+    this.poolStarting = true;
     g.controlsLocked = true;
     await g.hud.fadeTo(true, 0.3);
-    if (!this.inside) { g.controlsLocked = false; return; }
+    this.poolStarting = false;
+    if (!this.inside || p.dead) { await g.hud.fadeTo(false, 0.3); g.controlsLocked = false; return; }
     if (bet) { g.money -= bet; g.audio.cash(); }
     if (T.leaning) T.leaning.visible = false;
-    // vos (un "doble" animado con tu misma pinta; el personaje queda quieto al lado de la mesa)
-    const me = new Extra(D.group, p.look, g.textures.shadow, def.x - DRAW_TABLE.L / 2 - 0.6, def.z, Math.PI / 2);
-    const myCue = cueMesh(); D.group.add(myCue);
-    const opp = new Extra(D.group, randomLook(this.rng.next() < 0.4 ? 'cheto' : 'civil', () => this.rng.next()), g.textures.shadow, def.x + DRAW_TABLE.L / 2 + 0.75, def.z + 0.95, -Math.PI / 2);
-    const oppCue = cueMesh(); D.group.add(oppCue);
-    p.vx = p.vz = 0;
+    // vos (un "doble" animado con tu misma pinta; el personaje queda quieto al lado de la mesa) y el
+    // rival: se arman una vez por mesa y se reusan en las partidas siguientes
+    const C = T.cast || (T.cast = {
+      opp: new Extra(D.group, randomLook(this.rng.next() < 0.4 ? 'cheto' : 'civil', () => this.rng.next()), g.textures.shadow, 0, 0, 0),
+      oppCue: cueMesh(), myCue: cueMesh(), me: null, meKey: '',
+    });
+    const look = p.model.look, key = JSON.stringify(look);
+    if (!C.me) C.me = new Extra(D.group, look, g.textures.shadow, 0, 0, 0);
+    else if (C.meKey !== key) { C.me.model.look = { ...look }; C.me.model.build(); }
+    C.meKey = key;
+    const place = (e, x, z, rot) => { e.x = x; e.z = z; e.rot = rot; e.st = {}; e.root.visible = true; e.update(0); };
+    place(C.me, def.x - DRAW_TABLE.L / 2 - 0.6, def.z, Math.PI / 2);
+    place(C.opp, def.x + DRAW_TABLE.L / 2 + 0.75, def.z + 0.95, -Math.PI / 2);
+    for (const c of [C.myCue, C.oppCue]) { if (!c.parent) D.group.add(c); c.visible = true; }
+    const me = C.me, opp = C.opp, myCue = C.myCue, oppCue = C.oppCue;
+    p.vx = p.vz = p.vy = 0;
     p.pos.set(O.x + def.x - DRAW_TABLE.L / 2 - 0.6, O.y + 0.02, O.z + def.z);
     p.model.root.visible = false;
     this.poolHidden = p;
@@ -611,7 +661,7 @@ export class Interiors {
     if (!M) return;
     const T = M.T;
     M.dispose();
-    for (const pl of [M.me, M.opp]) { pl.e.root.removeFromParent(); pl.cue.removeFromParent(); }
+    for (const pl of [M.me, M.opp]) { pl.e.root.visible = false; pl.cue.visible = false; }
     T.match = null; T.track = false;
     if (T.leaning) T.leaning.visible = true;
     T.rack();
@@ -711,7 +761,7 @@ export class Interiors {
   }
 
   // Caminar alrededor de la mesa (por el borde, sin atravesarla)
-  walkTo(pl, target, dt, def) {
+  walkTo(pl, target, dt, def, speed = 1.15) {
     const e = pl.e;
     const ex = DRAW_TABLE.L / 2 + 0.5, ez = DRAW_TABLE.W / 2 + 0.5;
     const lx = e.x - def.x, lz = e.z - def.z, tx = target.x - def.x, tz = target.z - def.z;
@@ -735,7 +785,7 @@ export class Interiors {
       if (best) { gx = best[0]; gz = best[1]; }
     }
     const gd = Math.hypot(gx - lx, gz - lz) || 1;
-    const sp = 1.15;
+    const sp = speed;
     const step = Math.min(gd, sp * dt);
     e.x += ((gx - lx) / gd) * step; e.z += ((gz - lz) / gd) * step;
     e.rot = approachAngle(e.rot, Math.atan2(gx - lx, gz - lz), dt * 8);

@@ -261,8 +261,9 @@ export class Audio {
     // viento
     const p = game.player;
     const indoorsCar = p && p.vehicle && !p.vehicle.type.bike;
+    const sheltered = !!(game.interiors && game.interiors.inside); // adentro de un local cerrado
     const w = env.windSpeed;
-    const wv = clamp((w - 4) / 30, 0, 1) * (indoorsCar ? 0.25 : 0.7) * (game.paused ? 0 : 1);
+    const wv = clamp((w - 4) / 30, 0, 1) * (indoorsCar ? 0.25 : 0.7) * (game.paused || sheltered ? 0 : 1);
     this.wind.g.gain.setTargetAtTime(wv * 0.55, t, 0.3);
     this.wind.f.frequency.setTargetAtTime(300 + w * 18 + env.gust * 300, t, 0.3);
     // motor
@@ -285,7 +286,7 @@ export class Audio {
       const d = Math.hypot(c.pos.x - cam.x, c.pos.z - cam.z);
       if (d < nd) { nd = d; nearest = c; }
     }
-    if (nearest && !game.paused) {
+    if (nearest && !game.paused && !sheltered) {
       const ph = (performance.now() * 0.001) % 2;
       this.siren.o.frequency.setTargetAtTime(ph < 1 ? 650 + ph * 500 : 1150 - (ph - 1) * 500, t, 0.02);
       this.siren.g.gain.setTargetAtTime(clamp(1 - nd / 200, 0, 1) * 0.07, t, 0.1);
@@ -388,7 +389,7 @@ export class Audio {
   // Pista armada en el momento y una "voz" sintetizada (vocales con formantes) que canta la
   // melodía. Sale por el canal de música; onShowEnd avisa cuando termina cada tema.
   startShow(style = 'balada') {
-    if (!this.enabled) return;
+    if (!this.enabled || this.chase) return;
     this.stopRadio(true);
     this.bus = this.ctx.createGain();
     this.bus.gain.value = 1;
@@ -613,6 +614,8 @@ export class Audio {
     if (!this.bus || !this.song) return;
     const s = this.song;
     const ctx = this.ctx;
+    // si la pestaña estuvo oculta, seguir desde ahora en vez de reprogramar todo lo perdido de golpe
+    if (this.nextNote < ctx.currentTime - 0.1) this.nextNote = ctx.currentTime + 0.05;
     const spb = 60 / s.bpm; // segundos por negra
     const stepDur = s.style === 'folk' ? spb / 2 : spb / 4;
     const stepsPerBar = s.style === 'folk' ? 6 : 16;

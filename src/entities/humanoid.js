@@ -832,7 +832,7 @@ export class Humanoid {
       // cuerpo entero girado: acostado al nadar, inclinado al bucear o dando una vuelta
       // carnero; gira sobre la cadera (o el centro del cuerpo hecho bollito)
       let bp, py;
-      if (st.roll > 0) { bp = st.roll * Math.PI * 2; py = 0.5; a.bp = 0; }
+      if (st.roll > 0) { bp = st.roll * Math.PI * 2; py = 0.75; a.bp = 0; }
       else { a.bp = lerp(a.bp || 0, st.bodyPitch || 0, clamp(dt * 6, 0, 1)); bp = a.bp; py = this.hipY; }
       this.body.rotation.x = bp;
       this.body.position.y = py - py * Math.cos(bp);

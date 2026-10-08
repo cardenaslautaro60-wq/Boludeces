@@ -181,20 +181,20 @@ function texWindow() {
   // ventanal en arco: marco blanco con varillas; el vidrio se tiñe según la hora
   const c = cv(128, 160), g = c.getContext('2d');
   g.fillStyle = '#ffffff'; g.fillRect(0, 0, 128, 160);
-  g.fillStyle = '#000000';
+  // los vidrios quedan transparentes: atrás se ve el vidrio que cambia con la hora
   const cols = 4, rows = 5;
-  for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) g.fillRect(6 + i * 30, 46 + j * 22, 26, 18);
+  for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) g.clearRect(6 + i * 30, 46 + j * 22, 26, 18);
   // abanico del arco
   g.save(); g.beginPath(); g.arc(64, 44, 58, Math.PI, 0); g.lineTo(122, 44); g.lineTo(6, 44); g.closePath(); g.clip();
-  g.fillRect(0, 0, 128, 44);
+  g.clearRect(0, 0, 128, 44);
   g.strokeStyle = '#ffffff'; g.lineWidth = 4;
   for (let k = 1; k < 5; k++) { const a = Math.PI + (k / 5) * Math.PI; g.beginPath(); g.moveTo(64, 44); g.lineTo(64 + Math.cos(a) * 70, 44 + Math.sin(a) * 70); g.stroke(); }
   g.beginPath(); g.arc(64, 44, 26, Math.PI, 0); g.stroke();
   g.restore();
-  // fuera del arco: transparente (lo recorta el alpha)
+  // fuera del arco: pared (verde, opaca)
   const img = g.getImageData(0, 0, 128, 160);
   for (let y = 0; y < 44; y++) for (let x = 0; x < 128; x++) {
-    if (Math.hypot(x - 64, y - 44) > 60) img.data[(y * 128 + x) * 4 + 3] = 0;
+    if (Math.hypot(x - 64, y - 44) > 60) { const k = (y * 128 + x) * 4; img.data[k] = 31; img.data[k + 1] = 58; img.data[k + 2] = 44; img.data[k + 3] = 255; }
   }
   g.putImageData(img, 0, 0);
   return c;
@@ -241,7 +241,7 @@ export function buildDraw(game, ox, oy, oz) {
     return geo;
   };
   const cols = [];
-  const solid = (x0, z0, x1, z1, y0, y1) => cols.push([x0, z0, x1, z1, y0, y1]);
+  const solid = (x0, z0, x1, z1, y0, y1, tag = 'interior') => cols.push([x0, z0, x1, z1, y0, y1, tag]);
 
   // materiales
   const floorTile = M('floorTile', () => lam({ map: tx(texFloorTile(rng, '#cfc6b4', '#a89e8a'), 1, 1) }));
@@ -269,7 +269,8 @@ export function buildDraw(game, ox, oy, oz) {
   solid(-12, 0, 12, 32, -1, 0);
   box(ceilingDark, -12, H, 0, 12, H + 0.3, 10, 0.5);
   box(ceilingBlue, -12, H, 10, 12, H + 0.3, 32, 0.25);
-  solid(-12, 0, 12, 32, H, H + 1);
+  // el techo solo frena la cámara: si empujara al personaje de costado lo sacaba del local
+  solid(-12, 0, 12, 32, H, H + 1, 'techo');
   const T = 0.3;
   // salón: paredes verdes
   // frente (z = 0) con dos ventanales en arco: se arma en paños alrededor de los huecos
@@ -340,14 +341,14 @@ export function buildDraw(game, ox, oy, oz) {
   // ---- Barra ----
   box(woodDark, -9.7, 0, 4.6, -9.0, 1.05, 9.6, 1);
   box(wood, -9.85, 1.05, 4.5, -8.85, 1.12, 9.7, 1);
-  box(woodDark, -9.7, 0, 9.0, -11.9, 1.05, 9.6, 1);
+  box(woodDark, -11.9, 0, 9.0, -9.7, 1.05, 9.6, 1);
   solid(-9.85, 4.5, -8.85, 9.7, 0, 1.12);
   solid(-11.9, 9.0, -9.0, 9.7, 0, 1.12);
   // estantes con botellas
   box(woodDark, -11.95, 1.0, 4.8, -11.6, 1.04, 8.8);
   box(woodDark, -11.95, 1.6, 4.8, -11.6, 1.64, 8.8);
   box(woodDark, -11.95, 2.2, 4.8, -11.6, 2.24, 8.8);
-  solid(-12, 4.8, -11.5, 8.8, 0, 2.3);
+  solid(-12, 4.8, -11.5, 8.8, 0, H); // hasta el techo: no se puede trepar
   const bottleCols = [0x2a6a2a, 0x7a3a10, 0xd8d0b0, 0x3a1a4a, 0x8a1a1a, 0x1a3a7a, 0xc89a20];
   for (let s = 0; s < 3; s++) for (let i = 0; i < 16; i++) {
     const col = bottleCols[rng.int(0, bottleCols.length - 1)];
@@ -363,7 +364,7 @@ export function buildDraw(game, ox, oy, oz) {
   // banquetas contra la pared de la sala de pool (con el estante de apoyo de las fotos)
   box(wood, 11.5, 1.05, 11, 12, 1.1, 31, 1);
   solid(11.5, 11, 12, 31, 0, 1.1);
-  for (let i = 0; i < 9; i++) stools.push([11.0, 11.8 + i * 2.3, 0.72]);
+  for (let i = 0; i < 8; i++) stools.push([11.0, 11.8 + i * 2.3, 0.72]); // (el último pisaba el sillón)
   box(wood, -12, 1.05, 29, -11.5, 1.1, 31.5, 1);
   for (const [x, z, h] of stools) {
     const seat = new THREE.CylinderGeometry(0.19, 0.19, 0.06, 10); seat.translate(x, h, z); add(black, seat);
@@ -402,7 +403,7 @@ export function buildDraw(game, ox, oy, oz) {
   // ---- Escenario de Charly ----
   const STAGE = { x0: 7.2, x1: 12, z0: 4.2, z1: 9.8, h: 0.3 };
   box(M('stage', () => lam({ color: 0x24201c })), STAGE.x0, 0, STAGE.z0, STAGE.x1, STAGE.h, STAGE.z1, 1);
-  box(metal, STAGE.x0 - 0.02, STAGE.h - 0.04, STAGE.z0, STAGE.x0 + 0.02, STAGE.h, STAGE.z1);
+  box(metal, STAGE.x0 - 0.04, STAGE.h - 0.04, STAGE.z0, STAGE.x0, STAGE.h + 0.004, STAGE.z1);
   solid(STAGE.x0, STAGE.z0, STAGE.x1, STAGE.z1, -1, STAGE.h);
   // parlantes
   for (const z of [4.7, 9.3]) {
@@ -526,7 +527,7 @@ export function buildDraw(game, ox, oy, oz) {
   }
   for (let i = 0; i < 6; i++) {
     const p = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.52), frameMats[(i + 2) % 5]);
-    p.position.set(-11.68, 1.9 + (i % 2) * 0.62, 1.2 + Math.floor(i / 2) * 1.0); p.rotation.y = Math.PI / 2; group.add(p);
+    p.position.set(-11.98, 1.9 + (i % 2) * 0.62, 1.2 + Math.floor(i / 2) * 1.0); p.rotation.y = Math.PI / 2; group.add(p);
   }
 
   // ---- Neones ----
@@ -550,7 +551,7 @@ export function buildDraw(game, ox, oy, oz) {
   }
 
   // colisiones en coordenadas del mundo
-  for (const [x0, z0, x1, z1, y0, y1] of cols) game.colliders.addBox(ox + x0, ox + x1, oz + z0, oz + z1, oy + y0, oy + y1, 'interior');
+  for (const [x0, z0, x1, z1, y0, y1, tag] of cols) game.colliders.addBox(ox + x0, ox + x1, oz + z0, oz + z1, oy + y0, oy + y1, tag);
 
   // luces (se suman a la escena solo adentro)
   const lights = [];

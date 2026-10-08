@@ -109,7 +109,13 @@ export class Ped {
     if (this.swimming && this.isPlayer && !this.vehicle && !this.dead) {
       // en el agua: trepar a un muelle o a la orilla si hay algo adelante; si no, sumergirse
       if (this.diving) return false;
-      if (this.tryClimb(2.2)) { this.swimming = false; return true; }
+      if (this.tryClimb(2.2)) {
+        // el cuerpo nadando se dibuja 0,9 m más abajo: la trepada arranca desde ahí, ya sin brazada
+        this.swimming = false;
+        this.climb.y0 -= 0.9; this.pos.y -= 0.9;
+        this.model.anim.swim = 0; if (this.model.anim.bp !== undefined) this.model.anim.bp = 0;
+        return true;
+      }
       this.diving = true;
       this.vy = -2.2;
       this.game.effects && this.game.effects.splash(this.pos.x, this.pos.z);
@@ -174,6 +180,9 @@ export class Ped {
       const lx = x + fx * 0.55, lz = z + fz * 0.55;
       const onTop = Math.max(this.topAt(lx, lz, top + 0.3, true), W.footGround(lx, lz)) > top - 0.3;
       const ex = onTop ? lx : x + fx * 1.3, ez = onTop ? lz : z + fz * 1.3;
+      // adentro de un local no se salta por encima de nada que tenga un pozo atrás (la pared de afuera)
+      const ins = this.game.interiors && this.game.interiors.inside;
+      if (!onTop && ins && Math.max(this.topAt(ex, ez, top, true), W.footGround(ex, ez)) < y - 1.5) continue;
       this.climb = { t: 0, dur: 0.3 + (top - y) * 0.2, x0: this.pos.x, y0: y, z0: this.pos.z, xm: x, zm: z, top, x1: ex, z1: ez, over: !onTop };
       this.vx = this.vz = this.vy = 0;
       this.onGround = false;
@@ -467,7 +476,8 @@ export class Ped {
     const W = g.world;
     // viento fuerte empuja (temporal)
     let wx = 0, wz = 0;
-    if (g.env && g.env.windSpeed > 18 && !dead) {
+    const sheltered = g.interiors && g.interiors.inside && this.pos.y > g.interiors.origin.y - 8;
+    if (g.env && g.env.windSpeed > 18 && !dead && !sheltered) {
       const f = (g.env.windSpeed - 18) * 0.05;
       wx = g.env.windDir.x * f; wz = g.env.windDir.y * f;
     }
@@ -491,13 +501,17 @@ export class Ped {
         if (this.pos.y < bed) { this.pos.y = bed; if (this.vy < 0) this.vy = 0; }
         if (this.pos.y > -0.3 && this.vy > 0.2) { this.diving = false; this.pos.y = -0.3; this.vy = 0; g.effects && g.effects.splash(this.pos.x, this.pos.z); }
         else if (this.pos.y > -0.3) this.pos.y = -0.3;
+      } else if (dead && this.pos.y < -0.35) {
+        // ahogado: el cuerpo sube despacio hasta la superficie (la cámara lo sigue bajo el agua)
+        this.pos.y = Math.min(-0.3, this.pos.y + 1.2 * dt);
+        this.vy = 0;
       } else {
         this.diving = false;
         this.pos.y = lerp(this.pos.y, 0, 1 - Math.exp(-6 * dt));
         this.vy = 0;
       }
       this.onGround = false;
-      if (dead) this.pos.y = -0.3;
+      if (dead && !this.diving) this.pos.y = -0.3;
     } else {
       this.swimming = false;
       this.diving = false;
@@ -515,7 +529,8 @@ export class Ped {
         // caída de alto: corriendo se rueda (como en Vice City) y duele menos; de muy alto
         // se cae de cara al piso
         const hs = Math.hypot(this.vx, this.vz);
-        const roll = this.isPlayer && !dead && vy0 < -9.5 && vy0 > -19 && hs > 2.6 && this.knockT <= 0;
+        const knockV = this.jumpMul > 1 ? 30 : 19; // con SUPERSALTO se aguanta más
+        const roll = this.isPlayer && !dead && vy0 < -9.5 && vy0 > -knockV && hs > 2.6 && this.knockT <= 0;
         const fall = (this.jumpMul > 1 ? 30 : 14) + (roll ? 3 : 0);
         if (vy0 < -fall && !dead) this.hurt((-vy0 - fall) * (roll ? 4 : 6), null, null);
         if (roll && !this.dead) {
@@ -524,7 +539,7 @@ export class Ped {
           this.vx *= k; this.vz *= k;
           g.effects && g.effects.dustPuff && g.effects.dustPuff(this.pos.x, sy + 0.1, this.pos.z, 3, 0.7);
           g.audio && g.audio.thud && g.audio.thud(this.pos, 0.25);
-        } else if (vy0 < -19 && !dead && this.isPlayer && !this.dead) {
+        } else if (vy0 < -knockV && !dead && this.isPlayer && !this.dead) {
           this.knockdown(this.vx * 0.3, this.vz * 0.3, 0);
           this.knockT = 1.2;
           g.audio && g.audio.thud && g.audio.thud(this.pos, 0.5);

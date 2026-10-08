@@ -43,7 +43,9 @@ export class PoolMatch {
 
   // ---------- Línea de ayuda para apuntar ----------
   buildGuide() {
-    const D = this.ints.D;
+    const D = this.ints.D, I = this.ints;
+    // se arma una sola vez y se reusa en todas las partidas
+    if (I.poolGuide) { this.guide = I.poolGuide.guide; this.ghost = I.poolGuide.ghost; return; }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(12), 3));
     this.guide = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.75, toneMapped: false }));
@@ -51,6 +53,7 @@ export class PoolMatch {
     this.ghost = new THREE.Mesh(new THREE.RingGeometry(R * 0.85, R, 20), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, side: THREE.DoubleSide, toneMapped: false }));
     this.ghost.rotation.x = -Math.PI / 2;
     D.group.add(this.guide, this.ghost);
+    I.poolGuide = { guide: this.guide, ghost: this.ghost };
   }
 
   updateGuide(show) {
@@ -129,6 +132,10 @@ export class PoolMatch {
   update(dt) {
     const g = this.game, T = this.T, input = g.input;
     const look = input.consumeLook();
+    // si el juego estuvo en pausa o la ventana perdió el foco, se cancela la carga (no se tira solo)
+    const now = performance.now();
+    if (this.lastFrame && now - this.lastFrame > 250) this.cancelCharge();
+    this.lastFrame = now;
     this.t -= dt;
     // los dos jugadores: el que no tira espera con el taco parado
     const shooter = this.turn === 0 ? this.me : this.opp, waiter = this.turn === 0 ? this.opp : this.me;
@@ -154,8 +161,12 @@ export class PoolMatch {
       if (!this.opp.path) { this.state = 'aim'; this.t = 1.2 + Math.random() * 1.2; }
     } else if (this.state === 'over') {
       this.relax(shooter, dt);
-      if (this.t <= 0) this.ints.endPool();
+      if (this.t <= 0) { this.ints.endPool(); return; }
     }
+    // con la cámara detrás del taco, tu cuerpo taparía la vista
+    this.me.e.root.visible = !this.behindView();
+    this.me.e.update(dt);
+    this.opp.e.update(dt);
     this.updateGuide(this.state === 'aim' && this.turn === 0);
     const pw = this.hud.querySelector('.pool-power');
     pw.style.opacity = this.turn === 0 && this.state === 'aim' ? 1 : 0.25;
@@ -167,23 +178,32 @@ export class PoolMatch {
     const fine = input.is('jump') ? 0.25 : 1;
     this.aim -= look.x * 0.55 * fine;
     this.aim -= ax * dt * 0.9 * fine;
-    const want = input.is('fire') || input.is('sprint');
+    // la carga empieza con un toque nuevo: el clic que captura el mouse no tira
+    if (!this.charging) {
+      const touch = this.game.touch && this.game.touch.enabled;
+      if (input.was('sprint')) this.chargeKey = 'sprint';
+      else if (input.was('fire') && (input.locked || touch)) this.chargeKey = 'fire';
+      else this.chargeKey = null;
+    }
+    const want = this.chargeKey && input.is(this.chargeKey);
     if (want) {
       this.charging = true;
       this.chargeT += dt;
       // la fuerza sube y baja mientras mantenés (como en los juegos de pool de siempre)
       this.power = 0.5 - 0.5 * Math.cos(this.chargeT * 2.4);
     } else if (this.charging) {
-      this.charging = false; this.chargeT = 0;
+      this.charging = false; this.chargeT = 0; this.chargeKey = null;
       if (this.power > 0.03) { this.speed = 0.35 + this.power * 4.9; this.startStroke(); }
       else this.power = 0;
     }
-    // el que tira se para atrás de la blanca, girando alrededor de la mesa con la puntería
+    // el que tira camina alrededor de la mesa hasta quedar atrás de la blanca
     const st = this.stance(this.aim);
-    const e = this.me.e;
-    e.x += (this.def.x + st.x - e.x) * Math.min(1, dt * 10);
-    e.z += (this.def.z + st.z - e.z) * Math.min(1, dt * 10);
+    this.ints.walkTo(this.me, { x: this.def.x + st.x, z: this.def.z + st.z }, dt, this.def, 3.2);
   }
+
+  cancelCharge() { this.charging = false; this.chargeT = 0; this.chargeKey = null; this.power = 0; }
+
+  behindView() { return this.turn === 0 && (this.state === 'aim' || this.state === 'stroke') && this.view === 0; }
 
   startStroke() {
     this.state = 'stroke'; this.t = 0.16;
@@ -195,7 +215,7 @@ export class PoolMatch {
     const dx = Math.sin(this.aim), dz = Math.cos(this.aim);
     c.vx = dx * this.speed; c.vz = dz * this.speed;
     T.before = T.balls.map((b) => b.on);
-    T.firstHit = null; T.scratched = false; T.track = true;
+    T.firstHit = null; T.scratched = false; T.track = true; T.pottedOrder = [];
     this.state = 'roll';
     this.power = 0;
     this.game.audio.thud && this.game.audio.thud(null, 0.15);
@@ -221,7 +241,8 @@ export class PoolMatch {
     if (!foul && !mine && T.firstHit === 8) foul = true;
     // mesa abierta: la primera que entra define los grupos
     if (!mine && !foul && potted.length) {
-      const gr = groupOf(potted[0]);
+      const first = (T.pottedOrder || []).find((i) => groupOf(i)) || potted[0];
+      const gr = groupOf(first);
       this.group[k] = gr; this.group[1 - k] = gr === 'lisas' ? 'rayadas' : 'lisas';
       this.say(`${who === 'Vos' ? 'Sos' : this.oppName + ' es'} ${GROUP_NAME[gr]}.`, 3);
     }
@@ -300,9 +321,10 @@ export class PoolMatch {
   }
 
   // El mejor tiro: bola propia hacia la tronera con el corte más derecho y libre
-  aiPlan(k = 1) {
+  aiPlan(k = 1, withError = true) {
     const T = this.T, c = T.balls[0];
-    let best = null;
+    // candidatos: cada bola propia a cada tronera (bola fantasma), y pegarle de lleno a cada una
+    const cands = [];
     for (const b of this.legal(k)) {
       for (const [px, pz] of T.pockets) {
         let ux = px - b.x, uz = pz - b.z; const dp = Math.hypot(ux, uz) || 1; ux /= dp; uz /= dp;
@@ -311,30 +333,51 @@ export class PoolMatch {
         const cut = ax * ux + az * uz;
         if (cut < 0.3) continue;
         const bl = (this.blocked(c.x, c.z, gx, gz, [0, b.i]) ? 1 : 0) + (this.blocked(b.x, b.z, px, pz, [0, b.i]) ? 1 : 0);
-        const score = cut * 2 - (da + dp) * 0.35 - bl * 2;
-        if (!best || score > best.score) {
-          const need = Math.sqrt(2 * 0.45 * dp) + 0.35;
-          const speed = clamp(need / Math.max(cut * 0.96, 0.35) + Math.sqrt(2 * 0.45 * da) * 0.8, 0.9, 4.6);
-          best = { score, ang: Math.atan2(ax, az), speed };
-        }
+        const need = Math.sqrt(2 * 0.45 * dp) + 0.35;
+        const speed = clamp(need / Math.max(cut * 0.96, 0.35) + Math.sqrt(2 * 0.45 * da) * 0.8, 0.9, 4.6);
+        const geo = cut * 2 - (da + dp) * 0.35 - bl * 2;
+        cands.push({ ang: Math.atan2(ax, az), speed, geo });
+        cands.push({ ang: Math.atan2(ax, az), speed: clamp(speed * 1.35, 0.9, 4.8), geo: geo - 0.2 });
       }
-    }
-    if (!best) {
-      // nada limpio: pegarle de lleno a la más cercana de las suyas
-      const opts = this.legal(k);
-      const b = opts.sort((p, q) => Math.hypot(p.x - c.x, p.z - c.z) - Math.hypot(q.x - c.x, q.z - c.z))[0];
-      best = { ang: b ? Math.atan2(b.x - c.x, b.z - c.z) : 0, speed: 2.2, score: -9 };
+      cands.push({ ang: Math.atan2(b.x - c.x, b.z - c.z), speed: 2.2, geo: -3 });
     }
     // apertura: romper fuerte
-    if (T.balls.every((b) => b.on) && Math.abs(c.x + T.hx / 2) < 0.01) best.speed = 4.8;
-    const err = (1 - this.skill) * 0.05 + 0.006;
-    best.ang += (Math.random() + Math.random() - 1) * err;
+    const breakShot = T.balls.every((b) => b.on) && Math.abs(c.x + T.hx / 2) < 0.01;
+    if (breakShot) cands.splice(0, cands.length, { ang: Math.PI / 2 + (withError ? (Math.random() - 0.5) * 0.02 : 0), speed: 4.8, geo: 0 });
+    // se prueba cada tiro con la misma física de la mesa y se queda con el que mejor sale
+    // (los mejores por geometría primero, para no simular de más)
+    cands.sort((p, q) => q.geo - p.geo);
+    let best = null;
+    for (const cd of cands.slice(0, 14)) {
+      cd.score = this.evalShot(k, cd.ang, cd.speed) + cd.geo * 0.5;
+      if (!best || cd.score > best.score) best = cd;
+    }
+    if (!best) best = { ang: 0, speed: 2.2, score: -999 };
+    best = { ...best };
+    if (withError) {
+      const err = (1 - this.skill) * 0.05 + 0.006;
+      best.ang += (Math.random() + Math.random() - 1) * err;
+    }
     return best;
+  }
+
+  // Cómo sale un tiro para el jugador k (simulado sin tocar la mesa de verdad)
+  evalShot(k, ang, speed) {
+    const T = this.T, mine = this.group[k];
+    const S = T.simulate(Math.sin(ang) * speed, Math.cos(ang) * speed);
+    const leftBefore = mine ? T.balls.filter((b) => b.on && groupOf(b.i) === mine).length : -1;
+    const potted = S.pottedOrder;
+    if (potted.includes(8)) return leftBefore === 0 && !S.scratched && S.firstHit === 8 ? 1000 : -1000;
+    const foul = S.scratched || S.firstHit === null || (mine ? (leftBefore === 0 ? S.firstHit !== 8 : groupOf(S.firstHit) !== mine) : S.firstHit === 8);
+    if (foul) return -100;
+    const own = potted.filter((i) => (mine ? groupOf(i) === mine : groupOf(i))).length;
+    const theirs = mine ? potted.filter((i) => groupOf(i) && groupOf(i) !== mine).length : 0;
+    return own * 50 - theirs * 10;
   }
 
   // Al empezar tu turno el taco apunta a un tiro razonable (como en los juegos de pool)
   aimAtBest() {
-    const p = this.aiPlan(0);
+    const p = this.aiPlan(0, false);
     this.aim = p.ang;
   }
 
@@ -391,7 +434,7 @@ export class PoolMatch {
     const g = this.game, cam = g.camera, O = this.ints.origin, T = this.T, c = T.balls[0];
     const bx = O.x + this.def.x + c.x, bz = O.z + this.def.z + c.z, y = O.y + SURF;
     const dx = Math.sin(this.aim), dz = Math.cos(this.aim);
-    const behind = this.turn === 0 && (this.state === 'aim' || this.state === 'stroke') && this.view === 0;
+    const behind = this.behindView();
     if (behind) {
       this.camPos.set(bx - dx * 1.05, y + 0.42, bz - dz * 1.05);
       this.camLook.set(bx + dx * 0.9, y, bz + dz * 0.9);
@@ -412,8 +455,8 @@ export class PoolMatch {
   }
 
   dispose() {
-    this.guide.removeFromParent(); this.ghost.removeFromParent();
-    this.guide.geometry.dispose();
+    this.guide.visible = this.ghost.visible = false;
+    this.me.e.root.visible = true;
     this.hud.remove();
   }
 }

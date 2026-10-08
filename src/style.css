@@ -279,3 +279,5 @@ body.is-touch .lanes { height: 200px; }
 .pool-power i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #4ad86a, #f2d020 60%, #e83a2a); }
 .pool-keys { margin-top: 6px; text-align: center; font-size: 12px; font-weight: normal; opacity: 0.85; }
 .pool-keys kbd, .pool-keys b { color: #9cd0ff; font-family: inherit; }
+/* en el celu, arriba: abajo están el joystick y los botones */
+body.is-touch .pool-hud { bottom: auto; top: calc(8px + env(safe-area-inset-top, 0px)); width: min(420px, calc(100vw - 300px)); }

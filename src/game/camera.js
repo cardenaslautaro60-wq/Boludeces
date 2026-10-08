@@ -93,8 +93,10 @@ export class CameraRig {
     const gh = g.terrain.heightAt(this.pos.x, this.pos.z) + 0.3;
     if (this.pos.y < gh) this.pos.y = gh;
     // sobre el agua la cámara no se moja; buceando va abajo con el jugador
-    if (p.diving && !inCar) { if (this.pos.y > -0.25 && g.terrain.heightAt(this.pos.x, this.pos.z) < 0) this.pos.y = -0.25; }
-    else if (this.pos.y < 0.3 && g.terrain.heightAt(this.pos.x, this.pos.z) < 0) this.pos.y = 0.3;
+    // (mismo umbral que la vista bajo el agua; y nunca por debajo del terreno)
+    const th = g.terrain.heightAt(this.pos.x, this.pos.z);
+    if (p.diving && !inCar && th < -0.5) this.pos.y = Math.max(gh, Math.min(this.pos.y, -0.25));
+    else if (this.pos.y < 0.3 && th < 0) this.pos.y = 0.3;
 
     cam.position.copy(this.pos);
     if (this.shake > 0) {

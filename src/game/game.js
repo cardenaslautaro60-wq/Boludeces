@@ -300,6 +300,8 @@ export class Game {
 
   canSwitch() {
     if (!this.companionActive || this.companion.dead || this.companion.hidden) return false;
+    // adentro de un local solo si el otro entró con vos (si no, quedaría en un cuarto invisible)
+    if (this.interiors && this.interiors.inside && !this.interiors.companionIn) return false;
     if (this.missions && this.missions.active && !this.missions.active.allowSwitch) return false;
     return true;
   }
@@ -307,6 +309,7 @@ export class Game {
   switchCharacter() {
     const a = this.player, b = this.companion;
     a.isPlayer = false; b.isPlayer = true;
+    a.diving = false; a.swimUp = 0; // el que queda como compañero sale a flote
     a.brain = new Brain(this, a, 'follow');
     b.brain = null;
     a.isFriend = true; b.isFriend = false;
@@ -337,7 +340,10 @@ export class Game {
   }
 
   revive(p) {
-    p.dead = false; p.health = p.maxHealth; p.deadT = 0; p.knockT = 0; p.model.anim.dead = 0;
+    p.dead = false; p.health = p.maxHealth; p.deadT = 0; p.knockT = 0; p.model.anim.dead = 0; p.model.anim.bp = 0;
+    // sin restos del movimiento de antes (rolido, buceo, trepada)
+    p.rollT = 0; p.landT = 0; p.leap = false; p.climb = null; p.vx = p.vz = p.vy = 0;
+    p.diving = false; p.swimUp = 0; p.oxygen = 100; p.drownT = 0; p.sprintBoost = 0;
   }
 
   // ---------- Entidades ----------
@@ -525,7 +531,6 @@ export class Game {
     this.env.update(dt, this.camera.position, this.time);
     if (this.realSky) this.realSky.update(dt);
     this.interiors.applyLight();
-    this.underwaterLook();
     this.controller.update(dt, this.input);
     // entidades
     for (let i = 0; i < this.peds.length; i++) {
@@ -535,9 +540,11 @@ export class Game {
       q.update(dt);
       if (q.say) { q.say.t -= dt; if (q.say.t <= 0) q.say = null; }
     }
+    // adentro de un local la calle queda quieta: los autos no se mueven (su IA tampoco corre)
+    const frozen = !!this.interiors.inside;
     for (let i = 0; i < this.vehicles.length; i++) {
       const v = this.vehicles[i];
-      if (v.removed) continue;
+      if (v.removed || frozen) continue;
       const dCam = Math.abs(v.pos.x - this.camera.position.x) + Math.abs(v.pos.z - this.camera.position.z);
       if (dCam > 500 && !v.driver && !v.persistent) continue; // congelar autos lejanos estacionados
       v.update(dt);
@@ -565,7 +572,7 @@ export class Game {
     this.world.updateVisibility(this.camera.position, dt);
     // jugador muerto / ahogado
     if (p.dead && !this.respawning) this.wasted(false);
-    if (p.vehicle && p.vehicle.sinking > 1.5) { p.exitVehicle(); this.effects.splash(p.pos.x, p.pos.z); }
+    if (p.vehicle && p.vehicle.sinking > 1.5) { p.exitVehicle(); this.effects.splash(p.pos.x, p.pos.z); this.audio.stopRadio(); }
     // zona
     this.zoneT = (this.zoneT || 0) - dt;
     if (this.zoneT <= 0) {
@@ -577,6 +584,7 @@ export class Game {
     if (this.police.level >= 4) { this.chaseOffT = 0; if (!this.audio.chase) this.audio.startChase(); }
     else if (this.audio.chase) { this.chaseOffT = (this.chaseOffT || 0) + dt; if (this.chaseOffT > 3) this.audio.stopChase(); }
     this.cameraRig.update(dt, this.input);
+    this.underwaterLook(); // después de mover la cámara: si no, al zambullirse parpadea un cuadro
     this.hud.update(dt);
     this.audio.update(dt, this);
     this.menus.checkInGameKeys();
@@ -597,11 +605,26 @@ export class Game {
     this.waterCeil.visible = under;
     // desde abajo la superficie del mar se ve con ruido: se la reemplaza por el "techo" de agua
     if (this.world.water) this.world.water.visible = !under;
+    // el cielo no lleva niebla: bajo el agua se esconde (si no, se ve una franja clara en el horizonte)
+    const rs = this.realSky;
+    if (under !== !!this.wasUnder) {
+      this.wasUnder = under;
+      if (!under) {
+        this.scene.background = null;
+        this.env.sky.visible = !rs;
+        if (rs) rs.sky.visible = true;
+      }
+    }
     if (!under) return;
+    this.env.sky.visible = false;
+    if (rs) { rs.sky.visible = false; if (rs.flare) rs.flare.visible = false; }
     this.waterCeil.position.set(c.x, -0.05, c.z);
+    const light = 0.35 + this.env.dayLight * 0.65;
+    this.waterCeil.material.color.setHex(0x2a7a88).multiplyScalar(0.2 + this.env.dayLight * 0.8);
     const f = this.env.fog;
-    f.color.setRGB(0.05, 0.2, 0.24).multiplyScalar(0.35 + this.env.dayLight * 0.65);
+    f.color.setRGB(0.05, 0.2, 0.24).multiplyScalar(light);
     f.near = 0.5; f.far = 26;
+    this.scene.background = f.color;
   }
 
   updateLighting() {
