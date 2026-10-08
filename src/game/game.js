@@ -21,6 +21,9 @@ import { Cheats } from './cheats.js';
 import { NPCs } from './npcs.js';
 import { WorldEvents } from './events.js';
 import { Vida } from './vida.js';
+import { Saltos } from './saltos.js';
+import { Densidad } from './densidad.js';
+import { Cruces } from './cruces.js';
 import { SaveSystem } from './save.js';
 import { Brain } from './ai.js';
 import { HUD } from '../ui/hud.js';
@@ -108,6 +111,9 @@ export class Game {
     this.input.onType = (s) => this.cheats.check(s);
     if (this.touch.enabled) { this.traffic.max = 10; this.traffic.maxParked = 8; this.population.max = 12; }
     this.vida = new Vida(this);
+    this.saltos = new Saltos(this);
+    this.densidad = new Densidad(this);
+    this.cruces = new Cruces(this);
     this.audio.onTalk = (who, line) => { if (this.player && this.player.vehicle && !this.paused) this.hud.radioCaption(who, line, 8); };
     this.audio.onChase = (title) => {
       this.hud.radio.style.color = '#ff4a2a';
@@ -289,7 +295,7 @@ export class Game {
         const hits = rc.intersectObjects(g.scene.children, true).filter((h) => h.object.visible);
         return hits.slice(0, 4).map((h) => { const o = h.object; const path = []; for (let q = o; q; q = q.parent) path.push(q.type + (q.name ? ':' + q.name : '')); return { d: +h.distance.toFixed(1), type: o.type, mat: [].concat(o.material).map((m) => m && (m.type + (m.map ? '+map' : '') + (m.vertexColors ? '+vc' : '') + ' #' + (m.color ? m.color.getHexString() : ''))), verts: o.geometry && o.geometry.attributes.position.count, path: path.slice(0, 4).join('<'), ud: Object.keys(o.userData || {}) }; });
       },
-      state() { const p = g.player; return { pos: [p.pos.x, p.pos.y, p.pos.z].map((v) => +v.toFixed(1)), veh: p.vehicle && p.vehicle.key, hp: p.health, money: g.money, wanted: g.police.level, mission: g.missions.active && g.missions.active.def.id, fps: +g.fps.toFixed(1) }; },
+      state() { const p = g.player; return { pos: [p.pos.x, p.pos.y, p.pos.z].map((v) => +v.toFixed(1)), veh: p.vehicle && p.vehicle.key, hp: p.health, money: g.money, wanted: g.police.level, mission: g.missions.active && g.missions.active.def.id, fps: +g.fps.toFixed(1), densidad: g.densidad.info() }; },
     };
   }
 
@@ -481,7 +487,8 @@ export class Game {
     if (this.menus) this.menus.update(dt);
     if (this.touch) this.touch.update();
     this.audio.setPaused(this.paused || !this.started);
-    if (!this.paused && this.started) this.update(dt);
+    // cámara lenta (saltos únicos): el mundo va más despacio, la interfaz no
+    if (!this.paused && this.started) this.update(dt * (this.timeScale || 1));
     else if (this.menus && this.menus.attract) this.attract(dt);
     this.render();
     this.input.endFrame();
@@ -527,6 +534,8 @@ export class Game {
     }
     this.collidePedsVehicles(dt);
     this.collideVehicles();
+    this.densidad.update(dt);
+    this.cruces.update(dt);
     this.traffic.update(dt);
     this.population.update(dt);
     this.vida.update(dt);
@@ -576,6 +585,18 @@ export class Game {
     cm.setLights(eCars);
     cm.setEnvIntensity(0.25 + this.env.dayLight * 0.8);
     // carteles un poco apagados de noche
+  }
+
+  // Filtro de color de la cámara según la hora y el clima (timecycle.js). Se normaliza por el
+  // brillo para que tiña sin oscurecer ni aclarar.
+  applyFilter() {
+    const f = this.env && this.env.filter;
+    const u = this.post.mat.uniforms;
+    if (!f) return;
+    const lum = f.x * 0.299 + f.y * 0.587 + f.z * 0.114 || 1;
+    const r = 1 + (f.x / lum - 1) * f.w, gg = 1 + (f.y / lum - 1) * f.w, b = 1 + (f.z / lum - 1) * f.w;
+    if (u.uFilter) u.uFilter.value.set(r, gg, b);
+    else if (u.uTint) u.uTint.value.set(1.04 * r, gg, 0.94 * b);
   }
 
   collidePedsVehicles(dt) {
@@ -676,6 +697,7 @@ export class Game {
 
   render() {
     this.post.mat.uniforms.uTrail.value = this.settings.ps2 ? 0.33 : 0;
+    this.applyFilter();
     this.post.render(this.scene, this.camera);
   }
 }

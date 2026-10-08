@@ -289,7 +289,7 @@ export class Menus {
         ${row('Veces que te hicieron bolsa', S.deaths)}
         ${row('Veces que caíste en cana', S.arrests)}
         ${row('Bolsitas de La Anómala', `${S.bags} de 24`)}
-        ${row('Saltos únicos', `${S.jumps} de 6`)}
+        ${row('Saltos únicos', `${S.jumps} de ${g.terrain.ramps.length}`)}
         ${row('Viajes de remís', S.fares)}
         ${row('Mejor sesión de malabares', '$' + S.juggleBest)}
         ${row('Plata ganada en total', formatMoney(S.cashEarned))}

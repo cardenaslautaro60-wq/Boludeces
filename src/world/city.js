@@ -151,7 +151,12 @@ export class City {
 
     this.computeTrims();
     this.buildSidewalks();
-    for (const r of RAMPS) this.reserve({ cx: r.x, cz: r.z, ax: Math.cos(r.rot), az: -Math.sin(r.rot), hw: r.w / 2 + 3, hd: r.len / 2 + 6 });
+    for (const r of RAMPS) {
+      this.reserve({ cx: r.x, cz: r.z, ax: Math.cos(r.rot), az: -Math.sin(r.rot), hw: r.w / 2 + 3, hd: r.len / 2 + 6 });
+      // pista de aterrizaje del salto: sin casas ni árboles en los 50 m que siguen a la rampa
+      const f = r.len / 2 + 26;
+      this.reserve({ cx: r.x + Math.sin(r.rot) * f, cz: r.z + Math.cos(r.rot) * f, ax: Math.cos(r.rot), az: -Math.sin(r.rot), hw: 9, hd: 25 });
+    }
     for (const d of DECKS) this.reserve({ cx: d.cx, cz: d.cz, ax: d.ax, az: d.az, hw: d.hw, hd: d.hd });
     this.buildAreas(chunks, rng);
     this.buildSpecials(chunks, rng, T);

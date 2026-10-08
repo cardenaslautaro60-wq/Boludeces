@@ -48,7 +48,10 @@ export class Population {
     if (this.spawnT > 0) return;
     this.spawnT = 0.25;
     const n = this.count();
-    if (n < this.max * this.density) this.spawnCivilian(pp);
+    // cuánta gente según la zona y la hora (densidad.js); si sobra, se va la que no se ve
+    const want = this.max * this.density * (g.densidad ? g.densidad.cur.peds : 1);
+    if (n < want) this.spawnCivilian(pp);
+    else if (n > want + 3) this.thin(pp);
     this.spawnGangs(pp);
   }
 
@@ -62,10 +65,13 @@ export class Population {
     const cx = x - cam.x, cz = z - cam.z, cd = Math.hypot(cx, cz);
     const f = g.cameraRig.forward();
     if (cd < 45 && (cx * f.x + cz * f.z) / cd > 0.5) return;
-    const zt = g.world.zoneTypeAt(x, z);
     let kind = 'civil';
-    if ((zt === 'km' || zt === 'industrial' || zt === 'meseta') && chance(0.4)) kind = 'petrolero';
-    if (zt === 'rada' && chance(0.3)) kind = 'cheto';
+    if (g.densidad) kind = g.densidad.pedKind(x, z);
+    else {
+      const zt = g.world.zoneTypeAt(x, z);
+      if ((zt === 'km' || zt === 'industrial' || zt === 'meseta') && chance(0.4)) kind = 'petrolero';
+      if (zt === 'rada' && chance(0.3)) kind = 'cheto';
+    }
     const p = g.spawnPed(kind, x, z, { look: randomLook(kind), rot: rand(0, 6.28) });
     p.spawned = true;
     p.brain = new Brain(g, p, 'wander');
@@ -73,6 +79,21 @@ export class Population {
     if (kind === 'cheto') p.brain.hostile = false;
     if (chance(0.06)) { p.give('pistola', 20); }
     if (chance(0.05)) { p.give('bate'); p.setWeapon('bate'); }
+  }
+
+  // Saca un peatón lejano que no esté a la vista (cuando la zona se vacía)
+  thin(pp) {
+    const g = this.game;
+    const cam = g.camera.position, f = g.cameraRig.forward();
+    for (const p of g.peds) {
+      if (!p.spawned || p.removed || p.persistent || p.vehicle || p.turf || p.dead) continue;
+      const d = dist(p.pos.x, p.pos.z, pp.x, pp.z);
+      if (d < 35) continue;
+      const cx = p.pos.x - cam.x, cz = p.pos.z - cam.z, cd = Math.hypot(cx, cz) || 1;
+      if (d < 90 && (cx * f.x + cz * f.z) / cd > 0.3) continue;
+      g.removePed(p);
+      return;
+    }
   }
 
   spawnGangs(pp) {

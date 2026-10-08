@@ -22,10 +22,11 @@ const GradeShader = {
     uFlash: { value: 0 }, uGrey: { value: 0 }, uTrail: { value: 0 },
     uVig: { value: 0.28 }, uSat: { value: 1.12 }, uWarm: { value: 0.45 },
     uTime: { value: 0 }, uGrain: { value: 0.035 }, uCA: { value: 0.0022 },
+    uFilter: { value: new THREE.Vector3(1, 1, 1) },
   },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
   fragmentShader: `
-    uniform sampler2D tDiffuse; uniform float uFlash, uGrey, uVig, uSat, uWarm, uTime, uGrain, uCA; varying vec2 vUv;
+    uniform sampler2D tDiffuse; uniform float uFlash, uGrey, uVig, uSat, uWarm, uTime, uGrain, uCA; uniform vec3 uFilter; varying vec2 vUv;
     float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
     void main(){
       vec4 t = texture2D(tDiffuse, vUv);
@@ -37,6 +38,8 @@ const GradeShader = {
       float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
       c = max(mix(vec3(l), c, uSat), 0.0);
       c *= mix(vec3(1.0), vec3(1.05, 1.0, 0.93), uWarm);
+      // filtro de color de la hora y el clima (timecycle.js)
+      c *= uFilter;
       c = mix(c, vec3(l * 0.85), uGrey);
       vec2 d = vUv - 0.5;
       c *= 1.0 - dot(d, d) * uVig * 1.8;

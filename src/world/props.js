@@ -498,8 +498,14 @@ export class Props {
 
   buildRamps(terrain, colliders) {
     const gb = new GeoBuilder();
-    const col = hexColor(0x8a7a5a), side = hexColor(0x6a5a40);
+    // madera (la de siempre), tierra apisonada (en la meseta) y chapa sobre tambores (en el puerto)
+    const LOOK = {
+      madera: [hexColor(0x8a7a5a), hexColor(0x6a5a40)],
+      tierra: [hexColor(0x8d6c48), hexColor(0x6b5034)],
+      chapa: [hexColor(0x6f8790), hexColor(0x7a4a2a)],
+    };
     for (const r of terrain.ramps) {
+      const [col, side] = LOOK[r.kind] || LOOK.madera;
       const fx = r.fx, fz = r.fz, rx = fz, rz = -fx;
       const hl = r.len / 2, hw = r.w / 2;
       const P = (l, w, y) => [r.x + fx * l + rx * w, y, r.z + fz * l + rz * w];
@@ -511,8 +517,17 @@ export class Props {
       gb.quad(c0, c1, b1, b0, [0, 0], [1, 0], [1, 1], [0, 1], side);
       gb.tri(a0, c0, b0, [rx, 0, rz], [0, 0], [1, 0], [1, 1], side);
       gb.tri(a1, b1, c1, [-rx, 0, -rz], [0, 0], [1, 0], [1, 1], side);
-      // listones
-      for (let k = 1; k < 6; k++) {
+      if (r.kind === 'chapa') {
+        // tambores de 200 litros abajo de la punta
+        for (const w of [-hw + 0.7, 0, hw - 0.7]) {
+          const [tx, , tz] = P(hl - 0.6, w, b);
+          gb.box(tx - 0.3, tx + 0.3, b - 0.3, b + r.h - 0.05, tz - 0.3, tz + 0.3, hexColor(0x2f5f8a));
+        }
+      }
+      // listones (la de tierra tiene huellas de cubiertas)
+      if (r.kind === 'tierra') {
+        for (const w of [-1.2, 1.2]) gb.quad(P(-hl, w - 0.35, b + 0.03), P(hl, w - 0.35, b + r.h + 0.03), P(hl, w + 0.35, b + r.h + 0.03), P(-hl, w + 0.35, b + 0.03), [0, 0], [1, 0], [1, 1], [0, 1], side);
+      } else for (let k = 1; k < 6; k++) {
         const l = -hl + (k / 6) * r.len;
         const y = b + (r.h * k) / 6 + 0.03;
         gb.quad(P(l - 0.1, -hw, y), P(l + 0.1, -hw, y), P(l + 0.1, hw, y), P(l - 0.1, hw, y), [0, 0], [1, 0], [1, 1], [0, 1], side);
