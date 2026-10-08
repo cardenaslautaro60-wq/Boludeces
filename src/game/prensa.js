@@ -247,7 +247,7 @@ export class Prensa {
     if (ok && !v.dead && v.driver === c.cam) v.ai = new DriverAI(g, v, 'cruise', { speedMul: 1 });
   }
 
-  // Sin nada que cubrir: de vez en cuando hacen una nota de los baches cerca del jugador
+  // Sin nada que cubrir: de vez en cuando hacen una nota de algún bache de la ruta cerca del jugador
   idleNote(dt) {
     const g = this.game;
     if (g.missions && g.missions.active) return;

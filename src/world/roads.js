@@ -445,11 +445,11 @@ export class RoadNetwork {
         lb.tri(x, yc, z, x / 4, z / 4, x1, gy(x1, z1, yOff), z1, x1 / 4, z1 / 4, x0, gy(x0, z0, yOff), z0, x0 / 4, z0 / 4);
       }
     };
-    const EVERY = { calle: 45, avenida: 90, ruta: 240 };
+    // Muy pocos y solo en la ruta (pedido de Nicolás): uno cada ~1,5 km
+    const EVERY = { ruta: 1500 };
     this.edges.forEach((e, i) => {
       const every = EVERY[e.kind];
       if (!every || e.len < 14) return;
-      if (e.kind === 'calle' && !e.urban) return;
       const rnd = new RNG(7919 + i * 31);
       const n = Math.floor(e.len / every + rnd.next());
       const A = this.nodes[e.a];

@@ -19,7 +19,7 @@ const TIPS = [
   'Hay 24 bolsitas de La Anómala enganchadas en los alambrados. Juntalas todas.',
   'Subite a un remís y apretá 2 para laburar de remisero.',
   'En el semáforo de San Martín y Rivadavia el Pin hace malabares por monedas.',
-  'Cuidado con los baches: en los barrios hay pozos que te desarman el auto.',
+  'Cuidado con los baches de la ruta: son pocos, pero si los agarrás rápido te desarman el auto.',
   'Sintonizá ADNSUR Radio para enterarte de lo que pasa en la ciudad (y de lo que hiciste vos).',
   'Si armás lío, el móvil de ADNSUR llega a cubrirlo en vivo.',
   'La Madriguera es la cancha de Newbery. En 2004 todavía era de tierra.',

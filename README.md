@@ -76,12 +76,12 @@ Después de la nota de ADNSUR se leyeron los comentarios (ver `ideas/comentarios
 
 - **Bienvenida al empezar**: quién sos (el Pin, el malabarista del semáforo: "no es un virus, el payaso sos vos"), los controles básicos y que **se juega en el navegador, sin descargar nada** (también en la pantalla de carga y en la de inicio).
 - **"El Pin"**: así le dicen en el juego, en la intro, en el HUD y en la calle ("¿jodeme que ese es el Pin?").
-- **Calles rotas**: baches y pozos en las calles de barrio (y algunos en las avenidas y la ruta). Se ven, el auto pega un salto, pierde velocidad y, si vas muy rápido, se rompe.
+- **Baches en la ruta**: muy pocos, solo en la ruta (uno cada kilómetro y medio, más o menos). Se ven, el auto pega un salto, pierde velocidad y, si vas muy rápido, se rompe.
 - **La camiseta del Pin** ya no es tan blanca: está gastada y con manchas.
 - **Bandas de parodia**: *los Escarcha* (barrio San Martín) y *los Primavera* (Laprida), con nombres inventados, como Tenpesos o Don Crudo (no se usan apellidos de familias reales). Al entrar a un territorio aparece de quién es.
 - **Colectivos de 2004**: Patagonia Argentina y Diadema, con el cartel de la empresa y el destino.
 - **ADNSUR en el juego**:
-  - **El móvil de ADNSUR**: cuando hay un choque fuerte, una explosión, un tiroteo o una persecución con 3 estrellas o más, llega la chata de prensa; se bajan la cronista y el camarógrafo y salen **en vivo** (placa de "ADNSUR · EN VIVO" en pantalla). De vez en cuando también hacen una nota de los baches del barrio. Si los atacás, cortan la nota (y sale en las noticias).
+  - **El móvil de ADNSUR**: cuando hay un choque fuerte, una explosión, un tiroteo o una persecución con 3 estrellas o más, llega la chata de prensa; se bajan la cronista y el camarógrafo y salen **en vivo** (placa de "ADNSUR · EN VIVO" en pantalla). De vez en cuando también hacen una nota de algún bache de la ruta. Si los atacás, cortan la nota (y sale en las noticias).
   - **ADNSUR Radio**: una radio nueva con el noticiero de Comodoro, que cuenta lo que pasó en la ciudad (incluido lo que hiciste vos) y noticias del 2004.
   - Los periodistas son **personajes genéricos**: no se usan voces, caras ni nombres de periodistas reales sin su permiso. El noticiero va con subtítulos (o con la voz del navegador, si se elige en *Opciones*).
   - En la pausa, *Trucos*, se puede hacer aparecer el móvil de ADNSUR.
