@@ -430,8 +430,8 @@ export class RoadNetwork {
       }
     }
 
-    // Baches: "le faltaron las calles hechas m...". Más en las calles de barrio, algunos en las
-    // avenidas y pocos en la ruta; siempre en el mismo lugar (semilla fija por calle).
+    // Baches: muy pocos y solo en la ruta (pedido de Nicolás); siempre en el mismo lugar
+    // (semilla fija por tramo).
     this.potholes = [];
     this.potGrid = new Map();
     const rough = (mat, x, z, r, yOff, rnd) => {
@@ -445,11 +445,10 @@ export class RoadNetwork {
         lb.tri(x, yc, z, x / 4, z / 4, x1, gy(x1, z1, yOff), z1, x1 / 4, z1 / 4, x0, gy(x0, z0, yOff), z0, x0 / 4, z0 / 4);
       }
     };
-    const EVERY = { calle: 45, avenida: 90, ruta: 240 };
+    const EVERY = { ruta: 1500 };
     this.edges.forEach((e, i) => {
       const every = EVERY[e.kind];
       if (!every || e.len < 14) return;
-      if (e.kind === 'calle' && !e.urban) return;
       const rnd = new RNG(7919 + i * 31);
       const n = Math.floor(e.len / every + rnd.next());
       const A = this.nodes[e.a];
@@ -458,7 +457,7 @@ export class RoadNetwork {
         // en la mano de un lado o del otro (por donde pasan las ruedas)
         const off = rnd.sign() * e.width * rnd.range(0.12, 0.32);
         const x = A.x + e.dx * t - e.dz * off, z = A.z + e.dz * t + e.dx * off;
-        const r = rnd.range(0.45, e.kind === 'calle' ? 1.1 : 0.85);
+        const r = rnd.range(0.45, 0.85);
         rough('bacheBorde', x, z, r * 1.35, Y + 0.02, rnd);
         rough('bache', x, z, r, Y + 0.025, rnd);
         const pot = { x, z, r };

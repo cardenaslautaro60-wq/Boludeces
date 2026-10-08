@@ -145,7 +145,7 @@ export const ADNSUR = {
   ],
   generales: [
     'El viento de hoy: ráfagas de cien kilómetros por hora en el Centro. Agarren bien las puertas de los autos.',
-    'Vecinos de varios barrios reclaman por los baches. "Ya no son pozos, son piletas", dijo una vecina.',
+    'Camioneros reclaman por los baches de la ruta. "Ya no son pozos, son piletas", dijo uno.',
     'El barril sigue arriba y en el Km 3 no alcanzan las chatas. Las concesionarias tienen lista de espera.',
     'Corte de petroleros en la Ruta 3 a la altura del Km 8. Recomiendan salir con tiempo.',
     'Confirmado: el clásico Newbery–Huracán se juega este domingo. Habrá operativo especial en La Madriguera.',
@@ -162,7 +162,7 @@ export const ADNSUR = {
     explosion: ['Impresionante lo que se ve en {lugar}: un vehículo explotó hace instantes.', 'Todavía sale humo. Les pedimos a los vecinos que no se acerquen.', 'Nadie sabe bien qué pasó. Seguimos averiguando.'],
     muerto: ['Hecho de violencia en {lugar}. La policía ya está en camino.', 'Los testigos hablan de un gordo con camiseta del Lobo. No queremos sacar conclusiones.', 'Seguimos acá, en el lugar, para contarles todo.'],
     persecucion: ['¡Estamos siguiendo en vivo una persecución por {lugar}!', 'La policía está detrás de un sospechoso que maneja como si fuera el dueño de la ciudad.', 'Le pedimos al camarógrafo que no lo pierda... ¡no lo pierdas!'],
-    bache: ['Estamos en {lugar}, donde un bache ya tiene nombre propio entre los vecinos.', 'Se tragó dos ruedas esta semana. La Municipalidad no responde.'],
+    bache: ['Estamos en {lugar}, donde un bache de la ruta ya tiene nombre propio entre los camioneros.', 'Se tragó dos ruedas esta semana. Vialidad no responde.'],
   },
   // titulares que después repite la radio (y la placa de la tele)
   titular: {
