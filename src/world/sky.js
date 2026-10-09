@@ -1,21 +1,8 @@
 import * as THREE from 'three';
 import { clamp, lerp, smoothstep, noise2 } from '../util.js';
+import { sampleTimecycle, newSample } from './timecycle.js';
 
-// Paleta del cielo por hora (0..24)
-const KEYS = [
-  [0, 0x070b1c, 0x151c30, 0.16],
-  [5, 0x0d1330, 0x2a2a44, 0.2],
-  [6.3, 0x2a3566, 0x9a6a6a, 0.45],
-  [7.2, 0x4a6ea8, 0xe8a878, 0.8],
-  [9, 0x4d7fc4, 0xbccbd8, 1.0],
-  [13, 0x3f75c2, 0xc4d2de, 1.0],
-  [17.5, 0x4e79b8, 0xd2c8b0, 0.95],
-  [19.3, 0x3a4c88, 0xe89060, 0.75],
-  [20.3, 0x1c2352, 0x7a4a5a, 0.4],
-  [21.3, 0x0a1026, 0x1e2238, 0.2],
-  [24, 0x070b1c, 0x151c30, 0.16],
-];
-
+// Los colores del cielo, la luz y el filtro de cámara por hora y clima están en timecycle.js
 const SHADOW_R = 70;
 const WEATHER = {
   despejado: { name: 'Despejado', wind: 9, fogNear: 140, fogFar: 760, clouds: 0.15, dust: 0.0, snow: 0 },
@@ -165,26 +152,23 @@ export class Environment {
     const ang = 0.15 + (noise2(realT * 0.05, 1.1) - 0.5) * 0.6;
     this.windDir.set(Math.cos(ang), Math.sin(ang));
 
-    // colores
-    let i = 0;
-    while (i < KEYS.length - 2 && KEYS[i + 1][0] < h) i++;
-    const k0 = KEYS[i], k1 = KEYS[i + 1];
-    const t = clamp((h - k0[0]) / (k1[0] - k0[0]), 0, 1);
-    this.tmpTop.setHex(k0[1]).lerp(this.tmpA.setHex(k1[1]), t);
-    this.tmpHor.setHex(k0[2]).lerp(this.tmpB.setHex(k1[2]), t);
-    const light = lerp(k0[3], k1[3], t);
+    // colores: la fila de la hora en la tabla del clima actual, mezclada con la del que viene
+    const tc = sampleTimecycle(this.weather, this.weatherTarget, this.weatherT, h, this.tc || (this.tc = newSample()));
+    this.tmpTop.copy(tc.top);
+    this.tmpHor.copy(tc.hor);
+    const light = tc.light;
     this.dayLight = light;
     this.night = clamp(1 - (light - 0.16) / 0.5, 0, 1);
+    // filtro de color de la cámara (lo aplica el postproceso)
+    this.filter = tc.filter;
 
     const clouds = this.current('clouds');
     const dust = clamp(this.current('dust') + this.extraDust, 0, 1);
     this.dust = dust;
     this.snow = this.current('snow');
-    const grey = this.tmpA.setRGB(0.62, 0.64, 0.66).multiplyScalar(light);
-    this.tmpTop.lerp(grey, clouds * 0.55);
-    this.tmpHor.lerp(grey, clouds * 0.4);
+    // el polvo de los eventos (ráfagas, temporal de tierra) tiñe el horizonte encima de la tabla
     const dustCol = this.tmpB.setRGB(0.66, 0.56, 0.4).multiplyScalar(0.35 + light * 0.65);
-    this.tmpHor.lerp(dustCol, dust * 0.7);
+    this.tmpHor.lerp(dustCol, this.extraDust * 0.7);
 
     const U = this.skyUniforms;
     U.uTop.value.copy(this.tmpTop);
@@ -201,7 +185,7 @@ export class Environment {
     const sx = -Math.cos(sunAng), sy = Math.max(elev, -0.3) * (this.realSun ? 0.78 : 1), sz = this.realSun ? -0.62 : 0.35;
     U.uSunDir.value.set(sx, sy, sz).normalize();
     const low = 1 - smoothstep(0.0, 0.35, elev);
-    U.uSunColor.value.setRGB(1, lerp(0.92, 0.55, low), lerp(0.8, 0.35, low));
+    U.uSunColor.value.setRGB(tc.sun.r, lerp(0.92, 0.55, low) * tc.sun.g, lerp(0.8, 0.35, low) * tc.sun.b);
 
     this.fog.color.copy(this.tmpHor);
     this.fog.near = lerp(this.current('fogNear'), 8, this.extraDust) * this.fogScale;

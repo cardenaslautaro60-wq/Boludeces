@@ -97,10 +97,14 @@ export class World {
     this.culler.addTree(city.group);
     this.culler.addTree(this.roadMesh);
     this.culler.addTree(props.group);
+    // carga por sectores: cerca el detalle, lejos una caja por edificio (sectores.js)
+    this.sectores = city.sectores;
+    this.sectores.build(g.scene);
+    this.sectores.claim(this.culler, (o) => o.userData.sector);
     // memoria: los acumuladores de la ciudad ya no hacen falta, y la geometría fija se
     // queda solo en la placa de video
     city.chunks = null; city.lean = null;
-    for (const r of [this.terrainMesh, this.roadMesh, city.group, props.group, this.water]) releaseAfterUpload(r);
+    for (const r of [this.terrainMesh, this.roadMesh, city.group, props.group, this.water, this.sectores.group]) releaseAfterUpload(r);
     this.zoneCache = { x: 1e9, z: 1e9, name: '' };
     this.timings.push(['fin', Math.round(performance.now() - t0), mem()]);
   }
@@ -118,34 +122,70 @@ export class World {
     }
   }
 
-  // Rampas de saltos únicos al final de calles sin salida cerca de lugares lindos
+  // Rampas de saltos únicos al final de calles sin salida: primero las de los lugares lindos
+  // (en el mismo orden de siempre, para no mezclar las partidas guardadas) y después otras
+  // repartidas por todo el mapa, cada una lo más lejos posible de las demás
   placeRamps(roads, terrain) {
     RAMPS.length = 0;
-    const targets = ['miradorChenque', 'rada', 'puerto', 'museoPetroleo', 'aeropuerto', 'caleta', 'madriguera', 'puntaMarques'];
+    const esc = Math.max(0.5, META.escala || 1);
+    const SIZE = { madera: [14, 4.2], tierra: [16, 4.6], chapa: [12, 4] };
+    const WB = this.game.worldBounds;
+    const kindOf = (e, x, z) => {
+      if (e.kind === 'tierra') return 'tierra';
+      const pu = LANDMARKS.puerto;
+      if (pu && Math.hypot(pu.x - x, pu.z - z) < 300 * esc) return 'chapa';
+      return 'madera';
+    };
+    // ¿se puede saltar desde esta punta? piso parejo bajo la rampa y una pista de aterrizaje
+    // libre (sin mar, sin calles y sin una loma enfrente) de 20 a 60 m más allá
+    const spot = (n) => {
+      const e = roads.edges[n.edges[0]];
+      if (e.kind === 'ruta' || e.kind === 'peatonal' || e.kind === 'muelle' || e.len < 20) return null;
+      const o = roads.nodes[roads.otherNode(e, n.id)];
+      const dx = (n.x - o.x) / e.len, dz = (n.z - o.z) / e.len;
+      const kind = kindOf(e, n.x, n.z);
+      const [len] = SIZE[kind];
+      let lo = Infinity, hi = -Infinity;
+      for (let s = 1; s <= len + 1; s += 2) { const h = terrain.heightAt(n.x + dx * s, n.z + dz * s); lo = Math.min(lo, h); hi = Math.max(hi, h); }
+      if (lo < 1.5 || hi - lo > 1.6) return null;
+      for (let s = len + 20; s <= len + 60; s += 8) {
+        const x = n.x + dx * s, z = n.z + dz * s, hh = terrain.heightAt(x, z);
+        if (!WB.inside(x, z, 60) || hh < 1 || hh > hi + 2.5 || hh < lo - 12 || roads.clearance(x, z, 12) < 7) return null;
+      }
+      return { n, e, dx, dz, kind };
+    };
     const used = [];
-    for (const k of targets) {
+    const add = (c, place) => {
+      const [len, h] = SIZE[c.kind];
+      used.push([c.n.x, c.n.z]);
+      RAMPS.push({ x: c.n.x + c.dx * (len / 2 + 1), z: c.n.z + c.dz * (len / 2 + 1), rot: Math.atan2(c.dx, c.dz), len, h, w: 7, kind: c.kind, place });
+    };
+    const ends = roads.nodes.filter((n) => n.edges.length === 1).map(spot).filter(Boolean);
+    for (const k of ['miradorChenque', 'rada', 'puerto', 'museoPetroleo', 'aeropuerto', 'caleta', 'madriguera', 'puntaMarques']) {
       const L = LANDMARKS[k];
       if (!L) continue;
       let best = null, bd = 900;
-      for (const n of roads.nodes) {
-        if (n.edges.length !== 1) continue;
-        const d = Math.hypot(n.x - L.x, n.z - L.z);
-        if (d > bd) continue;
-        const e = roads.edges[n.edges[0]];
-        if (e.kind === 'ruta' || e.len < 20) continue;
-        const o = roads.nodes[roads.otherNode(e, n.id)];
-        const dx = (n.x - o.x) / e.len, dz = (n.z - o.z) / e.len;
-        // lugar libre más allá de la punta
-        const fx = n.x + dx * 25, fz = n.z + dz * 25;
-        if (terrain.heightAt(fx, fz) < 1 || roads.clearance(fx, fz, 20) < 6) continue;
-        if (used.some((u) => Math.hypot(u[0] - n.x, u[1] - n.z) < 150)) continue;
-        bd = d; best = { n, dx, dz };
+      for (const c of ends) {
+        const d = Math.hypot(c.n.x - L.x, c.n.z - L.z);
+        if (d > bd || used.some((u) => Math.hypot(u[0] - c.n.x, u[1] - c.n.z) < 150)) continue;
+        bd = d; best = c;
       }
-      if (!best) continue;
-      const { n, dx, dz } = best;
-      used.push([n.x, n.z]);
-      const len = 14, h = 3.4;
-      RAMPS.push({ x: n.x + dx * (len / 2 + 1), z: n.z + dz * (len / 2 + 1), rot: Math.atan2(dx, dz), len, h, w: 7 });
+      if (best) add(best, k);
+    }
+    // saltos nuevos: puntas con carrera larga, cada una la más alejada de las que ya hay
+    const cands = ends.filter((c) => c.e.len >= 35);
+    for (let k = 0; k < 10 && cands.length; k++) {
+      let best = -1, bd = 0;
+      for (let i = 0; i < cands.length; i++) {
+        const c = cands[i];
+        let d = Infinity;
+        for (const u of used) d = Math.min(d, Math.hypot(u[0] - c.n.x, u[1] - c.n.z));
+        if (d > bd) { bd = d; best = i; }
+      }
+      if (best < 0 || bd < 450 * esc) break;
+      const c = cands.splice(best, 1)[0];
+      const zn = this.game.zones && this.game.zones.zoneAt(c.n.x, c.n.z);
+      add(c, zn ? zn.name : c.e.name || '');
     }
   }
 
@@ -276,7 +316,13 @@ export class World {
     const g = this.game;
     const fogFar = g.env && g.env.fog ? g.env.fog.far : 760;
     const touch = g.touch && g.touch.enabled;
-    const maxDist = Math.min(fogFar + 60, touch ? 480 : 1300) * (g.settings && g.settings.quality < 0.7 ? 0.8 : 1);
+    const low = g.settings && g.settings.quality < 0.7;
+    const maxDist = Math.min(fogFar + 60, touch ? 480 : 1300) * (low ? 0.8 : 1);
+    // edificios con todo el detalle hasta "near"; más allá, las cajas de cada sector (en el
+    // celular llegan hasta donde llega el terreno, así la ciudad no se corta a los 480 m)
+    const near = touch ? 280 : low ? 340 : 420;
+    const far = touch ? Math.min(fogFar + 60, maxDist + 200) : maxDist;
+    this.sectores.update(cam, near, far, this.culler, maxDist);
     this.culler.update(cam, maxDist, dt);
     g.terrain.updateLOD(cam, maxDist, dt);
   }

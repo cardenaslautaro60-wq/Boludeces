@@ -176,6 +176,13 @@ export class Brain {
     if (!this.wp) {
       const w = this.sw;
       if (this.crossing) {
+        // esperar en la esquina a que corte el semáforo o no venga nadie (cruces.js)
+        const cr = g.cruces;
+        if (cr && !cr.canCross(w.e, w.toB ? w.e.a : w.e.b)) {
+          this.waitCross = (this.waitCross || 0) + dt;
+          if (this.waitCross < 20) { this.stop(); return; }
+        }
+        this.waitCross = 0;
         // primero cruzar al punto de la otra vereda en la misma esquina
         this.wp = this.lanePoint(w.e, w.side, !w.toB);
         this.crossing = false;

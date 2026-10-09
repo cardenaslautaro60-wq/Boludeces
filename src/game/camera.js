@@ -31,7 +31,9 @@ export class CameraRig {
       c.t = Math.min(1, (c.t || 0) + dt / (c.dur || 4));
       const k = c.ease ? c.t * c.t * (3 - 2 * c.t) : c.t;
       cam.position.lerpVectors(c.from, c.to, k);
-      this.target.lerpVectors(c.lookFrom || c.look, c.look, k);
+      // track: sigue con la mirada algo que se mueve (el auto en un salto)
+      if (c.track) this.target.set(c.track.pos.x, c.track.pos.y + 1, c.track.pos.z);
+      else this.target.lerpVectors(c.lookFrom || c.look, c.look, k);
       cam.lookAt(this.target);
       cam.fov = lerp(cam.fov, c.fov || 55, 0.1);
       cam.updateProjectionMatrix();
@@ -117,7 +119,7 @@ export class CameraRig {
   }
 
   startCinematic(from, to, look, dur = 4, opts = {}) {
-    this.cinematic = { from: from.clone(), to: to.clone(), look: look.clone(), lookFrom: opts.lookFrom ? opts.lookFrom.clone() : null, dur, t: 0, ease: true, fov: opts.fov };
+    this.cinematic = { from: from.clone(), to: to.clone(), look: look.clone(), lookFrom: opts.lookFrom ? opts.lookFrom.clone() : null, dur, t: 0, ease: true, fov: opts.fov, track: opts.track || null };
   }
 
   endCinematic() {
