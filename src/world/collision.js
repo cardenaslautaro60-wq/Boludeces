@@ -69,7 +69,7 @@ export class StaticColliders {
     const list = this.near(p.x - r, p.x + r, p.z - r, p.z + r, this._tmp || (this._tmp = []));
     let hit = false;
     for (const c of list) {
-      if (yFeet + height < c.y0 || yFeet > c.y1 - 0.35) continue;
+      if (c.tag === 'techo' || yFeet + height < c.y0 || yFeet > c.y1 - 0.35) continue;
       if (c.type === 'box') {
         const cx = Math.max(c.x0, Math.min(p.x, c.x1));
         const cz = Math.max(c.z0, Math.min(p.z, c.z1));
@@ -131,7 +131,7 @@ export class StaticColliders {
     let result = null;
     const rx = o.fz, rz = -o.fx; // eje lateral
     for (const c of list) {
-      if (o.y + o.h < c.y0 || o.y > c.y1 - 0.4) continue;
+      if (c.tag === 'techo' || o.y + o.h < c.y0 || o.y > c.y1 - 0.4) continue;
       let best = null;
       if (c.type === 'box') {
         // SAT con 4 ejes: X, Z, adelante, lateral

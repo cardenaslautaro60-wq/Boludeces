@@ -26,6 +26,8 @@ export class CameraRig {
   update(dt, input) {
     const g = this.game;
     const cam = this.camera;
+    // un minijuego maneja la cámara (el pool del Draw)
+    if (this.custom && !this.cinematic) { this.custom(dt, input); return; }
     if (this.cinematic) {
       const c = this.cinematic;
       c.t = Math.min(1, (c.t || 0) + dt / (c.dur || 4));
@@ -64,7 +66,7 @@ export class CameraRig {
         this.pitch = lerp(this.pitch, 0.22, dt * 1.5);
       }
     } else if (p.swimming) {
-      ty = p.pos.y + 0.6;
+      ty = p.pos.y + (p.diving ? 0.15 : 0.6);
     }
     if (this.lookBack && inCar) { /* mirar atrás */ }
     const yaw = this.yaw + (this.lookBack && inCar ? Math.PI : 0);
@@ -90,7 +92,11 @@ export class CameraRig {
     this.pos.set(tx + dx * this.dist, ty + dy * this.dist, tz + dz * this.dist);
     const gh = g.terrain.heightAt(this.pos.x, this.pos.z) + 0.3;
     if (this.pos.y < gh) this.pos.y = gh;
-    if (this.pos.y < 0.3 && g.terrain.heightAt(this.pos.x, this.pos.z) < 0) this.pos.y = 0.3;
+    // sobre el agua la cámara no se moja; buceando va abajo con el jugador
+    // (mismo umbral que la vista bajo el agua; y nunca por debajo del terreno)
+    const th = g.terrain.heightAt(this.pos.x, this.pos.z);
+    if (p.diving && !inCar && th < -0.5) this.pos.y = Math.max(gh, Math.min(this.pos.y, -0.25));
+    else if (this.pos.y < 0.3 && th < 0) this.pos.y = 0.3;
 
     cam.position.copy(this.pos);
     if (this.shake > 0) {

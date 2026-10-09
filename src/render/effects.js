@@ -238,7 +238,8 @@ export class Effects {
     // polvo (o nieve, con la nevada)
     const w = env.windSpeed;
     const snow = env.snow || 0;
-    const dens = snow > 0.05 ? snow * 0.95 : clamp((w - 10) / 18, 0, 1) * 0.55 + env.dust * 0.4;
+    let dens = snow > 0.05 ? snow * 0.95 : clamp((w - 10) / 18, 0, 1) * 0.55 + env.dust * 0.4;
+    if (this.game.interiors && this.game.interiors.inside) dens = 0; // adentro de un local no nieva
     this.dust.material.opacity = dens;
     this.dust.visible = dens > 0.02;
     if (snow > 0.05 !== !!this.snowing) {

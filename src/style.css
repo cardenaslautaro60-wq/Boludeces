@@ -33,6 +33,7 @@ canvas.game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
 .hud-bar.health.low i { animation: blink 0.5s steps(2) infinite; }
 .hud-bar.armor i { background: linear-gradient(#f2f2f2, #9a9a9a); }
 .hud-bar.breath i { background: linear-gradient(#bcd8f2, #6a9ac8); }
+.hud-bar.breath.air i { background: linear-gradient(#7ae8ff, #1a8ad8); }
 @keyframes blink { 50% { opacity: 0.2; } }
 .hud-money { font: 38px var(--display); letter-spacing: 2px; color: var(--sa-money); -webkit-text-stroke: 1.6px #000; text-shadow: 3px 3px 0 #000; line-height: 1.05; font-variant-numeric: tabular-nums; }
 .hud-money.neg { color: #c42a1a; }
@@ -267,3 +268,16 @@ body.is-touch .lanes { height: 200px; }
 .cheats .cheat { flex: 1 1 140px; min-height: 44px; padding: 6px 10px; background: #1b1d22; border: 1px solid #3a3d44; color: #eee; font: bold 14px var(--body); text-align: left; cursor: pointer; border-radius: 4px; letter-spacing: 0; line-height: 1.25; -webkit-text-stroke: 0; text-shadow: none; }
 .cheats .cheat:hover, .cheats .cheat:focus { background: #2a3a55; border-color: #5a7ab0; outline: none; }
 .cheats .cheat small { display: block; font: 11px var(--body); color: #8aa0bc; letter-spacing: 0.04em; margin-top: 2px; }
+
+/* Minijuego de pool (Draw) */
+.pool-hud { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(560px, calc(100vw - 32px)); z-index: 6; pointer-events: none; font: bold 15px/1.3 var(--body); color: #f2f2f2; text-shadow: 0 1px 2px #000; }
+.pool-score { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 6px; }
+.pool-score span { background: rgba(0,0,0,0.6); padding: 4px 10px; border-radius: 2px; opacity: 0.6; }
+.pool-score span.on { opacity: 1; box-shadow: inset 0 -3px 0 #3ac8ff; }
+.pool-score span.bet { opacity: 1; color: #7cf08a; }
+.pool-power { height: 12px; background: rgba(0,0,0,0.6); border: 2px solid #111; transition: opacity 0.2s; }
+.pool-power i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #4ad86a, #f2d020 60%, #e83a2a); }
+.pool-keys { margin-top: 6px; text-align: center; font-size: 12px; font-weight: normal; opacity: 0.85; }
+.pool-keys kbd, .pool-keys b { color: #9cd0ff; font-family: inherit; }
+/* en el celu, arriba: abajo están el joystick y los botones */
+body.is-touch .pool-hud { bottom: auto; top: calc(8px + env(safe-area-inset-top, 0px)); width: min(420px, calc(100vw - 300px)); }

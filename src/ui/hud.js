@@ -369,9 +369,12 @@ export class HUD {
     this.healthBar.classList.toggle('low', hpPct < 0.25);
     this.armorBar.style.visibility = p.armor > 0 ? 'visible' : 'hidden';
     this.armorBar.firstChild.style.width = clamp(p.armor, 0, 100) + '%';
+    // barra de aire: buceando muestra el oxígeno (como en San Andreas); si no, el aliento al correr
+    const air = p.diving || (p.swimming && p.oxygen < 99.5);
     const showBreath = p.gait === 2 && p.stamina < 99 || p.swimming;
     this.breathBar.style.visibility = showBreath ? 'visible' : 'hidden';
-    this.breathBar.firstChild.style.width = clamp(p.stamina, 0, 100) + '%';
+    this.breathBar.firstChild.style.width = clamp(air ? p.oxygen : p.stamina, 0, 100) + '%';
+    if (air !== this.airShown) { this.airShown = air; this.breathBar.classList.toggle('air', air); }
     // plata (animada como en SA)
     this.shownMoney = this.shownMoney === undefined ? g.money : this.shownMoney;
     const diff = g.money - this.shownMoney;
