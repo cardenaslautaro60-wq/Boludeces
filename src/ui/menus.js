@@ -230,7 +230,7 @@ export class Menus {
     const inp = g.input;
     if (this.choiceEl || g.activities.mini) return;
     if (inp.was('pause')) this.openPauseMenu();
-    else if (inp.was('map')) { this.openPauseMenu(); this.openMap(); }
+    else if (inp.was('map')) this.openMap();
   }
 
   update(dt) {
@@ -238,11 +238,7 @@ export class Menus {
     const inp = g.input;
     // navegación del menú con teclado en pausa
     if (!this.mapEl.hidden) {
-      if (inp.was('pause') || inp.was('map')) {
-        this.mapEl.hidden = true;
-        if (this.mapFromGame) this.resume(); else this.pause.hidden = false;
-        inp.pressed.clear();
-      }
+      if (inp.was('pause') || inp.was('map')) this.closeMap();
       this.drawMap();
     }
     if (this.paneEl && inp.was('pause')) { this.closePane(); inp.pressed.clear(); }
@@ -511,30 +507,53 @@ export class Menus {
   buildMap() {
     const m = h('div', 'mapview', document.body);
     m.hidden = true;
-    m.innerHTML = '<canvas></canvas><div class="maptitle">San Jorge</div><div class="legend"></div><div class="maphint">Arrastrá para mover · ruedita o pellizco para zoom · tocá/clic para marcar destino · Esc para volver</div>';
+    m.innerHTML = '<canvas></canvas><div class="maptitle">San Jorge</div><div class="legend"></div>'
+      + '<button class="mapclose" aria-label="Cerrar mapa">✕</button>'
+      + '<div class="mapzoom"><button data-z="1" aria-label="Acercar">+</button><button data-z="-1" aria-label="Alejar">−</button></div>'
+      + '<div class="maphint">Arrastrá para mover · pellizcá o usá + / − para zoom · tocá para marcar destino · ✕ para cerrar</div>';
     this.mapEl = m;
     this.mapCanvas = m.querySelector('canvas');
     this.mapView = { cx: 0, cz: 0, zoom: 0.35 };
-    let drag = null, moved = false;
+    const zoomTo = (k) => { this.mapView.zoom = clamp(this.mapView.zoom * k, 0.12, 3); };
+    m.querySelector('.mapclose').addEventListener('click', () => this.closeMap());
+    m.querySelectorAll('.mapzoom button').forEach((b) => b.addEventListener('click', () => zoomTo(b.dataset.z > 0 ? 1.3 : 1 / 1.3)));
+    // arrastrar con un dedo (o el mouse); con dos dedos, pellizcar para zoom
+    let drag = null, moved = false, pinch = null;
+    const ptrs = new Map();
     const c = this.mapCanvas;
-    c.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, cx: this.mapView.cx, cz: this.mapView.cz }; moved = false; c.setPointerCapture(e.pointerId); });
+    const dist = () => { const [a, b] = [...ptrs.values()]; return Math.hypot(a.x - b.x, a.y - b.y) || 1; };
+    c.addEventListener('pointerdown', (e) => {
+      ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      c.setPointerCapture(e.pointerId);
+      if (ptrs.size === 2) { pinch = { d: dist(), zoom: this.mapView.zoom }; drag = null; moved = true; return; }
+      drag = { x: e.clientX, y: e.clientY, cx: this.mapView.cx, cz: this.mapView.cz }; moved = false;
+    });
     c.addEventListener('pointermove', (e) => {
+      const p = ptrs.get(e.pointerId);
+      if (!p) return;
+      p.x = e.clientX; p.y = e.clientY;
+      if (pinch && ptrs.size === 2) { this.mapView.zoom = clamp(pinch.zoom * dist() / pinch.d, 0.12, 3); return; }
       if (!drag) return;
       const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
       if (Math.abs(dx) + Math.abs(dy) > 5) moved = true;
       this.mapView.cx = drag.cx - dx / this.mapView.zoom;
       this.mapView.cz = drag.cz - dy / this.mapView.zoom;
     });
-    c.addEventListener('pointerup', (e) => {
-      if (drag && !moved) {
+    const up = (e) => {
+      const was = ptrs.size;
+      ptrs.delete(e.pointerId);
+      if (ptrs.size < 2) pinch = null;
+      if (was === 1 && drag && !moved && e.type === 'pointerup') {
         const r = c.getBoundingClientRect();
         const x = this.mapView.cx + (e.clientX - r.left - r.width / 2) / this.mapView.zoom;
         const z = this.mapView.cz + (e.clientY - r.top - r.height / 2) / this.mapView.zoom;
         this.setWaypoint(x, z);
       }
-      drag = null;
-    });
-    c.addEventListener('wheel', (e) => { e.preventDefault(); this.mapView.zoom = clamp(this.mapView.zoom * (e.deltaY < 0 ? 1.15 : 0.87), 0.12, 3); }, { passive: false });
+      if (ptrs.size === 0) drag = null;
+    };
+    c.addEventListener('pointerup', up);
+    c.addEventListener('pointercancel', up);
+    c.addEventListener('wheel', (e) => { e.preventDefault(); zoomTo(e.deltaY < 0 ? 1.15 : 0.87); }, { passive: false });
   }
 
   setWaypoint(x, z) {
@@ -549,6 +568,8 @@ export class Menus {
     const g = this.game;
     this.mapEl.hidden = false;
     this.mapFromGame = this.pause.hidden;
+    // desde el juego el mundo se frena mientras se mira el mapa
+    if (this.mapFromGame) { g.paused = true; g.audio.stopRadio(); }
     this.pause.hidden = true;
     const p = g.player;
     const pp = p.vehicle ? p.vehicle.pos : p.pos;
@@ -563,6 +584,15 @@ export class Menus {
     }
     html += '<div><span style="background:#ff40ff"></span>Destino marcado</div>';
     legend.innerHTML = html;
+  }
+
+  // Cierra el mapa: vuelve al juego si se abrió desde el juego, o al menú de pausa
+  closeMap() {
+    const g = this.game;
+    this.mapEl.hidden = true;
+    if (this.mapFromGame) this.resume(); else this.pause.hidden = false;
+    g.input.pressed.clear();
+    g.input.touch.pressed.clear();
   }
 
   // Nombres para el mapa: barrios reales (nivel 9) y lugares grandes
