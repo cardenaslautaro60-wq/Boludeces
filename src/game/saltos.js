@@ -15,6 +15,11 @@ export class Saltos {
     this.jump = null;
     this.hinted = false;
     this.ramps = game.terrain.ramps.map((r, i) => this.prepare(r, i));
+    // marcador en el mapa: una "S" en cada rampa, que se apaga cuando ya se hizo el salto
+    for (const R of this.ramps) {
+      R.blip = { x: R.r.x, z: R.r.z, letter: 'S', bg: '#e8b423', fg: '#000', name: 'Salto único', legend: true, salto: true };
+      game.blips.push(R.blip);
+    }
   }
 
   get done() { return this.game.activities.jumpsDone; }
@@ -45,6 +50,8 @@ export class Saltos {
   update(dt) {
     const g = this.game;
     const p = g.player;
+    // el marcador se apaga cuando ya se hizo ese salto (también al cargar una partida)
+    for (const R of this.ramps) R.blip.hidden = this.done.has(R.i);
     const v = p.vehicle;
     if (!v || v.driver !== p) { if (this.jump) this.finish(null); return; }
     if (!this.jump) {
