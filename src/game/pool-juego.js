@@ -185,14 +185,22 @@ export class PoolMatch {
     const fine = input.is('jump') ? 0.25 : 1;
     this.aim -= look.x * 0.55 * fine;
     this.aim -= ax * dt * 0.9 * fine;
-    // la carga empieza con un toque nuevo: el clic que captura el mouse no tira
+    // el que tira camina alrededor de la mesa hasta quedar atrás de la blanca
+    const st = this.stance(this.aim), tx = this.def.x + st.x, tz = this.def.z + st.z;
+    this.ints.walkTo(this.me, { x: tx, z: tz }, dt, this.def, 3.2);
+    // lejos = todavía caminando (con margen, para que mover un poco la mira no lo haga caminar)
+    this.meFar = Math.hypot(tx - this.me.e.x, tz - this.me.e.z) > (this.meFar ? 0.08 : 0.3);
+    const touch = this.game.touch && this.game.touch.enabled;
+    // en la vista de arriba no se tira mientras tu muñeco camina (si estabas cargando, se corta),
+    // y el clic que capturó el mouse no carga aunque el navegador avise tarde
+    const walking = this.meFar && !this.behindView();
+    if (walking || (this.chargeKey === 'fire' && input.lockGrab && !touch)) this.cancelCharge();
+    // la carga empieza con un toque nuevo
     if (!this.charging) {
-      const touch = this.game.touch && this.game.touch.enabled;
-      if (input.was('sprint')) this.chargeKey = 'sprint';
-      else if (input.was('fire') && (touch || !input.captureClick)) this.chargeKey = 'fire';
+      if (walking) this.chargeKey = null;
+      else if (input.was('sprint')) this.chargeKey = 'sprint';
+      else if (input.was('fire') && (touch || !(input.captureClick || input.lockGrab))) this.chargeKey = 'fire';
       else this.chargeKey = null;
-      // en la vista de arriba no se tira hasta que tu muñeco llegó atrás de la blanca
-      if (this.meFar && !this.behindView()) this.chargeKey = null;
     }
     const want = this.chargeKey && input.is(this.chargeKey);
     if (want) {
@@ -205,11 +213,6 @@ export class PoolMatch {
       if (this.power > 0.03) { this.speed = 0.35 + this.power * 4.9; this.startStroke(); }
       else this.power = 0;
     }
-    // el que tira camina alrededor de la mesa hasta quedar atrás de la blanca
-    const st = this.stance(this.aim), tx = this.def.x + st.x, tz = this.def.z + st.z;
-    this.ints.walkTo(this.me, { x: tx, z: tz }, dt, this.def, 3.2);
-    // lejos = todavía caminando (con margen, para que mover un poco la mira no lo haga caminar)
-    this.meFar = Math.hypot(tx - this.me.e.x, tz - this.me.e.z) > (this.meFar ? 0.08 : 0.3);
   }
 
   cancelCharge() { this.charging = false; this.chargeT = 0; this.chargeKey = null; this.power = 0; }
@@ -220,7 +223,7 @@ export class PoolMatch {
     this.state = 'stroke'; this.t = 0.16;
     this.strokeFrom = 0.06 + this.power * 0.22;
     if (this.turn === 0 && this.me.path) {
-      // tiraste antes de que tu muñeco llegara (vista de atrás, donde no se ve): queda en su lugar
+      // tiraste antes de que tu muñeco llegara (en la vista de atrás no se ve; en la de arriba ya estaba al lado): queda en su lugar
       const s = this.stance(this.aim), e = this.me.e;
       e.x = this.def.x + s.x; e.z = this.def.z + s.z; e.rot = this.aim;
       this.me.path = null;
@@ -466,6 +469,13 @@ export class PoolMatch {
 
   wait(pl, dt) {
     const e = pl.e, def = this.def;
+    if (!pl.home && this.state === 'plan') {
+      // el rival todavía está pensando el tiro: se queda quieto hasta saber de qué lado se para
+      pl.path = null; e.st.speed = 0;
+      e.st.cue = 0; e.st.holdCue = 1; e.st.stroke = 0;
+      this.ints.cueUpright(pl);
+      return;
+    }
     if (!pl.home) {
       // al costado de la mesa, del lado contrario al que tira
       const s = this.stance(this.aim);
