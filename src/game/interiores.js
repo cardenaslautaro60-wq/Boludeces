@@ -238,6 +238,8 @@ export class Interiors {
     const y = g.world.footGround(x, z);
     this.door = { x, z, y, face };
     this.origin = { x, y: y + ALTO, z };
+    // lo más alto donde se puede parar alguien adentro sin meter la cabeza en el techo
+    this.headroomY = this.origin.y + DRAW_H - 1.85;
     this.marker = new Marker(g, x, z, 0xff2a2a, { r: 0.95, h: 1.2 });
     this.ring = this.makeRing(x, y + 0.05, z, g.scene);
     g.blips.push({ x, z, letter: '8', bg: '#111', fg: '#fff', name: 'Draw Bar & Pool', legend: true });
@@ -545,7 +547,7 @@ export class Interiors {
     // (si muere adentro, el interior sigue a la vista hasta que reaparece en el hospital)
     if (!this.busy && (Math.abs(p.pos.y - O.y) > 8 || Math.abs(p.pos.x - O.x) > 40 || Math.abs(p.pos.z - O.z - 16) > 40)) { this.restore(); return; }
     // la cabeza no pasa del techo
-    const roof = O.y + DRAW_H - 1.85;
+    const roof = this.headroomY;
     if (p.pos.y > roof && !p.climb) { p.pos.y = roof; if (p.vy > 0) p.vy = 0; }
     const D = this.D;
     D.update(dt, g.env);

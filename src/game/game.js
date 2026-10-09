@@ -611,8 +611,9 @@ export class Game {
       this.wasUnder = under;
       if (!under) {
         this.scene.background = null;
-        this.env.sky.visible = !rs;
+        // en realista el cielo de noche lo maneja realSky cada cuadro (si se apaga acá, las estrellas parpadean)
         if (rs) rs.sky.visible = true;
+        else this.env.sky.visible = true;
       }
     }
     if (!under) return;
@@ -646,9 +647,12 @@ export class Game {
   }
 
   collidePedsVehicles(dt) {
+    // adentro de un local los autos de afuera quedan quietos: conservan la velocidad para cuando salís,
+    // pero no pisan a nadie ni llevan gente en el techo
+    const frozen = !!(this.interiors && this.interiors.inside);
     for (const v of this.vehicles) {
       if (v.removed) continue;
-      const sp = v.speed;
+      const sp = frozen ? 0 : v.speed;
       const f = v.fwd;
       const lx = f.z, lz = -f.x;
       for (const p of this.peds) {
@@ -662,7 +666,7 @@ export class Game {
         // arriba del techo (o trepando): no choca; si el auto anda, lo lleva ("surfear" el techo)
         if (p.climb) continue;
         if (p.pos.y > v.pos.y + v.type.H - 0.4) {
-          if (p.onGround && Math.abs(lf) < v.type.L / 2 && Math.abs(ll) < v.type.W / 2) { p.pos.x += v.vx * dt; p.pos.z += v.vz * dt; p.pos.y = Math.max(p.pos.y, v.pos.y + v.type.H); }
+          if (p.onGround && Math.abs(lf) < v.type.L / 2 && Math.abs(ll) < v.type.W / 2) { if (!frozen) { p.pos.x += v.vx * dt; p.pos.z += v.vz * dt; } p.pos.y = Math.max(p.pos.y, v.pos.y + v.type.H); }
           continue;
         }
         // dentro de la caja: ¿atropello o empujón?

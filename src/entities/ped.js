@@ -183,6 +183,8 @@ export class Ped {
       // adentro de un local no se salta por encima de nada que tenga un pozo atrás (la pared de afuera)
       const ins = this.game.interiors && this.game.interiors.inside;
       if (!onTop && ins && Math.max(this.topAt(ex, ez, top, true), W.footGround(ex, ez)) < y - 1.5) continue;
+      // ni a nada tan alto que la cabeza quede en el techo (las paredes): de ahí se terminaba afuera del local
+      if (ins && top > this.game.interiors.headroomY) continue;
       this.climb = { t: 0, dur: 0.3 + (top - y) * 0.2, x0: this.pos.x, y0: y, z0: this.pos.z, xm: x, zm: z, top, x1: ex, z1: ez, over: !onTop };
       this.vx = this.vz = this.vy = 0;
       this.onGround = false;

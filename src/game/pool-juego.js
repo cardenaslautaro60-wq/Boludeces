@@ -33,6 +33,7 @@ export class PoolMatch {
     this.skill = clamp(opts.skill || 0.6, 0, 1);
     this.camPos = new THREE.Vector3(); this.camLook = new THREE.Vector3();
     this.camInit = false;
+    this.lastBlurs = this.game.input.blurs || 0;
     T.rack();
     T.balls[0].x = -T.hx / 2;
     this.aimAtRack();
@@ -136,6 +137,7 @@ export class PoolMatch {
     const now = performance.now();
     if (this.lastFrame && now - this.lastFrame > 250) this.cancelCharge();
     this.lastFrame = now;
+    if ((input.blurs || 0) !== this.lastBlurs) { this.lastBlurs = input.blurs || 0; this.cancelCharge(); }
     this.t -= dt;
     // los dos jugadores: el que no tira espera con el taco parado
     const shooter = this.turn === 0 ? this.me : this.opp, waiter = this.turn === 0 ? this.opp : this.me;
@@ -145,7 +147,9 @@ export class PoolMatch {
     if (this.state === 'aim') {
       if (this.turn === 0) this.playerAim(dt, input, look);
       else this.aiAim(dt);
-      this.pose(shooter, dt, this.state === 'aim' ? 0.06 + (this.charging ? this.power * 0.22 : Math.sin(g.time * 3) * 0.02) : 0);
+      // vista de arriba: mientras tu muñeco todavía camina hasta la blanca, camina con el taco parado
+      if (this.state === 'aim' && this.turn === 0 && this.meFar && !this.behindView()) this.walkPose(this.me, dt);
+      else this.pose(shooter, dt, this.state === 'aim' ? 0.06 + (this.charging ? this.power * 0.22 : Math.sin(g.time * 3) * 0.02) : 0);
     } else if (this.state === 'stroke') {
       const k = 1 - this.t / 0.16;
       this.pose(shooter, dt, (this.strokeFrom || 0.1) * (1 - k) - 0.01);
@@ -153,6 +157,9 @@ export class PoolMatch {
     } else if (this.state === 'roll') {
       this.relax(shooter, dt);
       if (!T.moving() && T.balls[0].on) this.judge();
+    } else if (this.state === 'plan') {
+      this.relax(shooter, dt);
+      this.planStep();
     } else if (this.state === 'walk') {
       this.relax(shooter, dt);
       // el rival va hasta atrás de la blanca
@@ -182,8 +189,10 @@ export class PoolMatch {
     if (!this.charging) {
       const touch = this.game.touch && this.game.touch.enabled;
       if (input.was('sprint')) this.chargeKey = 'sprint';
-      else if (input.was('fire') && (input.locked || touch)) this.chargeKey = 'fire';
+      else if (input.was('fire') && (touch || !input.captureClick)) this.chargeKey = 'fire';
       else this.chargeKey = null;
+      // en la vista de arriba no se tira hasta que tu muñeco llegó atrás de la blanca
+      if (this.meFar && !this.behindView()) this.chargeKey = null;
     }
     const want = this.chargeKey && input.is(this.chargeKey);
     if (want) {
@@ -197,8 +206,10 @@ export class PoolMatch {
       else this.power = 0;
     }
     // el que tira camina alrededor de la mesa hasta quedar atrás de la blanca
-    const st = this.stance(this.aim);
-    this.ints.walkTo(this.me, { x: this.def.x + st.x, z: this.def.z + st.z }, dt, this.def, 3.2);
+    const st = this.stance(this.aim), tx = this.def.x + st.x, tz = this.def.z + st.z;
+    this.ints.walkTo(this.me, { x: tx, z: tz }, dt, this.def, 3.2);
+    // lejos = todavía caminando (con margen, para que mover un poco la mira no lo haga caminar)
+    this.meFar = Math.hypot(tx - this.me.e.x, tz - this.me.e.z) > (this.meFar ? 0.08 : 0.3);
   }
 
   cancelCharge() { this.charging = false; this.chargeT = 0; this.chargeKey = null; this.power = 0; }
@@ -208,6 +219,13 @@ export class PoolMatch {
   startStroke() {
     this.state = 'stroke'; this.t = 0.16;
     this.strokeFrom = 0.06 + this.power * 0.22;
+    if (this.turn === 0 && this.me.path) {
+      // tiraste antes de que tu muñeco llegara (vista de atrás, donde no se ve): queda en su lugar
+      const s = this.stance(this.aim), e = this.me.e;
+      e.x = this.def.x + s.x; e.z = this.def.z + s.z; e.rot = this.aim;
+      this.me.path = null;
+    }
+    this.meFar = false;
   }
 
   shoot() {
@@ -264,8 +282,24 @@ export class PoolMatch {
       this.aimAtBest();
       return;
     }
-    // el rival elige tiro y camina hasta la blanca
-    const plan = this.aiPlan();
+    // el rival piensa el tiro (de a poco, para no trabar la imagen) y después camina hasta la blanca
+    this.meFar = false;
+    this.cands = this.aiCands(1);
+    this.best = null;
+    this.state = 'plan';
+  }
+
+  // Prueba algunos tiros por cuadro con la física de la mesa (unos pocos milisegundos por cuadro)
+  planStep() {
+    const t0 = performance.now();
+    do {
+      const cd = this.cands.shift();
+      if (!cd) break;
+      cd.score = this.evalShot(1, cd.ang, cd.speed) + cd.geo * 0.5;
+      if (!this.best || cd.score > this.best.score) this.best = cd;
+    } while (this.cands.length && performance.now() - t0 < 4);
+    if (this.cands.length) return;
+    const plan = this.finishPlan(this.best, true);
     this.plan = plan;
     this.aim = plan.ang;
     const st = this.stance(plan.ang);
@@ -320,8 +354,8 @@ export class PoolMatch {
     return false;
   }
 
-  // El mejor tiro: bola propia hacia la tronera con el corte más derecho y libre
-  aiPlan(k = 1, withError = true) {
+  // Tiros posibles: bola propia hacia la tronera con el corte más derecho y libre (los mejores primero)
+  aiCands(k = 1) {
     const T = this.T, c = T.balls[0];
     // candidatos: cada bola propia a cada tronera (bola fantasma), y pegarle de lleno a cada una
     const cands = [];
@@ -341,24 +375,31 @@ export class PoolMatch {
       }
       cands.push({ ang: Math.atan2(b.x - c.x, b.z - c.z), speed: 2.2, geo: -3 });
     }
-    // apertura: romper fuerte
-    const breakShot = T.balls.every((b) => b.on) && Math.abs(c.x + T.hx / 2) < 0.01;
-    if (breakShot) cands.splice(0, cands.length, { ang: Math.PI / 2 + (withError ? (Math.random() - 0.5) * 0.02 : 0), speed: 4.8, geo: 0 });
-    // se prueba cada tiro con la misma física de la mesa y se queda con el que mejor sale
-    // (los mejores por geometría primero, para no simular de más)
     cands.sort((p, q) => q.geo - p.geo);
-    let best = null;
-    for (const cd of cands.slice(0, 14)) {
-      cd.score = this.evalShot(k, cd.ang, cd.speed) + cd.geo * 0.5;
-      if (!best || cd.score > best.score) best = cd;
-    }
-    if (!best) best = { ang: 0, speed: 2.2, score: -999 };
-    best = { ...best };
+    // se simulan solo los mejores por geometría, para no hacer cuentas de más
+    const top = cands.slice(0, 14);
+    // con todas las bolas en la mesa (por ejemplo, falta en la apertura) también se prueba romper fuerte contra el triángulo
+    if (T.balls.every((b) => b.on)) top.push({ ang: Math.atan2(T.hx / 2 - c.x, -c.z), speed: 4.8, geo: 0 });
+    return top;
+  }
+
+  finishPlan(best, withError) {
+    best = { ...(best || { ang: 0, speed: 2.2, score: -999 }) };
     if (withError) {
       const err = (1 - this.skill) * 0.05 + 0.006;
       best.ang += (Math.random() + Math.random() - 1) * err;
     }
     return best;
+  }
+
+  // El mejor tiro de una (se prueba cada uno con la misma física de la mesa)
+  aiPlan(k = 1, withError = true) {
+    let best = null;
+    for (const cd of this.aiCands(k)) {
+      cd.score = this.evalShot(k, cd.ang, cd.speed) + cd.geo * 0.5;
+      if (!best || cd.score > best.score) best = cd;
+    }
+    return this.finishPlan(best, withError);
   }
 
   // Cómo sale un tiro para el jugador k (simulado sin tocar la mesa de verdad)
@@ -377,8 +418,8 @@ export class PoolMatch {
 
   // Al empezar tu turno el taco apunta a un tiro razonable (como en los juegos de pool)
   aimAtBest() {
-    const p = this.aiPlan(0, false);
-    this.aim = p.ang;
+    const c = this.aiCands(0)[0];
+    if (c) this.aim = c.ang;
   }
 
   aimAtRack() { this.aim = Math.PI / 2; }
@@ -414,6 +455,13 @@ export class PoolMatch {
     const e = pl.e;
     e.st.cue = Math.max(0, (e.st.cue || 0) - dt * 1.5);
     if (e.st.cue < 0.5) { e.st.holdCue = 1; this.ints.cueUpright(pl); }
+  }
+
+  // Caminando alrededor de la mesa: piernas en movimiento (walkTo ya puso velocidad y rumbo) y taco parado
+  walkPose(pl, dt) {
+    const e = pl.e;
+    e.st.cue = 0; e.st.stroke = 0; e.st.holdCue = 1;
+    this.ints.cueUpright(pl);
   }
 
   wait(pl, dt) {
