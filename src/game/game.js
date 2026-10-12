@@ -123,9 +123,10 @@ export class Game {
       this.hud.radio.textContent = title ? `🤘 Novishok — ${title}` : '🤘 Persecución';
       this.hud.radio.classList.remove('show'); void this.hud.radio.offsetWidth; this.hud.radio.classList.add('show');
     };
-    this.audio.onRadioSong = (title) => {
+    this.audio.onRadioSong = (title, st) => {
       if (!this.player || !this.player.vehicle) return;
-      this.hud.showRadio(title ? `🤘 Novishok FM — ${title}` : 'Novishok FM — subí los temas en "Intro y música"');
+      if (st && st.temas) this.hud.showRadio(title ? `🎸 ${st.short} — ${title}` : `${st.short} — no se encontraron los temas`);
+      else this.hud.showRadio(title ? `🤘 Novishok FM — ${title}` : 'Novishok FM — subí los temas en "Intro y música"');
     };
     this.media.onChange(() => this.audio.setChaseSongs(this.media.songs()));
     this.audio.setChaseSongs(this.media.songs());

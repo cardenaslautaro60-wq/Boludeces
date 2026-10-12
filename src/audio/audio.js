@@ -6,6 +6,7 @@ import VOZ_BIN from './voces.bin';
 import VOZ_IDX from './voces.json';
 import { voiceKey, SPEAKERS } from './vozkey.js';
 import { BusSound } from './colectivo.js';
+import { RADIO_TEMAS, RADIO_BASES } from './radio-temas.js';
 
 const STATIONS = [
   { name: 'Radio Cumbia Villera 104.5', style: 'cumbia', color: '#ff5fd0' },
@@ -14,6 +15,8 @@ const STATIONS = [
   { name: 'Radio Chacarera Patagónica', style: 'folk', color: '#e8d23a' },
   { name: 'Tango del Viento AM 1210', style: 'tango', color: '#e84a4a' },
   { name: 'Novishok FM — thrash comodorense', style: 'novishok', color: '#ff3b2a' },
+  { name: 'Rock Local 92.7 — bandas de Comodoro', short: 'Rock Local', style: 'temas', temas: 'rock-local', color: '#ffb02a' },
+  { name: 'Urbano 95.5 — trap, rap y RKT', short: 'Urbano', style: 'temas', temas: 'urbano', color: '#c06bff' },
   { name: 'La Ciudad Perdida — con Santiago Sánchez', style: 'talk', color: '#8aff6a' },
   { name: 'ADNSUR Radio — el noticiero de Comodoro', style: 'talk', news: true, color: '#ff4a4a' },
   { name: 'Radio apagada', style: 'off', color: '#aaaaaa' },
@@ -414,9 +417,11 @@ export class Audio {
     this.bus.gain.value = 1;
     this.bus.connect(this.musicBus);
     // Novishok FM: los temas subidos en "Intro y música" (si no hay, thrash generado)
-    if (st.style === 'novishok' && (this.chaseSongs || []).length) { this.song = null; this.playRadioSong(); return; }
+    if (st.style === 'novishok' && (this.chaseSongs || []).length) { this.song = null; this.playRadioSong(this.chaseSongs, st); return; }
+    // Rock Local y Urbano: temas reales de bandas de Comodoro
+    if (st.style === 'temas') { this.song = null; this.playRadioSong(this.temasDe(st), st); return; }
     this.newSong(st.style === 'novishok' ? { style: 'thrash' } : st);
-    if (st.style === 'novishok') this.onRadioSong && this.onRadioSong(null);
+    if (st.style === 'novishok') this.onRadioSong && this.onRadioSong(null, st);
     this.nextNote = this.ctx.currentTime + 0.3;
     this.step = 0;
     if (st.style === 'talk') this.talk();
@@ -424,21 +429,38 @@ export class Audio {
 
   stationCount() { return STATIONS.length; }
 
-  playRadioSong() {
-    const songs = this.chaseSongs || [];
+  temasDe(st) {
+    const base = this.radioBase || RADIO_BASES[0];
+    return (RADIO_TEMAS[st.temas] || []).map((t) => ({ url: base + t.archivo, archivo: t.archivo, title: t.titulo }));
+  }
+
+  playRadioSong(list, st, retry = 0) {
+    const songs = list || [];
     if (!songs.length || !this.bus) return;
-    this.radioSongIdx = this.radioSongIdx === undefined ? Math.floor(Math.random() * songs.length) : (this.radioSongIdx + 1) % songs.length;
-    const song = songs[this.radioSongIdx];
+    if (!retry) {
+      const k = st && st.temas ? 'temas:' + st.temas : 'novishok';
+      if (this.radioSongKey !== k) { this.radioSongKey = k; this.radioSongIdx = undefined; }
+      this.radioSongIdx = this.radioSongIdx === undefined ? Math.floor(Math.random() * songs.length) : (this.radioSongIdx + 1) % songs.length;
+    }
+    const song = songs[this.radioSongIdx % songs.length];
     const el = new window.Audio();
     el.src = song.url;
     el.preload = 'auto';
     const bus = this.bus;
     try { this.ctx.createMediaElementSource(el).connect(bus); } catch (e) { /* sin ruteo: suena directo */ }
     this.radioAudio = el;
-    el.onended = () => { if (this.radioAudio === el && this.bus === bus) this.playRadioSong(); };
-    el.onerror = () => { if (this.radioAudio === el) this.radioAudio = null; };
+    el.onended = () => { if (this.radioAudio === el && this.bus === bus) this.playRadioSong(st && st.temas ? this.temasDe(st) : songs, st); };
+    el.onerror = () => {
+      if (this.radioAudio !== el) return;
+      this.radioAudio = null;
+      // temas de la radio: probar la otra carpeta (las páginas de dist/ los buscan un nivel más arriba)
+      if (st && st.temas && song.archivo && retry < RADIO_BASES.length - 1 && this.bus === bus) {
+        this.radioBase = RADIO_BASES[(RADIO_BASES.indexOf(this.radioBase || RADIO_BASES[0]) + 1) % RADIO_BASES.length];
+        this.playRadioSong(this.temasDe(st), st, retry + 1);
+      } else if (st && st.temas) this.onRadioSong && this.onRadioSong(null, st);
+    };
     if (!this.pausedFlag) { const q = el.play(); if (q && q.catch) q.catch(() => {}); }
-    this.onRadioSong && this.onRadioSong(song.title);
+    this.onRadioSong && this.onRadioSong(song.title, st);
   }
 
   releaseRadioAudio() {

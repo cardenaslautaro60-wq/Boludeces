@@ -4,3 +4,4 @@
 - **Temas de Novishok:** copiá los archivos en `media/novishok/` y anotalos en `media/medios.js`. Suenan cuando la policía te persigue con 4 estrellas o más.
 
 También se pueden subir desde el mismo juego, en **Intro y música** (menú principal o pausa). En la versión publicada, lo que sube quien edita el juego queda para todos los que lo abren (hasta 20 MB por archivo).
+- **Radios Rock Local y Urbano:** los temas están en `media/radio/rock-local/` y `media/radio/urbano/`, recomprimidos con `tools/radio/temas.sh`, y anotados en `src/audio/radio-temas.js`. No van adentro de las páginas: se cargan de esta carpeta (las páginas de `dist/` la buscan un nivel más arriba y la versión publicada la lleva al lado).
