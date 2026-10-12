@@ -220,7 +220,7 @@ export class PlayerController {
     if (!v.playerOwned && !v.missionOwned) {
       if (v.stolenBy !== p) { g.stats && (g.stats.carsStolen += 1); v.stolenBy = p; }
     }
-    g.audio && g.audio.door(v.pos);
+    g.audio && g.audio.door(v.pos, v, true);
     g.hud && g.hud.showVehicleName(v.type.name);
     if (v.type.bike) g.audio && g.audio.stopRadio(); else g.audio && g.audio.startRadio(v.radio);
     g.hud && !v.type.bike && g.hud.showRadio(g.audio ? g.audio.stationName(v.radio) : '');
@@ -293,7 +293,7 @@ export class PlayerController {
     p.exitVehicle(v.speed > 5);
     g.audio && g.audio.stopRadio();
     g.audio && g.audio.horn(v, false);
-    g.audio && g.audio.door(v.pos);
+    g.audio && g.audio.door(v.pos, v, false);
     g.onExitVehicle && g.onExitVehicle(v);
   }
 }

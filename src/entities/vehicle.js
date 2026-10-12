@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { STYLE, lam } from '../render/style.js';
 import { signTexture } from '../render/textures.js';
 import { buildCarModel, CarMaterials } from './carmodels.js';
+import { busSkinMesh } from './colectivos.js';
 import { clamp, lerp, approach, angleWrap, rand, pick } from '../util.js';
 
 // Resistencia de un vehículo antes de prenderse fuego (los autos de Comodoro aguantan una buena)
@@ -141,8 +142,16 @@ export class Vehicle {
     const L = line || pick(BUS_LINES);
     this.busLine = L;
     this.destino = pick(L.destinos);
+    // pintura real de la empresa; si no hay, los carteles a los costados
+    const skin = busSkinMesh(T, L.empresa);
+    if (skin) {
+      this.body.add(skin);
+      this.busSkin = skin;
+      this.color = 0xf2f2f2;
+      this.paintMesh.material = this.mats.paint(this.color);
+    }
     const side = decalMat([L.empresa], { bg: '#f4f1e8', fg: '#1a2a5a', w: 512, h: 64, sizes: [40], borderColor: '#1a2a5a' });
-    for (const s of [-1, 1]) {
+    for (const s of skin ? [] : [-1, 1]) {
       const m = new THREE.Mesh(new THREE.PlaneGeometry(5.2, 0.5), side);
       m.position.set(s * (hw + 0.03), 1.05, 0.2);
       m.rotation.y = s * Math.PI / 2;
@@ -150,7 +159,7 @@ export class Vehicle {
     }
     const dest = decalMat([this.destino], { bg: '#111111', fg: '#ffb020', w: 256, h: 48, sizes: [34], border: false });
     const d = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 0.3), dest);
-    d.position.set(0, 2.85, hl + 0.03);
+    d.position.set(0, 2.85, hl + (skin && skin.userData.frente === 'entero' ? 0.05 : 0.03));
     this.body.add(d);
   }
 
@@ -218,6 +227,7 @@ export class Vehicle {
     this.dead = true;
     this.health = 0;
     this.paintMesh.material = this.mats.burnt;
+    if (this.busSkin) this.busSkin.visible = false;
     this.detMesh.material = this.mats.burnt;
     if (this.chromeMesh) this.chromeMesh.material = this.mats.burnt;
     if (this.glassMesh) this.glassMesh.visible = false;

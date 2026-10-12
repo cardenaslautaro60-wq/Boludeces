@@ -1,9 +1,11 @@
-// Sonido 100% sintetizado con WebAudio: efectos, motor, viento, sirenas y radios procedurales.
+// Sonido sintetizado con WebAudio: efectos, motor, viento, sirenas y radios procedurales.
+// El colectivo usa sonidos grabados (colectivo.js).
 import { clamp, rand, RNG } from '../util.js';
 import { SANTIAGO, TALK, BUMPERS } from './guion.js';
 import VOZ_BIN from './voces.bin';
 import VOZ_IDX from './voces.json';
 import { voiceKey, SPEAKERS } from './vozkey.js';
+import { BusSound } from './colectivo.js';
 
 const STATIONS = [
   { name: 'Radio Cumbia Villera 104.5', style: 'cumbia', color: '#ff5fd0' },
@@ -69,6 +71,7 @@ export class Audio {
     this.setupEngine();
     this.setupSiren();
     this.enabled = true;
+    this.colectivo = new BusSound(this);
   }
 
   noise(dur) {
@@ -147,7 +150,12 @@ export class Audio {
     this.burst({ dur: 0.35, freq: 900, q: 0.5, type: 'lowpass', gain: v, pos, range: 150 });
     this.burst({ dur: 0.25, freq: 4000, q: 3, gain: v * 0.4, pos, range: 150 });
   }
-  door(pos) { this.burst({ dur: 0.1, freq: 250, type: 'lowpass', gain: 0.6, pos }); this.tone({ freq: 120, dur: 0.08, gain: 0.3, pos }); }
+  // al subir o bajar de un colectivo suenan las puertas neumáticas grabadas
+  door(pos, v = null, entering = false) {
+    if (v && v.type.style === 'bus' && this.colectivo && this.colectivo.buf.abre) { if (entering) this.colectivo.enter(v); else this.colectivo.exit(v); return; }
+    this.burst({ dur: 0.1, freq: 250, type: 'lowpass', gain: 0.6, pos });
+    this.tone({ freq: 120, dur: 0.08, gain: 0.3, pos });
+  }
   // estruendo de fuegos artificiales (lejano, grave y con cola)
   boom(x, y, z) {
     const pos = { x, y, z };
@@ -230,6 +238,10 @@ export class Audio {
 
   horn(v, on) {
     if (!this.enabled) return;
+    if (v && v.type.style === 'bus' && this.colectivo && this.colectivo.buf.bocina) {
+      if (on) this.colectivo.hornOn(); else this.colectivo.hornOff();
+      return;
+    }
     if (on && !this.hornNode) {
       const ctx = this.ctx;
       const g = ctx.createGain(); g.gain.value = 0.12;
@@ -267,7 +279,9 @@ export class Audio {
     this.wind.f.frequency.setTargetAtTime(300 + w * 18 + env.gust * 300, t, 0.3);
     // motor
     const v = p && p.vehicle;
-    if (v && !v.dead && !v.type.bike || (v && v.key === 'enduro')) {
+    const grabado = this.colectivo && this.colectivo.update(dt, game);
+    if (grabado) this.engine.g.gain.setTargetAtTime(0, t, 0.1);
+    else if (v && !v.dead && !v.type.bike || (v && v.key === 'enduro')) {
       const sp = Math.abs(v.forwardSpeed);
       const gear = Math.min(4, Math.floor(sp / (v.type.maxSpeed / 4.5)));
       const rpm = (sp - gear * (v.type.maxSpeed / 4.5)) / (v.type.maxSpeed / 4.5);
