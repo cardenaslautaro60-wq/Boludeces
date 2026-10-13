@@ -1,0 +1,29 @@
+{
+  "name": "gta-san-jorge",
+  "productName": "GTA San Jorge",
+  "version": "1.0.0",
+  "private": true,
+  "main": "main.js",
+  "description": "GTA San Jorge: versión de escritorio (Windows)",
+  "build": {
+    "appId": "local.gtasanjorge.paquete",
+    "productName": "GTA San Jorge",
+    "files": [
+      "main.js",
+      "index.html",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": [
+        "portable"
+      ]
+    }
+  },
+  "devDependencies": {
+    "electron": "^44.7.1",
+    "electron-builder": "^26.15.3"
+  }
+}
