@@ -1,0 +1,12 @@
+# Generados al empaquetar: no van al repo
+escritorio/node_modules/
+escritorio/release/
+escritorio/index.html
+apk/node_modules/
+apk/www/
+apk/android/app/build/
+apk/android/build/
+apk/android/.gradle/
+apk/android/.idea/
+apk/android/local.properties
+apk/android/app/src/main/assets/
