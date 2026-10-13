@@ -5,7 +5,8 @@ import { InstChunks } from './culling.js';
 // Casas de barrio instanciadas: 4 plantillas (1 o 2 plantas, techo a dos aguas o plano),
 // cada instancia con su escala, color de pared y color de techo. Agrupadas por sector.
 const WN = 10, DN = 9, FH = 2.8;
-const CHUNK = 260;
+// mismo tamaño que los sectores de carga (sectores.js)
+const CHUNK = 300;
 
 let ATLAS = null;
 
@@ -168,11 +169,17 @@ export class HouseInstances {
     this.items.push({ ...o, floors, flat, wall: wallHex, roof: roofHex, y: mx + 0.08, key: `${floors}${flat ? 'f' : 'g'}` });
   }
 
-  build(colliders) {
+  build(colliders, sectores = null) {
     const group = new THREE.Group();
     const buckets = new Map();
     for (const it of this.items) {
       const k = `${Math.floor(it.cx / CHUNK)},${Math.floor(it.cz / CHUNK)},${it.key}`;
+      // versión lejana: una caja con techo
+      if (sectores) {
+        const Hh = it.floors * FH;
+        sectores.box(it, -it.hw, it.hw, -it.hd, it.hd, it.y - 0.5, it.y + Hh + (it.flat ? 0.5 : 0), it.wall, 'house',
+          it.flat ? { hex: it.roof, mat: 'roofFlat' } : { gable: true, rise: it.floors === 1 ? 1.7 : 1.9, along: true, hex: it.roof });
+      }
       let b = buckets.get(k);
       if (!b) { b = []; buckets.set(k, b); }
       b.push(it);
@@ -199,6 +206,9 @@ export class HouseInstances {
       });
       geo.setAttribute('roofColor', new THREE.InstancedBufferAttribute(roof, 3));
       mesh.computeBoundingSphere();
+      const [ci, cj] = k.split(',').map(Number);
+      mesh.userData.cell = { i: ci, j: cj, size: CHUNK };
+      mesh.userData.sector = true;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       group.add(mesh);

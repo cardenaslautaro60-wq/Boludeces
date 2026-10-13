@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { lam } from '../render/style.js';
-import { POI, RAMPS } from '../world/mapdata.js';
+import { POI } from '../world/mapdata.js';
 import { WEAPONS } from './weapons.js';
 import { dist, rand, pick, chance, clamp } from '../util.js';
 import { randomLook } from '../entities/humanoid.js';
@@ -255,39 +255,9 @@ export class Activities {
     this.spraying = false;
   }
 
-  // ---------- Saltos únicos ----------
+  // ---------- Saltos únicos (game/saltos.js) ----------
   checkJumps(dt) {
-    const g = this.game;
-    const p = g.player;
-    const v = p.vehicle;
-    if (!v || v.driver !== p) return;
-    if (!v.grounded && !this.jumpStart) {
-      // ¿despegó cerca de una rampa?
-      const ri = g.terrain.ramps.findIndex((r) => dist(v.pos.x, v.pos.z, r.x + r.fx * r.len / 2, r.z + r.fz * r.len / 2) < 9);
-      this.jumpStart = { x: v.pos.x, z: v.pos.z, ramp: ri, t: 0, maxY: v.pos.y };
-    }
-    if (this.jumpStart) {
-      const j = this.jumpStart;
-      j.t += dt;
-      j.maxY = Math.max(j.maxY, v.pos.y);
-      if (j.ramp >= 0 && j.t > 0.6) g.timeScale = 0.45;
-      if (v.grounded) {
-        g.timeScale = 1;
-        const d = dist(j.x, j.z, v.pos.x, v.pos.z);
-        if (j.ramp >= 0 && j.t > 0.8) {
-          const first = !this.jumpsDone.has(j.ramp);
-          const bonus = Math.round((j.t * 150 + d * 5) * (first ? 2 : 1) / 10) * 10;
-          if (first) { this.jumpsDone.add(j.ramp); g.stats.jumps = this.jumpsDone.size; }
-          g.addMoney(bonus);
-          g.hud.bigText('¡SALTO INSÓLITO!', `${Math.round(d)} m — $${bonus}${first ? `<br><small>Saltos únicos: ${this.jumpsDone.size} de ${RAMPS.length}</small>` : ''}`, 3.5);
-        } else if (j.t > 2.2) {
-          const bonus = Math.round(j.t * 40);
-          g.addMoney(bonus);
-          g.hud.showToast(`Volaste ${Math.round(d)} m — +$${bonus}`, 2);
-        }
-        this.jumpStart = null;
-      }
-    }
+    if (this.game.saltos) this.game.saltos.update(dt);
   }
 
   // ---------- Remís ----------

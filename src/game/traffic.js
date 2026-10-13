@@ -19,6 +19,10 @@ export class DriverAI {
     this.replanT = 0;
     this.offroadOK = v.type.offroad;
     this.laneFrac = 0.25;
+    // en avenidas anchas hay dos carriles por mano: 0 el de adentro, 1 el de afuera
+    this.lane = chance(0.6) ? 1 : 0;
+    this.laneK = this.lane;
+    this.laneCool = 0;
     this.placeOnRoad();
   }
 
@@ -82,7 +86,31 @@ export class DriverAI {
   }
 
   laneOffset(e) {
-    return e.width * this.laneFrac + (e.width > 13 ? 0.5 : 0);
+    if (e.width >= 13) return e.width * (0.125 + 0.25 * this.laneK);
+    return e.width * this.laneFrac;
+  }
+
+  // Pasarse al otro carril para adelantar a uno lento (solo en avenidas de dos carriles por mano)
+  overtake(block, desired, remain, dt) {
+    this.laneCool -= dt;
+    this.laneK += Math.sign(this.lane - this.laneK) * Math.min(Math.abs(this.lane - this.laneK), dt * 0.7);
+    const e = this.edge;
+    if (!block || !block.type || this.laneCool > 0 || e.width < 13 || remain < 35 || this.mode !== 'cruise') return;
+    if (block.speed > desired * 0.6) return;
+    const R = this.game.roads, A = R.nodes[this.from];
+    const dx = (R.nodes[this.to].x - A.x) / e.len, dz = (R.nodes[this.to].z - A.z) / e.len;
+    const want = 1 - this.lane;
+    const off = e.width * (0.125 + 0.25 * want);
+    const v = this.v;
+    const s0 = (v.pos.x - A.x) * dx + (v.pos.z - A.z) * dz;
+    for (const o of this.game.vehicles) {
+      if (o === v || o.removed) continue;
+      const ox = o.pos.x - A.x, oz = o.pos.z - A.z;
+      const s = ox * dx + oz * dz, lat = ox * -dz + oz * dx;
+      if (Math.abs(s - s0) < 22 && Math.abs(lat - off) < 2.2) return; // el otro carril está ocupado
+    }
+    this.lane = want;
+    this.laneCool = 7;
   }
 
   update(dt) {
@@ -155,6 +183,8 @@ export class DriverAI {
         if (turn > 0.3) desired = Math.min(desired, lerpN(desired, 7, clamp(turn, 0, 1)));
         if (this.next === e) desired = Math.min(desired, 4);
       }
+      // esquinas: semáforos y ceder el paso (cruces.js)
+      if (g.cruces && this.mode === 'cruise') desired = Math.min(desired, g.cruces.limit(this, e, this.to, remain, speed, dt));
       // semáforo de San Martín y Rivadavia
       const tl = g.activities && g.activities.trafficLight;
       if (tl && this.mode === 'cruise') {
@@ -191,6 +221,7 @@ export class DriverAI {
         bd = fwd; block = p;
       }
     }
+    if (!direct) this.overtake(block, desired, remain, dt);
     if (block && !(this.aggressive && block === this.target)) {
       const stopD = bd - 2.5;
       desired = Math.min(desired, Math.max(0, stopD * 0.9));
@@ -321,8 +352,12 @@ export class Traffic {
     if (this.spawnT > 0) return;
     this.spawnT = 0.35;
     const moving = this.cars.filter((v) => v.ai).length;
-    if (moving < this.max * this.density) this.spawnMoving(pp);
-    if (this.parked.length < this.maxParked * this.density) this.spawnParked(pp);
+    // cuántos autos según la zona y la hora (densidad.js)
+    const D = g.densidad ? g.densidad.cur : { cars: 1, parked: 1 };
+    const want = this.max * this.density * D.cars;
+    if (moving < want) this.spawnMoving(pp);
+    else if (moving > want + 3) this.thin(pp);
+    if (this.parked.length < this.maxParked * this.density * D.parked) this.spawnParked(pp);
   }
 
   randomRoadPoint(pp, rMin, rMax) {
@@ -350,6 +385,7 @@ export class Traffic {
     const e = n.edge;
     const zk = this.zoneKind(n.x, n.z, e);
     let key = pick(ZONE_CARS[zk] || ZONE_CARS.barrio);
+    if (g.densidad) key = g.densidad.carKey(zk, key);
     if (chance(0.06)) key = 'patrullero';
     if ((key === 'colectivo' || key === 'cisterna') && e.width < 11) key = 'reno12';
     if (e.kind === 'tierra' && !['empresa', 'jilux', 'f100', 'enduro'].includes(key)) key = 'empresa';
@@ -370,6 +406,21 @@ export class Traffic {
     v.vx = dx * 8; v.vz = dz * 8;
     if (key === 'patrullero') { v.isCopCar = true; g.police.registerPatrol(v); }
     this.cars.push(v);
+  }
+
+  // Saca un auto lejano que no esté a la vista (cuando la zona se vacía)
+  thin(pp) {
+    const g = this.game;
+    const cam = g.camera.position, f = g.cameraRig.forward();
+    for (const v of this.cars) {
+      if (!v.ai || v.removed || v.persistent || v.missionOwned || v.isCopCar || v === g.lastPlayerVehicle || v.seats.some((s) => s && (s.isPlayer || s.persistent))) continue;
+      const d = dist(v.pos.x, v.pos.z, pp.x, pp.z);
+      if (d < 70) continue;
+      const cx = v.pos.x - cam.x, cz = v.pos.z - cam.z, cd = Math.hypot(cx, cz) || 1;
+      if (d < 200 && (cx * f.x + cz * f.z) / cd > 0.3) continue;
+      g.removeVehicle(v);
+      return;
+    }
   }
 
   spawnParked(pp) {
