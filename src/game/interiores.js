@@ -240,14 +240,14 @@ export class Interiors {
     this.origin = { x, y: y + ALTO, z };
     // lo más alto donde se puede parar alguien adentro sin meter la cabeza en el techo
     this.headroomY = this.origin.y + DRAW_H - 1.85;
-    this.marker = new Marker(g, x, z, 0xff2a2a, { r: 0.95, h: 1.2 });
+    this.marker = new Marker(g, x, z, 0xff2a2a, { r: 1.0, h: 7, strong: true });
     this.ring = this.makeRing(x, y + 0.05, z, g.scene);
-    g.blips.push({ x, z, letter: '8', bg: '#111', fg: '#fff', name: 'Draw Bar & Pool', legend: true });
+    g.blips.push({ x, z, letter: '8', bg: '#111', fg: '#fff', name: 'Draw Bar & Pool', legend: true, edge: true });
     this.addSign();
   }
 
   makeRing(x, y, z, parent) {
-    const m = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.07, 6, 32), new THREE.MeshBasicMaterial({ color: 0xff2020, transparent: true, opacity: 0.85, toneMapped: false }));
+    const m = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.13, 8, 36), new THREE.MeshBasicMaterial({ color: 0xff2020, transparent: true, opacity: 0.95, toneMapped: false }));
     m.rotation.x = Math.PI / 2;
     m.position.set(x, y, z);
     parent.add(m);

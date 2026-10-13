@@ -17,15 +17,18 @@ export class Marker {
     const h = opts.h || 1.6;
     const geo = new THREE.CylinderGeometry(this.r, this.r, h, 24, 1, true);
     geo.translate(0, h / 2, 0);
-    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending });
+    // strong: columna alta y opaca que se ve de lejos y de día (el aditivo se pierde sobre el asfalto claro)
+    this.strong = !!opts.strong;
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false, blending: this.strong ? THREE.NormalBlending : THREE.AdditiveBlending });
     this.mesh = new THREE.Mesh(geo, mat);
     this.mesh.position.set(x, y, z);
     this.mesh.renderOrder = 6;
     game.scene.add(this.mesh);
     if (opts.arrow !== false) {
-      const ag = new THREE.ConeGeometry(0.45, 0.9, 4);
+      const ag = this.strong ? new THREE.ConeGeometry(0.75, 1.5, 4) : new THREE.ConeGeometry(0.45, 0.9, 4);
       ag.rotateX(Math.PI);
       this.arrow = new THREE.Mesh(ag, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9 }));
+      this.arrowY = this.strong ? h + 1.2 : 2.8;
       this.arrow.position.set(x, y + h + 1.2, z);
       game.scene.add(this.arrow);
     }
@@ -34,8 +37,8 @@ export class Marker {
   }
   update(dt) {
     this.t += dt;
-    this.mesh.material.opacity = 0.32 + Math.sin(this.t * 4) * 0.12;
-    if (this.arrow) { this.arrow.rotation.y += dt * 2; this.arrow.position.y = this.y + 2.8 + Math.sin(this.t * 3) * 0.25; }
+    this.mesh.material.opacity = this.strong ? 0.55 + Math.sin(this.t * 4) * 0.12 : 0.32 + Math.sin(this.t * 4) * 0.12;
+    if (this.arrow) { this.arrow.rotation.y += dt * 2; this.arrow.position.y = this.y + this.arrowY + Math.sin(this.t * 3) * 0.25; }
   }
   set visible(v) { this.mesh.visible = v; if (this.arrow) this.arrow.visible = v; }
   contains(pos, pad = 0) { return dist(pos.x, pos.z, this.x, this.z) < this.r + pad && Math.abs(pos.y - this.y) < 3; }
