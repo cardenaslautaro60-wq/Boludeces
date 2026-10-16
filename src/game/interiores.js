@@ -357,29 +357,53 @@ export class Interiors {
     this.busy = true;
     g.controlsLocked = true;
     p.vx = p.vz = 0;
-    await g.hud.fadeTo(true, 0.45);
-    if (!this.D) this.build();
-    const D = this.D, O = this.origin;
-    D.group.visible = true;
-    for (const l of D.lights) l.visible = true;
-    this.exitMarker.visible = true; this.exitRingMesh.visible = true;
-    this.inside = { name: 'Draw Bar & Pool', def: D };
-    this.prevFar = g.camera.far;
-    g.camera.far = 160; g.camera.updateProjectionMatrix();
-    p.pos.set(O.x + D.spawn.x, O.y + 0.02, O.z + D.spawn.z);
-    p.vx = p.vz = p.vy = 0; p.onGround = true; p.swimming = false; p.diving = false;
-    p.heading = D.spawn.rot;
-    g.cameraRig.snapBehind(p.heading);
-    g.cameraRig.dist = 3;
-    // el compañero entra con vos
-    this.companionIn = false;
-    const c = g.companion;
-    if (g.companionActive && c && !c.hidden && !c.vehicle && !c.dead && Math.hypot(c.pos.x - this.door.x, c.pos.z - this.door.z) < 30) {
-      c.pos.set(O.x + D.spawn.x + 0.9, O.y + 0.02, O.z + D.spawn.z - 0.4); c.vx = c.vz = c.vy = 0; c.onGround = true;
-      this.companionIn = true;
+    await g.hud.fadeTo(true, 0.35);
+    // punto de carga como en San Andreas: pantalla del local mientras se arma el interior, que es
+    // otro mapa (300 m arriba de la vereda, con su propia luz; la calle queda quieta)
+    try {
+      await g.hud.loading.run({ art: 'draw', name: 'Draw Bar & Pool', sub: 'San Martín 371 · Centro' }, async (prog) => {
+        if (!this.D) this.build();
+        prog(0.6);
+        const D = this.D, O = this.origin;
+        D.group.visible = true;
+        for (const l of D.lights) l.visible = true;
+        this.exitMarker.visible = true; this.exitRingMesh.visible = true;
+        this.inside = { name: 'Draw Bar & Pool', def: D };
+        this.prevFar = g.camera.far;
+        g.camera.far = 160; g.camera.updateProjectionMatrix();
+        p.pos.set(O.x + D.spawn.x, O.y + 0.02, O.z + D.spawn.z);
+        p.vx = p.vz = p.vy = 0; p.onGround = true; p.swimming = false; p.diving = false;
+        p.heading = D.spawn.rot;
+        g.cameraRig.snapBehind(p.heading);
+        g.cameraRig.dist = 3;
+        // el compañero entra con vos
+        this.companionIn = false;
+        const c = g.companion;
+        if (g.companionActive && c && !c.hidden && !c.vehicle && !c.dead && Math.hypot(c.pos.x - this.door.x, c.pos.z - this.door.z) < 30) {
+          c.pos.set(O.x + D.spawn.x + 0.9, O.y + 0.02, O.z + D.spawn.z - 0.4); c.vx = c.vz = c.vy = 0; c.onGround = true;
+          this.companionIn = true;
+        }
+        this.exitArmed = false;
+        this.startShow();
+        // compilar los materiales del local ahora y no en el primer cuadro (en el celu se trababa)
+        await new Promise((r) => setTimeout(r, 0));
+        try { g.renderer.compile(D.group, g.camera, g.scene); } catch (e) { /* si falla, compila al dibujar */ }
+        prog(1);
+      });
+    } catch (e) {
+      // si algo falla al armar el local, no dejar al jugador trabado en la pantalla de carga
+      console.error('Draw: no se pudo cargar el interior', e);
+      g.hud.loading.hide();
+      if (this.inside) this.restore();
+      const d = this.door, bx = d.x - this.inward.x * 1.6, bz = d.z - this.inward.z * 1.6;
+      p.pos.set(bx, g.world.footGround(bx, bz), bz); p.vx = p.vz = p.vy = 0;
+      this.busy = false; this.marker.inside = true;
+      await g.hud.fadeTo(false, 0.4);
+      g.controlsLocked = false;
+      g.hud.showToast('No se pudo cargar el Draw. Probá de nuevo.', 3);
+      return;
     }
-    this.exitArmed = false;
-    this.startShow();
+    g.hud.loading.hide();
     g.hud.showZone('Draw Bar & Pool');
     await g.hud.fadeTo(false, 0.5);
     g.controlsLocked = false;
@@ -392,19 +416,26 @@ export class Interiors {
     if (this.busy) return;
     this.busy = true;
     g.controlsLocked = true;
-    await g.hud.fadeTo(true, 0.45);
-    this.restore();
-    const d = this.door;
-    p.pos.set(d.x - this.inward.x * 1.6, g.world.footGround(d.x - this.inward.x * 1.6, d.z - this.inward.z * 1.6), d.z - this.inward.z * 1.6);
-    p.vx = p.vz = p.vy = 0; p.onGround = true;
-    p.heading = d.face;
-    g.cameraRig.snapBehind(p.heading);
-    if (this.companionIn) {
-      const c = g.companion;
-      if (c && !c.dead) { c.pos.set(p.pos.x + 1, p.pos.y, p.pos.z + 1); c.vx = c.vz = c.vy = 0; }
-      this.companionIn = false;
-    }
-    this.marker.inside = true; // no volver a entrar hasta salir del aro
+    await g.hud.fadeTo(true, 0.35);
+    await g.hud.loading.run({ art: 'ciudad', name: 'Comodoro Rivadavia', sub: 'Centro · San Martín', min: 1.2 }, async (prog) => {
+      this.restore();
+      prog(0.5);
+      const d = this.door;
+      // afuera del aro y de la columna, para que la cámara no quede adentro del rojo
+      const sx = d.x - this.inward.x * 2.8, sz = d.z - this.inward.z * 2.8;
+      p.pos.set(sx, g.world.footGround(sx, sz), sz);
+      p.vx = p.vz = p.vy = 0; p.onGround = true;
+      p.heading = d.face;
+      g.cameraRig.snapBehind(p.heading);
+      if (this.companionIn) {
+        const c = g.companion;
+        if (c && !c.dead) { c.pos.set(p.pos.x + 1, p.pos.y, p.pos.z + 1); c.vx = c.vz = c.vy = 0; }
+        this.companionIn = false;
+      }
+      this.marker.inside = true; // no volver a entrar hasta salir del aro
+      prog(1);
+    });
+    g.hud.loading.hide();
     await g.hud.fadeTo(false, 0.5);
     g.controlsLocked = false;
     this.busy = false;
@@ -531,14 +562,19 @@ export class Interiors {
     m.update(dt);
     this.ring.rotation.z += dt * 0.6;
     const onMission = g.missions.active && !g.missions.active.allowShops;
-    m.visible = !onMission;
-    this.ring.visible = !onMission && !this.inside;
+    // el aro se ve siempre (en misión también), así nadie se queda buscándolo
+    this.ring.visible = !this.inside;
     if (!this.inside) {
-      const inRing = !p.vehicle && m.contains(p.pos, -0.15) && !p.dead;
-      if (inRing && !m.inside && !this.busy && !g.controlsLocked && !g.respawning && !onMission) {
-        if (g.police && g.police.level > 0) g.hud.showToast('Con la cana atrás no te dejan pasar. Perdelos primero.', 3);
+      const inRing = !p.vehicle && m.contains(p.pos, 0.1) && !p.dead;
+      if (inRing && !m.inside && !this.busy && !g.controlsLocked && !g.respawning) {
+        if (onMission) g.hud.showToast('Terminá la misión y después entrás al Draw.', 3);
+        else if (g.police && g.police.level > 0) g.hud.showToast('Con la cana atrás no te dejan pasar. Perdelos primero.', 3);
         else this.enter();
       }
+      // cerca del aro, el aviso de cómo se entra (una vez por visita)
+      const dd = Math.hypot(p.pos.x - m.x, p.pos.z - m.z);
+      if (dd < 9 && !p.vehicle && !this.hinted) { this.hinted = true; g.hud.showHelp('Pisá el <b>aro rojo</b> para entrar al <b>Draw Bar & Pool</b>.', 5); }
+      else if (dd > 30) this.hinted = false;
       m.inside = inRing;
       return;
     }
