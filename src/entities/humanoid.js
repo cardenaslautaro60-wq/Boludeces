@@ -703,12 +703,57 @@ export class Humanoid {
     a.swim = lerp(a.swim, st.swim ? 1 : 0, clamp(dt * 5, 0, 1));
     if (a.swim > 0.05) {
       const k = a.swim;
-      torsoX = lerp(torsoX, 1.25, k);
-      armL = lerp(armL, -2.6 + Math.sin(a.phase * 0.6) * 1.4, k);
-      armR = lerp(armR, -2.6 - Math.sin(a.phase * 0.6) * 1.4, k);
-      elL = lerp(elL, -0.3, k); elR = lerp(elR, -0.3, k);
-      legL = lerp(legL, s * 0.35, k); legR = lerp(legR, -s * 0.35, k);
-      knL = lerp(knL, 0.3, k); knR = lerp(knR, 0.3, k);
+      if (!st.swimStyle || st.swimStyle === 'crol') {
+        // crol: brazadas alternadas y patada corta (el cuerpo va acostado con bodyPitch)
+        const sw = a.phase * 0.6;
+        torsoX = lerp(torsoX, st.bodyPitch ? 0.05 : 1.25, k);
+        armL = lerp(armL, -2.6 + Math.sin(sw) * 1.5, k);
+        armR = lerp(armR, -2.6 - Math.sin(sw) * 1.5, k);
+        armLz = lerp(armLz, 0.15 + Math.max(0, Math.cos(sw)) * 0.5, k); armRz = lerp(armRz, -0.15 - Math.max(0, -Math.cos(sw)) * 0.5, k);
+        elL = lerp(elL, -0.3, k); elR = lerp(elR, -0.3, k);
+        legL = lerp(legL, Math.sin(a.phase * 1.8) * 0.3, k); legR = lerp(legR, -Math.sin(a.phase * 1.8) * 0.3, k);
+        knL = lerp(knL, 0.2, k); knR = lerp(knR, 0.2, k);
+      } else {
+        // pecho y buceo: brazada simétrica que abre y patada de rana
+        const sw = 0.5 + 0.5 * Math.sin(a.phase * (st.swimStyle === 'buceo' ? 0.42 : 0.55));
+        torsoX = lerp(torsoX, 0.05, k); headX = lerp(headX, st.swimStyle === 'buceo' ? -0.2 : -0.75, k);
+        armL = lerp(armL, -2.95 + sw * 1.6, k); armR = lerp(armR, -2.95 + sw * 1.6, k);
+        armLz = lerp(armLz, 0.15 + sw * 0.95, k); armRz = lerp(armRz, -0.15 - sw * 0.95, k);
+        elL = lerp(elL, -0.15 - (1 - sw) * 0.9, k); elR = lerp(elR, -0.15 - (1 - sw) * 0.9, k);
+        legL = lerp(legL, -0.15 - (1 - sw) * 0.55, k); legR = lerp(legR, -0.15 - (1 - sw) * 0.55, k);
+        knL = lerp(knL, 0.25 + (1 - sw) * 1.5, k); knR = lerp(knR, 0.25 + (1 - sw) * 1.5, k);
+      }
+    }
+    // salto en carrera (Vice City): se estira hacia adelante
+    if (st.leap && a.air > 0.05) {
+      const k = a.air;
+      torsoX = lerp(torsoX, 0.5, k);
+      armL = lerp(armL, -2.25, k); armR = lerp(armR, -2.25, k); armLz = lerp(armLz, 0.3, k); armRz = lerp(armRz, -0.3, k);
+      elL = lerp(elL, -0.25, k); elR = lerp(elR, -0.25, k);
+      legL = lerp(legL, 0.45, k); legR = lerp(legR, -0.5, k); knL = lerp(knL, 1.1, k); knR = lerp(knR, 0.3, k);
+    }
+    // voltereta: hecho un bollito
+    if (st.roll > 0) {
+      legL = -1.7; legR = -1.7; knL = 2.3; knR = 2.3; torsoX = 0.9; headX = 0.4;
+      armL = -1.1; armR = -1.1; elL = -1.6; elR = -1.6; armLz = 0.3; armRz = -0.3; lower = 0.3; bob = 0;
+    }
+    // jugador de pool agachado sobre la mesa; stroke: 0 atrás, 1 adelante
+    if (st.cue > 0.01) {
+      const k = st.cue, sk = st.stroke || 0;
+      torsoX = lerp(torsoX, 1.05, k); headX = lerp(headX, -0.55, k);
+      armL = lerp(armL, -1.0, k); armLz = lerp(armLz, -0.35, k); elL = lerp(elL, -0.2, k);
+      armR = lerp(armR, 0.35 - sk * 0.5, k); armRz = lerp(armRz, 0.15, k); elR = lerp(elR, -1.25 + sk * 0.45, k);
+      legL = lerp(legL, -0.35, k); knL = lerp(knL, 0.35, k); legR = lerp(legR, 0.25, k); knR = lerp(knR, 0.05, k);
+      lower = lerp(lower, 0.04, k);
+    }
+    // parado con el taco
+    if (st.holdCue && !(st.cue > 0.5)) { armR = -0.55; armRz = -0.05; elR = -1.0; }
+    // cantando: el micrófono en la boca y la otra mano marcando el ritmo
+    if (st.sing) {
+      const w = Math.sin(now * 0.004);
+      armR = -2.35; armRz = 0.62; elR = -2.15;
+      armL = -1.0 + w * 0.45; armLz = 0.45 + w * 0.1; elL = -0.75;
+      torsoY += w * 0.12; headX -= 0.15;
     }
     a.aim = lerp(a.aim, st.aim ? 1 : 0, clamp(dt * 14, 0, 1));
     if (a.aim > 0.02) {
@@ -783,7 +828,16 @@ export class Humanoid {
       this.body.position.y = a.dead * 0.14;
       this.body.position.z = -a.dead * 0.1;
       B.shL.rotation.z = lerp(B.shL.rotation.z, 1.3, a.dead); B.shR.rotation.z = lerp(B.shR.rotation.z, -1.3, a.dead);
-    } else { this.body.rotation.x = 0; this.body.position.y = 0; this.body.position.z = 0; }
+    } else {
+      // cuerpo entero girado: acostado al nadar, inclinado al bucear o dando una vuelta
+      // carnero; gira sobre la cadera (o el centro del cuerpo hecho bollito)
+      let bp, py;
+      if (st.roll > 0) { bp = st.roll * Math.PI * 2; py = 0.75; a.bp = 0; }
+      else { a.bp = lerp(a.bp || 0, st.bodyPitch || 0, clamp(dt * 6, 0, 1)); bp = a.bp; py = this.hipY; }
+      this.body.rotation.x = bp;
+      this.body.position.y = py - py * Math.cos(bp);
+      this.body.position.z = -py * Math.sin(bp);
+    }
     if (this.shadow && !st.ride) this.shadow.visible = !st.sit;
   }
 }
