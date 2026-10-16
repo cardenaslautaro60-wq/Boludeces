@@ -70,11 +70,15 @@ export class DistanceCuller {
     if (this.t > 0 && !force && !jump) return;
     this.last = { x: cam.x, z: cam.z };
     this.t = 0.25;
-    for (const it of this.items) {
-      const d = Math.hypot(it.x - cam.x, it.z - cam.z) - it.r;
-      // minDist: versión lejana de algo que de cerca se dibuja con más detalle (árboles)
-      it.obj.visible = (!it.md || d >= it.md) && d < (it.cd ? Math.min(it.cd, maxDist) : maxDist);
-    }
+    for (const it of this.items) this.apply(it, cam, maxDist);
+  }
+
+  apply(it, cam, maxDist) {
+    // sec: el objeto es parte del detalle de un sector (sectores.js); lejos, lo reemplaza la caja
+    if (it.sec && !it.sec.detail) { it.obj.visible = false; return; }
+    const d = Math.hypot(it.x - cam.x, it.z - cam.z) - it.r;
+    // minDist: versión lejana de algo que de cerca se dibuja con más detalle (árboles)
+    it.obj.visible = (!it.md || d >= it.md) && d < (it.cd ? Math.min(it.cd, maxDist) : maxDist);
   }
 }
 

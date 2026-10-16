@@ -154,9 +154,10 @@ export class ChunkedGeo {
     this.map = new Map();
   }
   get(x, z, mat) {
-    const k = `${Math.floor(x / this.size)},${Math.floor(z / this.size)},${mat}`;
+    const i = Math.floor(x / this.size), j = Math.floor(z / this.size);
+    const k = `${i},${j},${mat}`;
     let b = this.map.get(k);
-    if (!b) { b = { mat, gb: new GeoBuilder() }; this.map.set(k, b); }
+    if (!b) { b = { mat, i, j, gb: new GeoBuilder() }; this.map.set(k, b); }
     return b.gb;
   }
   build(materials, parent) {
@@ -165,6 +166,9 @@ export class ChunkedGeo {
       if (!gb.count) continue;
       const m = new THREE.Mesh(gb.toGeometry(true), materials[mat]);
       gb.free();
+      // sector y material (para la carga por sectores, sectores.js)
+      m.userData.cell = { i: b.i, j: b.j, size: this.size };
+      m.userData.mat = mat;
       m.matrixAutoUpdate = false;
       m.castShadow = true;
       m.receiveShadow = true;
