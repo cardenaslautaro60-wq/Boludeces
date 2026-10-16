@@ -33,6 +33,9 @@ import { Input } from '../ui/input.js';
 import { Menus } from '../ui/menus.js';
 import { Touch } from '../ui/touch.js';
 import { Audio } from '../audio/audio.js';
+import { Online } from '../red/sala.js';
+import { JugadoresRed } from '../red/jugadores.js';
+import { OnlineUI } from '../ui/online.js';
 import { MediaLibrary } from '../media/media.js';
 import { clamp, pick, rand, dist, safeStorageGet, safeStorageSet } from '../util.js';
 
@@ -115,6 +118,12 @@ export class Game {
     this.input.onType = (s) => this.cheats.check(s);
     if (this.touch.enabled) { this.traffic.max = 10; this.traffic.maxParked = 8; this.population.max = 12; }
     this.vida = new Vida(this);
+    // modo online (salas del Artifact, solo para invitados con cuenta): si esta vista no puede
+    // conectarse, los botones no aparecen y el juego queda igual que siempre
+    this.online = new Online();
+    this.red = new JugadoresRed(this, this.online);
+    this.onlineUI = new OnlineUI(this, this.online, this.red);
+    this.online.conectar().then(() => this.onlineUI.mostrarBotones()).catch(() => {});
     this.saltos = new Saltos(this);
     this.densidad = new Densidad(this);
     this.cruces = new Cruces(this);
@@ -408,6 +417,7 @@ export class Game {
   }
 
   onGunshot(shooter) {
+    if (shooter === this.player && this.red) this.red.miDisparo(shooter);
     if (shooter.isPlayer) this.police.crime('gunshot', shooter.pos);
     this.population.panic(shooter.pos, 45, shooter);
   }
@@ -512,6 +522,8 @@ export class Game {
     // cámara lenta (saltos únicos): el mundo va más despacio, la interfaz no
     if (!this.paused && this.started) this.update(dt * (this.timeScale || 1));
     else if (this.menus && this.menus.attract) this.attract(dt);
+    // la sala sigue andando en pausa (los demás te ven quieto y con "(pausa)")
+    if (this.started && this.red) { this.red.tick(dt); this.onlineUI.update(dt); }
     this.render();
     this.input.endFrame();
   }
@@ -543,7 +555,7 @@ export class Game {
     // entidades
     for (let i = 0; i < this.peds.length; i++) {
       const q = this.peds[i];
-      if (q.removed || q.hidden) continue;
+      if (q.removed || q.hidden || q.remoto) continue; // los de otros jugadores los mueve la red
       if (q.brain && !q.dead) q.brain.update(dt);
       q.update(dt);
       if (q.say) { q.say.t -= dt; if (q.say.t <= 0) q.say = null; }
@@ -552,7 +564,7 @@ export class Game {
     const frozen = !!this.interiors.inside;
     for (let i = 0; i < this.vehicles.length; i++) {
       const v = this.vehicles[i];
-      if (v.removed || frozen) continue;
+      if (v.removed || frozen || v.remoto) continue;
       const dCam = Math.abs(v.pos.x - this.camera.position.x) + Math.abs(v.pos.z - this.camera.position.z);
       if (dCam > 500 && !v.driver && !v.persistent) continue; // congelar autos lejanos estacionados
       v.update(dt);
@@ -681,7 +693,8 @@ export class Game {
       const f = v.fwd;
       const lx = f.z, lz = -f.x;
       for (const p of this.peds) {
-        if (p.vehicle || p.removed || p.hidden) continue;
+        // a otro jugador lo atropella (o no) su propio juego: acá solo se ve
+        if (p.vehicle || p.removed || p.hidden || p.remoto) continue;
         const dx = p.pos.x - v.pos.x, dz = p.pos.z - v.pos.z;
         if (Math.abs(dx) > 8 || Math.abs(dz) > 8) continue;
         if (Math.abs(p.pos.y - v.pos.y) > 2.2) continue;

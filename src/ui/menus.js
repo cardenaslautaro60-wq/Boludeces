@@ -52,6 +52,7 @@ export class Menus {
       <div class="panel">
         <button data-a="continue">Continuar</button>
         <button data-a="new">Nueva partida</button>
+        <button data-a="online" hidden>Jugar online</button>
         <button data-a="options">Opciones</button>
         <button data-a="media">Intro y música</button>
         <button data-a="controls">Controles</button>
@@ -148,6 +149,7 @@ export class Menus {
       }
       return;
     }
+    if (a === 'online') g.onlineUI.abrir(this.main);
     if (a === 'options') this.openPane('options', this.main);
     if (a === 'media') this.openPane('media', this.main);
     if (a === 'controls') this.openPane('controls', this.main);
@@ -175,6 +177,7 @@ export class Menus {
     s.innerHTML = `<h2>Pausa</h2><div class="panel">
       <button data-a="resume">Seguir jugando</button>
       <button data-a="map">Mapa</button>
+      <button data-a="online" hidden>Online</button>
       <button data-a="cheats">Trucos</button>
       <button data-a="stats">Estadísticas</button>
       <button data-a="brief">Última misión</button>
@@ -213,6 +216,7 @@ export class Menus {
     const g = this.game;
     if (a === 'resume') this.resume();
     if (a === 'map') this.openMap();
+    if (a === 'online') g.onlineUI.abrir(this.pause);
     if (a === 'cheats') this.openPane('cheats', this.pause);
     if (a === 'stats') this.openPane('stats', this.pause);
     if (a === 'brief') this.openPane('brief', this.pause);
