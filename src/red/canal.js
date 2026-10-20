@@ -8,14 +8,27 @@
 
 const ESPERA_USE = 12000; // claude.use() responde null a los ~10 s si no hay visor
 
+// Por qué la última búsqueda no encontró la sala (para mostrárselo a quien lo necesite)
+let motivo = '';
+export const motivoCanal = () => motivo;
+
+// ¿Se está jugando dentro de un Artifact? (en el .exe, el .apk o el archivo suelto no hay salas)
+export function hayArtifact() {
+  try { if (new URLSearchParams(location.search).get('red') === 'bc' && typeof BroadcastChannel === 'function') return true; } catch (e) { /* sin URL */ }
+  return typeof window !== 'undefined' && !!window.claude && typeof window.claude.use === 'function';
+}
+
 // La sala del Artifact, o null si esta vista no puede conectarse (link público, sin sesión, descargado)
 export async function salaDelArtifact() {
   const c = typeof window !== 'undefined' ? window.claude : null;
-  if (!c || typeof c.use !== 'function') return null;
+  if (!c || typeof c.use !== 'function') { motivo = 'sin-artifact'; return null; }
   try {
-    const r = await Promise.race([c.use('room'), new Promise((res) => setTimeout(() => res(null), ESPERA_USE))]);
+    let tiempo = false;
+    const r = await Promise.race([c.use('room'), new Promise((res) => setTimeout(() => { tiempo = true; res(null); }, ESPERA_USE))]);
+    motivo = r ? '' : tiempo ? 'sin-respuesta' : 'sin-permiso';
     return r || null;
   } catch (e) {
+    motivo = 'error';
     return null;
   }
 }

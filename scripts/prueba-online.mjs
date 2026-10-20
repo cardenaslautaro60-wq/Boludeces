@@ -11,8 +11,8 @@ const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 let fallas = 0;
 const ok = (cond, msg) => { console.log((cond ? '  ok  ' : '  MAL ') + msg); if (!cond) fallas++; };
 const prefijo = 'prueba-' + Date.now() + '-';
-const nuevo = async (nombre) => {
-  const o = new Online({ canal: { tipo: 'bc', room: salaPestanas({ prefijo }) } });
+const nuevo = async (nombre, acceso = 'completo') => {
+  const o = new Online({ acceso, canal: { tipo: 'bc', room: salaPestanas({ prefijo }) } });
   o.setNombre(nombre);
   await o.conectar();
   return o;
@@ -96,6 +96,20 @@ ok(e && e.vx === 80 && e.vz === -80 && e.arma === 5, 'velocidades y arma se acot
 ok(e && !e.auto, 'un auto que no existe se ignora');
 ok(e && e.golpes.length === 1, 'los golpes mal formados se descartan');
 ok(textoChat('hola\u0000‮ mundo<script>'.repeat(10)).length <= 100 && !/[\u0000‮]/.test(textoChat('a\u0000‮b')), 'el chat saca caracteres de control y se corta en 100');
+
+console.log('Acceso solo por código (lo que queda hasta que se decida)');
+{
+  const dani = await nuevo('Dani', 'codigo'), eli = await nuevo('Eli', 'codigo');
+  const x = await dani.crearSala('Quiere ser pública', 'publica');
+  ok(x.ok && x.sala.tipo === 'amigos', 'aunque pida pública o con pedido, la sala sale privada con código');
+  await esperar(400);
+  ok(eli.salasAbiertas().length === 0 && ana.salasAbiertas().every((s) => s.nombre !== 'Quiere ser pública'), 'no aparece en ninguna lista');
+  const y = await eli.entrar('p-abcdefgh');
+  ok(!y.ok, 'no se puede entrar a una sala pública ni con pedido por id');
+  const z = await eli.entrar(idDeCodigo(codigoDe(x.sala.id)));
+  ok(z.ok, 'con el código se entra');
+  for (const o of [dani, eli]) { await o.salir(true); o.canal.room.cerrarTodo(); }
+}
 
 for (const o of [ana, beto, caro, ...otros]) { await o.salir(true); o.canal.room.cerrarTodo(); }
 console.log(fallas ? `\n${fallas} pruebas fallaron` : '\nTodas las pruebas pasaron');

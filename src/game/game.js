@@ -118,12 +118,13 @@ export class Game {
     this.input.onType = (s) => this.cheats.check(s);
     if (this.touch.enabled) { this.traffic.max = 10; this.traffic.maxParked = 8; this.population.max = 12; }
     this.vida = new Vida(this);
-    // modo online (salas del Artifact, solo para invitados con cuenta): si esta vista no puede
-    // conectarse, los botones no aparecen y el juego queda igual que siempre
+    // modo online (salas del Artifact, solo para invitados con cuenta): si no se puede conectar, el panel
+    // explica qué hacer y el juego queda igual que siempre
     this.online = new Online();
     this.red = new JugadoresRed(this, this.online);
     this.onlineUI = new OnlineUI(this, this.online, this.red);
-    this.online.conectar().then(() => this.onlineUI.mostrarBotones()).catch(() => {});
+    this.onlineUI.mostrarBotones();
+    this.onlineUI.iniciar().catch(() => {});
     this.saltos = new Saltos(this);
     this.densidad = new Densidad(this);
     this.cruces = new Cruces(this);

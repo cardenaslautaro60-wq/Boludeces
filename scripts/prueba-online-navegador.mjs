@@ -11,6 +11,7 @@ const srv = http.createServer((req, res) => { res.writeHead(200, { 'content-type
 await new Promise((r) => srv.listen(0, r));
 const url = `http://127.0.0.1:${srv.address().port}/juego.html?red=bc`;
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+const traza = async (n) => { if (process.env.TRAZA) console.log('   [' + n + ']', JSON.stringify(await B.evaluate(() => { const g = window.__game, p = g.player; return { hp: Math.round(p.health), dead: !!p.dead, resp: !!g.respawning, x: Math.round(p.pos.x), z: Math.round(p.pos.z) }; }))); };
 let fallas = 0;
 const ok = (c, m) => { console.log((c ? '  ok  ' : '  MAL ') + m); if (!c) fallas++; };
 
@@ -36,6 +37,7 @@ const abrir = async (nombre) => {
 };
 const A = await abrir('Ana');
 const B = await abrir('Beto');
+await B.evaluate(() => { const p = window.__game.player, h = p.hurt.bind(p); window.__recibido = 0; p.hurt = (d, ...r) => { if (!p.dead) window.__recibido += d; return h(d, ...r); }; });
 ok(await A.evaluate(() => !document.querySelector('[data-a=online]').hidden), 'aparece el botón Jugar online');
 
 const sala = await A.evaluate(async () => (await window.__game.online.crearSala('Prueba', 'publica')).sala.id);
@@ -62,6 +64,7 @@ await esperar(800);
 const hpDesp = await B.evaluate(() => window.__game.player.health);
 ok(hpDesp <= hpAntes - 24 && hpDesp >= hpAntes - 26, `un tiro de 25 le baja la vida a Beto (${hpAntes} → ${hpDesp})`);
 
+await traza('// tope por segundo');
 // tope por segundo: 5000 de golpe se cobran de a 300 por segundo como mucho
 await B.evaluate(() => { const p = window.__game.player; p.health = 5000; p.armor = 0; });
 await A.evaluate(() => { const g = window.__game; const r = [...g.red.remotos.values()][0]; g.red.sumarGolpe(r.peer, 5000, 'pistola'); });
@@ -70,6 +73,7 @@ const hpTope = await B.evaluate(() => window.__game.player.health);
 ok(hpTope >= 5000 - 300 - 160, `5000 de daño de golpe no se cobran de una: se cobró ${5000 - hpTope}`);
 await B.evaluate(() => { const p = window.__game.player; p.dead = false; p.health = 100; });
 await esperar(1000);
+await traza('// fuera de alcance');
 // fuera de alcance: lejos, un golpe de puño no cuenta
 await B.evaluate((q) => { const p = window.__game.player; p.dead = false; p.health = 100; p.pos.set(q.x + 60, q.y, q.z); }, pos);
 await esperar(1200);
@@ -77,9 +81,11 @@ await A.evaluate(() => { const g = window.__game; const r = [...g.red.remotos.va
 await esperar(800);
 ok(await B.evaluate(() => window.__game.player.health) === 100, 'un golpe de puño a 60 m no cuenta');
 
+await traza('// disparo real con el');
 // disparo real con el arma del juego
 await B.evaluate((q) => { const p = window.__game.player; p.health = 100; p.pos.set(q.x, q.y, q.z + 6); }, pos);
 await esperar(1500);
+await traza('const tiro = await A.e');
 const tiro = await A.evaluate(async () => {
   const g = window.__game, p = g.player, r = [...g.red.remotos.values()][0];
   const dx = r.ped.pos.x - p.pos.x, dz = r.ped.pos.z - p.pos.z;
@@ -95,14 +101,20 @@ const tiro = await A.evaluate(async () => {
 console.log('   ', JSON.stringify(tiro));
 await esperar(800);
 const hpTiro = await B.evaluate(() => window.__game.player.health);
+const recibido = await B.evaluate(() => Math.round(window.__recibido || 0));
 ok(typeof tiro === 'object' && tiro.despues > tiro.antes, 'disparar con la pistola del juego suma daño a Beto');
-ok(hpTiro < 100, `y a Beto le baja la vida (${hpTiro})`);
+const infoB = recibido > 0 ? '' : ' ' + JSON.stringify(await B.evaluate(() => { const g = window.__game, p = g.player; const V = [...g.red.vistos.values()][0]; return { dead: p.dead, resp: g.respawning, inside: !!(g.interiors && g.interiors.inside), V, pos: [p.pos.x, p.pos.z] }; })) + JSON.stringify(await A.evaluate(() => { const g = window.__game; const r = [...g.red.remotos.values()][0]; return { mios: [...g.red.mios.values()], ped: [g.player.pos.x, g.player.pos.z], r: r && [r.ped.pos.x, r.ped.pos.z] }; }));
+ok(recibido > 0, `y Beto recibe el daño (${recibido} de vida; si pasa de 100 muere y revive en el hospital)` + infoB);
 
 // auto: Beto se sube a un auto y Ana lo ve
+await B.evaluate(() => { const g = window.__game, p = g.player; p.dead = false; p.health = 100; g.respawning = false; });
+await esperar(500);
 const subio = await B.evaluate(() => { const g = window.__game, p = g.player; const v = g.vehicles.filter((v) => !v.remoto && !v.dead).sort((a, b) => a.pos.distanceTo(p.pos) - b.pos.distanceTo(p.pos))[0]; if (!v) return false; if (g.enterVehicle) g.enterVehicle(v); else { p.vehicle = v; v.driver = p; } return !!p.vehicle; });
 await esperar(1500);
 const autoA = await A.evaluate(() => { const r = [...window.__game.red.remotos.values()][0]; return !!(r && r.auto && window.__game.vehicles.includes(r.auto)); });
-ok(!subio || autoA, subio ? 'cuando Beto maneja, Ana ve su auto' : '(no se pudo subir a Beto a un auto, se salta)');
+ok(subio, 'Beto se pudo subir a un auto');
+const dbg = autoA ? '' : ' ' + JSON.stringify(await B.evaluate(() => { const p = window.__game.player; return { a: window.__game.red.estadoMio().a, dead: p.dead, veh: !!p.vehicle }; })) + JSON.stringify(await A.evaluate(() => { const r = [...window.__game.red.remotos.values()][0]; return r && { auto: !!r.auto, e: !!r.ultP }; }));
+ok(autoA, 'cuando Beto maneja, Ana ve su auto' + dbg);
 
 // chat
 await B.evaluate(() => window.__game.red.decir('hola <b>che</b>'));

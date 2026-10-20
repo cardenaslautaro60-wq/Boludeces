@@ -28,9 +28,34 @@ export class OnlineUI {
     red.alAviso = (html) => this.g.hud.showToast(html, 3.5);
   }
 
-  // Los botones "Jugar online" de los menús aparecen solo si esta vista puede conectarse
+  // Los botones "Jugar online" aparecen dentro de un Artifact (en el .exe o el .apk no hay salas).
+  // Si todavía no conectó dice "conectando"; si no pudo, el panel explica qué hacer.
   mostrarBotones() {
-    for (const b of document.querySelectorAll('[data-a=online]')) b.hidden = !this.o.disponible;
+    const o = this.o, en = o.enArtifact();
+    for (const b of document.querySelectorAll('[data-a=online]')) {
+      if (!b.dataset.txt) b.dataset.txt = b.textContent;
+      b.hidden = !en;
+      b.textContent = b.dataset.txt + (o.disponible ? '' : o.estado === 'buscando' || o.estado === 'apagado' ? ' (conectando...)' : ' (sin conexión)');
+    }
+  }
+
+  // Busca la sala al abrir el juego y vuelve a probar si no apareció (el celular a veces tarda o falla la
+  // primera vez), y cada vez que se vuelve a la pestaña
+  async iniciar() {
+    const intentar = async () => {
+      if (this.o.disponible || this.buscando) return;
+      this.buscando = true;
+      this.mostrarBotones(); this.refrescar();
+      try { await this.o.reconectar(); } catch (e) { /* queda sin conexión */ }
+      this.buscando = false;
+      this.mostrarBotones(); this.refrescar();
+    };
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) intentar(); });
+    for (let i = 0; i < 8 && !this.o.disponible; i++) {
+      await intentar();
+      if (!this.o.disponible) await new Promise((r) => setTimeout(r, 5000));
+    }
+    this.reintentar = intentar;
   }
 
   // ---------- panel ----------
@@ -49,14 +74,15 @@ export class OnlineUI {
     el('span', '', filaNombre, 'Tu nombre en la sala');
     const nom = el('input', '', filaNombre); nom.maxLength = 24; nom.value = this.o.nombre; aislar(nom);
     nom.addEventListener('change', () => { nom.value = this.o.setNombre(nom.value); });
-    el('h4', '', fuera, 'Salas abiertas');
+    this.h4Salas = el('h4', '', fuera, 'Salas abiertas');
     this.lista = el('div', 'online-lista', fuera);
-    el('h4', '', fuera, 'Crear una sala');
-    const crear = el('div', 'online-crear', fuera);
+    const resto = el('div', 'online-resto', fuera);
+    el('h4', '', resto, this.o.soloCodigo ? 'Crear una sala privada' : 'Crear una sala');
+    const crear = el('div', 'online-crear', resto);
     const nomSala = el('input', '', crear); nomSala.maxLength = 24; nomSala.placeholder = `Sala de ${this.o.nombre}`; aislar(nomSala);
     const tipos = el('div', 'online-tipos', crear);
-    let tipo = 'publica';
-    for (const t of ['publica', 'amigos', 'pedido']) {
+    let tipo = this.o.soloCodigo ? 'amigos' : 'publica';
+    for (const t of this.o.soloCodigo ? [] : ['publica', 'amigos', 'pedido']) {
       const lab = el('label', 'online-tipo', tipos);
       const r = el('input', '', lab); r.type = 'radio'; r.name = 'online-tipo'; r.value = t; r.checked = t === tipo;
       r.addEventListener('change', () => { if (r.checked) tipo = t; });
@@ -70,8 +96,8 @@ export class OnlineUI {
       bCrear.disabled = false;
       if (!r.ok) this.mensaje(r.error); else this.alEntrar();
     });
-    el('h4', '', fuera, 'Entrar con código');
-    const cod = el('div', 'online-codigo', fuera);
+    el('h4', '', resto, 'Entrar con código');
+    const cod = el('div', 'online-codigo', resto);
     const inCod = el('input', '', cod); inCod.maxLength = 12; inCod.placeholder = 'Ej.: K7M2QX'; aislar(inCod);
     const bCod = el('button', 'online-btn', cod, 'Entrar');
     bCod.addEventListener('click', async () => {
@@ -84,7 +110,9 @@ export class OnlineUI {
       bCod.disabled = false;
       if (!r.ok) this.mensaje(r.error); else this.alEntrar();
     });
-    el('p', 'online-nota', fuera, 'Solo entran las personas invitadas a esta página con su cuenta. Quien la abre por el link público juega solo. Se pueden disparar entre ustedes: cada uno se aplica el daño que recibe.');
+    el('p', 'online-nota', resto, this.o.soloCodigo
+      ? 'Se crea una sala privada y te da un código de 6 letras: pasáselo a quien quieras que entre. Se pueden disparar entre ustedes: cada uno se aplica el daño que recibe.'
+      : 'Solo entran las personas invitadas a esta página con su cuenta. Quien la abre por el link público juega solo. Se pueden disparar entre ustedes: cada uno se aplica el daño que recibe.');
     // adentro de una sala
     const dentro = el('div', 'online-dentro', pane);
     this.cab = el('div', 'online-cab', dentro);
@@ -101,12 +129,11 @@ export class OnlineUI {
     this.bJugar.addEventListener('click', () => this.jugar());
     const bVolver = el('button', '', pie, 'Volver');
     bVolver.addEventListener('click', () => this.cerrar());
-    this.fuera = fuera; this.dentro = dentro;
+    this.fuera = fuera; this.dentro = dentro; this.resto = resto;
     this.panel = s;
     this.firma = null;
     try { document.exitPointerLock && document.exitPointerLock(); } catch (e) { /* nada */ }
     this.refrescar();
-    if (!this.o.disponible) this.mensaje('El modo online no está disponible en esta vista.');
   }
 
   cerrar() {
@@ -132,16 +159,29 @@ export class OnlineUI {
     const o = this.o;
     const enSala = !!o.sala && !o.esperando;
     // solo se rearma si cambió algo que se ve (la sala manda novedades muchas veces por segundo)
-    const firma = JSON.stringify([enSala, this.g.started, enSala ? [o.sala, o.jugadores().map((j) => [j.peer, j.nombre, j.guest]), o.anfitrion() && o.anfitrion().peer, o.pendientes(), [...o.silenciados], o.esAnfitrion()] : o.salasAbiertas(), o.disponible]);
+    const firma = JSON.stringify([enSala, this.g.started, enSala ? [o.sala, o.jugadores().map((j) => [j.peer, j.nombre, j.guest]), o.anfitrion() && o.anfitrion().peer, o.pendientes(), [...o.silenciados], o.esAnfitrion()] : o.salasAbiertas(), o.disponible, o.estado, o.motivo]);
     if (firma === this.firma) return;
     this.firma = firma;
     this.fuera.hidden = enSala;
+    this.resto.hidden = !o.disponible;
     this.dentro.hidden = !enSala;
     this.bJugar.textContent = this.g.started ? 'Volver al juego' : enSala ? 'Empezar a jugar' : 'Jugar solo';
     if (!enSala) {
       this.lista.replaceChildren();
+      this.h4Salas.hidden = this.lista.hidden = o.disponible && o.soloCodigo;
+      if (!o.disponible) {
+        const buscando = o.estado === 'buscando' || o.estado === 'apagado';
+        el('p', 'online-vacio', this.lista, buscando ? 'Conectando con el modo online...' : 'No pude conectarme al modo online. Tiene que abrirse el juego con tu cuenta de Claude, desde el link que te compartieron (no el link público). Si ya es así, probá de nuevo o abrilo desde el navegador.');
+        if (!buscando) {
+          const b = el('button', 'online-btn', this.lista, 'Reintentar');
+          b.addEventListener('click', () => { b.disabled = true; this.mensaje('Buscando...'); (this.reintentar ? this.reintentar() : this.o.reconectar()).then(() => { this.mensaje(this.o.disponible ? '' : 'Sigue sin conexión (' + (this.o.motivo || 'sin datos') + ').'); this.refrescar(); }); });
+          if (o.motivo) el('p', 'online-diag', this.lista, 'Dato para ayudar: ' + o.motivo);
+        }
+        return;
+      }
+      if (o.soloCodigo) return;
       const salas = o.salasAbiertas();
-      if (!salas.length) el('p', 'online-vacio', this.lista, o.disponible ? 'No hay salas abiertas. Creá una.' : 'Sin conexión.');
+      if (!salas.length) el('p', 'online-vacio', this.lista, 'No hay salas abiertas. Creá una.');
       for (const s of salas) {
         const f = el('div', 'online-fila', this.lista);
         el('b', '', f, s.nombre);

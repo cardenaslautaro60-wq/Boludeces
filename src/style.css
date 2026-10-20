@@ -307,6 +307,8 @@ body.is-touch .pool-hud { bottom: auto; top: calc(8px + env(safe-area-inset-top,
 .online-pane label.online-tipo { justify-content: flex-start; gap: 8px; border: 0; padding: 3px 0; }
 .online-cod { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0; }
 .online-code { font: 26px var(--display); letter-spacing: 4px; color: #f2c230; }
+.online-diag { color: #777; font-size: 11px; margin: 6px 0 0; }
+.online-resto[hidden] { display: none; }
 .online-nota, .online-vacio { color: #9a9a9a; font-size: 13px; margin: 10px 0 0; }
 .online-fuera[hidden], .online-dentro[hidden], .online-pane h4[hidden] { display: none; }
 .online-hud { position: absolute; left: 18px; top: calc(18px + env(safe-area-inset-top, 0px)); display: flex; align-items: center; gap: 6px; font: bold 14px var(--body); color: #f2f2f2; text-shadow: 1px 1px 0 #000, -1px -1px 0 #000; background: rgba(0,0,0,0.45); padding: 4px 8px; border-radius: 3px; max-width: 60vw; }

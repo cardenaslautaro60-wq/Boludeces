@@ -7,7 +7,7 @@
 // creó, mientras siga); él anuncia la sala en el lobby, acepta pedidos y puede echar a alguien. Quien
 // juega con el juego tal cual respeta todo eso; un jugador con un juego modificado podría saltearlo
 // (está en los riesgos del plan). Todo lo que llega se valida: nombres como texto, tamaños acotados.
-import { conseguirCanal } from './canal.js';
+import { conseguirCanal, hayArtifact, motivoCanal } from './canal.js';
 
 export const MAX_SALA = 8;
 export const TIPOS = ['publica', 'amigos', 'pedido'];
@@ -33,9 +33,15 @@ export function idDeCodigo(txt) {
   return ID_SALA.test(id) ? id : null;
 }
 
+// Quién puede encontrar y entrar a las salas. 'codigo': solo salas privadas con código, sin lista de salas
+// ni salas con pedido (lo que queda hasta que Nicolás decida). 'completo': también salas públicas en la lista
+// y privadas con pedido (ya está hecho y probado; se enciende cambiando esta línea).
+export const ACCESO_POR_DEFECTO = 'codigo';
+
 export class Online {
   constructor(opts = {}) {
     this.opts = opts;
+    this.acceso = opts.acceso || ACCESO_POR_DEFECTO;
     this.canal = null; // { tipo: 'room' | 'bc', room }
     this.disponible = false;
     this.estado = 'apagado'; // apagado | buscando | listo | sin-canal
@@ -63,6 +69,16 @@ export class Online {
     return this.nombre;
   }
 
+  // ¿Esta vista tiene alguna chance de tener salas? (dentro de un Artifact sí; en el .exe o el .apk no)
+  enArtifact() { return !!this.opts.canal || hayArtifact(); }
+  get motivo() { return motivoCanal(); }
+
+  // Volver a buscar la sala si la vez anterior no apareció (el celular puede tardar o fallar la primera vez)
+  async reconectar() {
+    if (this.estado === 'sin-canal') this.estado = 'apagado';
+    return this.conectar();
+  }
+
   async conectar() {
     if (this.estado !== 'apagado') return this.disponible;
     this.estado = 'buscando';
@@ -86,8 +102,10 @@ export class Online {
   }
 
   // ---------- lobby ----------
+  get soloCodigo() { return this.acceso !== 'completo'; }
+
   salasAbiertas() {
-    if (!this.canal) return [];
+    if (!this.canal || this.soloCodigo) return [];
     const porId = new Map();
     for (const p of this.canal.room.peers()) {
       const a = p.presence && p.presence.an;
@@ -103,7 +121,7 @@ export class Online {
   anunciar() {
     if (!this.canal) return;
     let an = null;
-    if (this.sala && this.sala.tipo !== 'amigos' && this.esAnfitrion()) {
+    if (!this.soloCodigo && this.sala && this.sala.tipo !== 'amigos' && this.esAnfitrion()) {
       an = { id: this.sala.id, n: this.sala.nombre, ti: this.sala.tipo, j: this.jugadores().length, mx: MAX_SALA };
     }
     const s = JSON.stringify(an);
@@ -116,6 +134,7 @@ export class Online {
   async crearSala(nombre, tipo) {
     if (!this.canal) return { ok: false, error: 'El modo online no está disponible acá.' };
     if (!TIPOS.includes(tipo)) tipo = 'publica';
+    if (this.soloCodigo) tipo = 'amigos';
     const id = (tipo === 'amigos' ? 'c-' + azar(6) : (tipo === 'pedido' ? 'r-' : 'p-') + azar(8));
     const sala = { id, nombre: textoSeguro(nombre) || `Sala de ${this.nombre}`, tipo, max: MAX_SALA };
     const r = await this.unirseCanal(id);
@@ -133,7 +152,7 @@ export class Online {
 
   async entrar(id) {
     if (!this.canal) return { ok: false, error: 'El modo online no está disponible acá.' };
-    if (!ID_SALA.test(id || '')) return { ok: false, error: 'Ese código no es válido.' };
+    if (!ID_SALA.test(id || '') || (this.soloCodigo && !id.startsWith('c-'))) return { ok: false, error: 'Ese código no es válido.' };
     if (this.sala && this.sala.id === id) return { ok: true, sala: this.sala };
     const r = await this.unirseCanal(id);
     if (!r.ok) return r;
