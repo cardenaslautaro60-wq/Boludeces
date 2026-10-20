@@ -89,6 +89,22 @@ class Extra {
 const R = 0.0285;
 const BALL_COLS = [0xf4f2ea, 0xf2c018, 0x1a3ab8, 0xd0201a, 0x5a1a8a, 0xf07018, 0x1a7a2a, 0x7a1010, 0x111111, 0xf2c018, 0x1a3ab8, 0xd0201a, 0x5a1a8a, 0xf07018, 0x1a7a2a, 0x7a1010];
 
+// Las rayadas (9-15) llevan una franja de color a lo ancho y los dos casquetes blancos, así se
+// distinguen de las lisas (1-7) desde arriba. La bola no rota, la franja queda fija.
+function ballMaterial() {
+  const m = new THREE.MeshLambertMaterial();
+  m.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aStripe;\nvarying float vStripe;\nvarying vec3 vLocal;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvStripe = aStripe;\nvLocal = position;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vStripe;\nvarying vec3 vLocal;')
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        if (vStripe > 0.5 && abs(vLocal.x) > ${(R * 0.42).toFixed(5)}) diffuseColor.rgb = vec3(0.96, 0.95, 0.9);`);
+  };
+  return m;
+}
+
 class PoolTable {
   constructor(def, rng) {
     this.def = def;
@@ -316,14 +332,20 @@ export class Interiors {
     }
     // mesas de pool con gente jugando (algunas libres)
     this.tables = [];
-    const balls = new THREE.InstancedMesh(new THREE.SphereGeometry(R, 10, 8), new THREE.MeshLambertMaterial(), DRAW_TABLES.length * 16);
+    const bg = new THREE.SphereGeometry(R, 14, 10);
+    const stripe = new Float32Array(DRAW_TABLES.length * 16);
+    bg.setAttribute('aStripe', new THREE.InstancedBufferAttribute(stripe, 1));
+    const balls = new THREE.InstancedMesh(bg, ballMaterial(), DRAW_TABLES.length * 16);
     balls.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     const col = new THREE.Color();
     const playing = [1, 2, 4, 5, 6, 7];
     DRAW_TABLES.forEach((def, ti) => {
       const T = new PoolTable(def, rng);
       T.base = ti * 16;
-      for (let i = 0; i < 16; i++) balls.setColorAt(ti * 16 + i, col.setHex(BALL_COLS[i]));
+      for (let i = 0; i < 16; i++) {
+        balls.setColorAt(ti * 16 + i, col.setHex(BALL_COLS[i]));
+        stripe[ti * 16 + i] = i >= 9 ? 1 : 0; // 9-15: rayadas
+      }
       if (playing.includes(def.n)) {
         for (let k = 0; k < 2; k++) {
           const px = def.x + (k ? 1 : -1) * (DRAW_TABLE.L / 2 + 0.55), pz = def.z + (k ? 0.5 : -0.5);
