@@ -11,8 +11,9 @@ const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 let fallas = 0;
 const ok = (cond, msg) => { console.log((cond ? '  ok  ' : '  MAL ') + msg); if (!cond) fallas++; };
 const prefijo = 'prueba-' + Date.now() + '-';
-const nuevo = async (nombre, acceso = 'completo') => {
-  const o = new Online({ acceso, canal: { tipo: 'bc', room: salaPestanas({ prefijo }) } });
+const TODO = { publica: true, pedido: true }, SOLO_CODIGO = { publica: false, pedido: false };
+const nuevo = async (nombre, acceso = TODO, pref = prefijo) => {
+  const o = new Online({ acceso, canal: { tipo: 'bc', room: salaPestanas({ prefijo: pref }) } });
   o.setNombre(nombre);
   await o.conectar();
   return o;
@@ -99,7 +100,7 @@ ok(textoChat('hola\u0000‮ mundo<script>'.repeat(10)).length <= 100 && !/[\u000
 
 console.log('Acceso solo por código (lo que queda hasta que se decida)');
 {
-  const dani = await nuevo('Dani', 'codigo'), eli = await nuevo('Eli', 'codigo');
+  const dani = await nuevo('Dani', SOLO_CODIGO), eli = await nuevo('Eli', SOLO_CODIGO);
   const x = await dani.crearSala('Quiere ser pública', 'publica');
   ok(x.ok && x.sala.tipo === 'amigos', 'aunque pida pública o con pedido, la sala sale privada con código');
   await esperar(400);
@@ -109,6 +110,33 @@ console.log('Acceso solo por código (lo que queda hasta que se decida)');
   const z = await eli.entrar(idDeCodigo(codigoDe(x.sala.id)));
   ok(z.ok, 'con el código se entra');
   for (const o of [dani, eli]) { await o.salir(true); o.canal.room.cerrarTodo(); }
+}
+
+console.log('Acceso por defecto: salas públicas con lista y privadas con código; "con pedido" apagada');
+{
+  const aparte = prefijo + 'defecto-'; // un lobby propio, sin las salas que quedaron de las pruebas de arriba
+  const fer = await nuevo('Fer', {}, aparte), gus = await nuevo('Gus', {}, aparte), hugo = await nuevo('Hugo', {}, aparte);
+  const x = await fer.crearSala('Los de la costanera', 'publica');
+  ok(x.ok && x.sala.tipo === 'publica', 'se puede crear una sala pública');
+  await esperar(400);
+  const l1 = gus.salasAbiertas();
+  ok(l1.length === 1 && l1[0].nombre === 'Los de la costanera' && l1[0].j === 1, 'otro jugador la ve en la lista con 1/8');
+  const e = await gus.entrar(x.sala.id);
+  ok(e.ok, 'entra desde la lista');
+  await esperar(500);
+  ok(hugo.salasAbiertas()[0].j === 2, 'un tercero ve que ahora hay 2/8');
+  await gus.salir(true);
+  await esperar(1500);
+  ok(hugo.salasAbiertas()[0].j === 1, 'y 1/8 cuando se va');
+  const p = await fer.crearSala('Quiere ser con pedido', 'pedido');
+  ok(p.ok && p.sala.tipo === 'amigos' && codigoDe(p.sala.id).length === 6, 'si piden "con pedido" (apagada) sale privada con código');
+  await esperar(400);
+  ok(hugo.salasAbiertas().length === 0, 'y no aparece en la lista');
+  const q = await hugo.entrar('r-abcdefgh');
+  ok(!q.ok, 'no se puede entrar a una sala "con pedido" por id');
+  const w = await hugo.entrar(idDeCodigo(codigoDe(p.sala.id)));
+  ok(w.ok, 'con el código se entra a la privada');
+  for (const o of [fer, gus, hugo]) { await o.salir(true); o.canal.room.cerrarTodo(); }
 }
 
 for (const o of [ana, beto, caro, ...otros]) { await o.salir(true); o.canal.room.cerrarTodo(); }

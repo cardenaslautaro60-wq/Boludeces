@@ -7,7 +7,7 @@
 // creó, mientras siga); él anuncia la sala en el lobby, acepta pedidos y puede echar a alguien. Quien
 // juega con el juego tal cual respeta todo eso; un jugador con un juego modificado podría saltearlo
 // (está en los riesgos del plan). Todo lo que llega se valida: nombres como texto, tamaños acotados.
-import { conseguirCanal, hayArtifact, motivoCanal } from './canal.js';
+import { conseguirCanal, hayArtifact, motivoCanal, diagCanal } from './canal.js';
 
 export const MAX_SALA = 8;
 export const TIPOS = ['publica', 'amigos', 'pedido'];
@@ -33,15 +33,18 @@ export function idDeCodigo(txt) {
   return ID_SALA.test(id) ? id : null;
 }
 
-// Quién puede encontrar y entrar a las salas. 'codigo': solo salas privadas con código, sin lista de salas
-// ni salas con pedido (lo que queda hasta que Nicolás decida). 'completo': también salas públicas en la lista
-// y privadas con pedido (ya está hecho y probado; se enciende cambiando esta línea).
-export const ACCESO_POR_DEFECTO = 'codigo';
+// Qué tipos de sala se pueden crear y encontrar. La privada con código (no sale en ninguna lista) siempre está.
+//   publica: salas públicas, que aparecen en una lista con cuánta gente hay y cualquiera puede entrar.
+//   pedido:  privadas que aparecen en la lista pero el anfitrión tiene que aceptar a cada uno (apagado hasta que
+//            Nicolás diga que la quiere; está hecho y probado).
+export const ACCESO = { publica: true, pedido: false };
 
 export class Online {
   constructor(opts = {}) {
     this.opts = opts;
-    this.acceso = opts.acceso || ACCESO_POR_DEFECTO;
+    const acceso = { ...ACCESO, ...(opts.acceso || {}) };
+    this.permitidos = new Set(['amigos', ...(acceso.publica ? ['publica'] : []), ...(acceso.pedido ? ['pedido'] : [])]);
+    this.listadas = this.permitidos.has('publica') || this.permitidos.has('pedido'); // ¿hay lista de salas?
     this.canal = null; // { tipo: 'room' | 'bc', room }
     this.disponible = false;
     this.estado = 'apagado'; // apagado | buscando | listo | sin-canal
@@ -71,11 +74,12 @@ export class Online {
 
   // ¿Esta vista tiene alguna chance de tener salas? (dentro de un Artifact sí; en el .exe o el .apk no)
   enArtifact() { return !!this.opts.canal || hayArtifact(); }
-  get motivo() { return motivoCanal(); }
+  get motivo() { return this.errorCanal && this.estado === 'sin-canal' ? this.errorCanal : motivoCanal(); }
+  get diag() { return diagCanal(); }
 
   // Volver a buscar la sala si la vez anterior no apareció (el celular puede tardar o fallar la primera vez)
   async reconectar() {
-    if (this.estado === 'sin-canal') this.estado = 'apagado';
+    if (this.estado === 'sin-canal') { this.estado = 'apagado'; this.errorCanal = null; }
     return this.conectar();
   }
 
@@ -87,7 +91,19 @@ export class Online {
     this.estado = this.disponible ? 'listo' : 'sin-canal';
     if (this.canal) {
       const room = this.canal.room;
-      try { room.onPeers(() => this.emitir('cambio'), (e) => { this.errorCanal = e && e.code; this.emitir('cambio'); }); } catch (e) { /* nada */ }
+      // Si la vista conecta pero la plataforma no admite a esta cuenta (not_granted) o le saca el acceso
+      // (revoked), no hay salas: se trata como sin conexión
+      const fatales = ['not_granted', 'revoked', 'capability_disabled', 'capability_removed'];
+      const alError = (e) => {
+        this.errorCanal = e && e.code;
+        if (fatales.includes(this.errorCanal)) {
+          this.disponible = false;
+          this.estado = 'sin-canal';
+          if (this.sala) this.salir(true).then(() => this.emitir('fuera', 'Se perdió la conexión con la sala.'));
+        }
+        this.emitir('cambio');
+      };
+      try { room.onPeers(() => this.emitir('cambio'), alError); } catch (e) { /* nada */ }
       try { room.presence({ v: 1, an: null }).catch(() => {}); } catch (e) { /* nada */ }
     }
     this.emitir('cambio');
@@ -102,15 +118,14 @@ export class Online {
   }
 
   // ---------- lobby ----------
-  get soloCodigo() { return this.acceso !== 'completo'; }
-
   salasAbiertas() {
-    if (!this.canal || this.soloCodigo) return [];
+    if (!this.canal || !this.listadas) return [];
     const porId = new Map();
     for (const p of this.canal.room.peers()) {
       const a = p.presence && p.presence.an;
       if (!a || typeof a !== 'object' || !ID_SALA.test(a.id || '') || a.id.startsWith('c-')) continue;
-      const tipo = a.ti === 'pedido' ? 'pedido' : 'publica';
+      const tipo = a.id.startsWith('r-') ? 'pedido' : 'publica'; // el tipo lo marca el id, el mismo que se usa para entrar
+      if (!this.permitidos.has(tipo)) continue;
       const s = { id: a.id, nombre: textoSeguro(a.n) || 'Sala', tipo, j: Math.max(1, Math.min(MAX_SALA, Math.floor(+a.j) || 1)), max: MAX_SALA, mia: !!(p.isMe && p.sameTab) };
       const prev = porId.get(s.id);
       if (!prev || s.j > prev.j) porId.set(s.id, s);
@@ -121,7 +136,7 @@ export class Online {
   anunciar() {
     if (!this.canal) return;
     let an = null;
-    if (!this.soloCodigo && this.sala && this.sala.tipo !== 'amigos' && this.esAnfitrion()) {
+    if (this.listadas && this.sala && this.sala.tipo !== 'amigos' && this.permitidos.has(this.sala.tipo) && this.esAnfitrion()) {
       an = { id: this.sala.id, n: this.sala.nombre, ti: this.sala.tipo, j: this.jugadores().length, mx: MAX_SALA };
     }
     const s = JSON.stringify(an);
@@ -134,7 +149,7 @@ export class Online {
   async crearSala(nombre, tipo) {
     if (!this.canal) return { ok: false, error: 'El modo online no está disponible acá.' };
     if (!TIPOS.includes(tipo)) tipo = 'publica';
-    if (this.soloCodigo) tipo = 'amigos';
+    if (!this.permitidos.has(tipo)) tipo = 'amigos'; // lo que no está permitido sale privada con código, nunca más abierta
     const id = (tipo === 'amigos' ? 'c-' + azar(6) : (tipo === 'pedido' ? 'r-' : 'p-') + azar(8));
     const sala = { id, nombre: textoSeguro(nombre) || `Sala de ${this.nombre}`, tipo, max: MAX_SALA };
     const r = await this.unirseCanal(id);
@@ -152,7 +167,8 @@ export class Online {
 
   async entrar(id) {
     if (!this.canal) return { ok: false, error: 'El modo online no está disponible acá.' };
-    if (!ID_SALA.test(id || '') || (this.soloCodigo && !id.startsWith('c-'))) return { ok: false, error: 'Ese código no es válido.' };
+    const clase = { p: 'publica', r: 'pedido', c: 'amigos' }[(id || '')[0]];
+    if (!ID_SALA.test(id || '') || !this.permitidos.has(clase)) return { ok: false, error: 'Ese código no es válido.' };
     if (this.sala && this.sala.id === id) return { ok: true, sala: this.sala };
     const r = await this.unirseCanal(id);
     if (!r.ok) return r;

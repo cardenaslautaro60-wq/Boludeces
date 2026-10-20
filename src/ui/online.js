@@ -3,6 +3,7 @@
 // de la sala y el chat en el HUD. Todo lo que escribió otro jugador se muestra como texto (textContent).
 import { MAX_SALA, codigoDe, idDeCodigo } from '../red/sala.js';
 import { escapar, colorDe } from '../red/jugadores.js';
+import { hayPermisos, pedirPermiso, abrirPermisos } from '../red/canal.js';
 
 const el = (tag, cls, parent, txt) => {
   const e = document.createElement(tag);
@@ -11,16 +12,29 @@ const el = (tag, cls, parent, txt) => {
   if (parent) parent.appendChild(e);
   return e;
 };
-const TIPO_TXT = { publica: 'Pública', amigos: 'Privada · solo amigos con código', pedido: 'Privada · piden entrar y el anfitrión acepta' };
+const TIPO_TXT = { publica: 'Pública', amigos: 'Privada · con código', pedido: 'Privada · piden entrar y el anfitrión acepta' };
+const TIPO_BOTON = { publica: 'Crear sala pública', amigos: 'Crear sala privada (con código)', pedido: 'Crear sala privada (piden entrar)' };
 // para que escribir en un campo no mueva al personaje ni dispare trucos
 const aislar = (inp) => { for (const ev of ['keydown', 'keyup', 'keypress']) inp.addEventListener(ev, (e) => e.stopPropagation()); };
+
+// Qué le pasó a esta vista y qué puede hacer quien juega, según lo que averiguó red/canal.js
+function explicacion(o) {
+  const d = o.diag || {}, m = o.motivo;
+  if (m === 'not_granted' || m === 'revoked') return 'Claude no deja entrar a esta cuenta a las salas de esta página. Quien compartió la página tiene que invitarte con tu correo (no alcanza con el link público).';
+  if (d.marco === false) return 'Abriste el juego suelto, no dentro de Claude. Abrilo desde la app o la web de Claude, con tu cuenta.';
+  if (d.permiso === 'denied') return 'Rechazaste el permiso de salas para esta página. Tocá "Abrir permisos" y activalo.';
+  if (d.permiso === 'prompt') return 'Falta que aceptes el permiso de salas. Tocá "Permitir".';
+  if (m === 'sin-respuesta') return 'Claude no respondió a tiempo. Probá de nuevo.';
+  return 'El modo online no está disponible para esta cuenta. Quien compartió la página tiene que invitarte con tu correo (el link público no alcanza) y la tenés que abrir con esa cuenta.';
+}
+const datoDiag = (o) => { const d = o.diag || {}; return [o.motivo, d.marco === false ? 'suelto' : d.marco ? 'dentro-de-claude' : '', d.permiso && 'permiso=' + d.permiso, d.movil ? 'celular' : 'compu', d.ms ? d.ms + 'ms' : ''].filter(Boolean).join(' · '); };
 
 export class OnlineUI {
   constructor(game, online, red) {
     this.g = game; this.o = online; this.red = red;
     this.panel = null;
     this.buildHud();
-    online.on('cambio', () => this.refrescar());
+    online.on('cambio', () => { this.mostrarBotones(); this.refrescar(); });
     online.on('aviso', (t) => this.mensaje(t));
     online.on('fuera', (t) => { this.mensaje(t); if (this.g.started) this.g.hud.showToast(escapar(t), 3); this.refrescar(); });
     online.on('admitido', (s) => { if (this.g.started) this.g.hud.showToast(`Entraste a <b>${escapar(s.nombre)}</b>`, 3); });
@@ -34,28 +48,33 @@ export class OnlineUI {
     const o = this.o, en = o.enArtifact();
     for (const b of document.querySelectorAll('[data-a=online]')) {
       if (!b.dataset.txt) b.dataset.txt = b.textContent;
-      b.hidden = !en;
-      b.textContent = b.dataset.txt + (o.disponible ? '' : o.estado === 'buscando' || o.estado === 'apagado' ? ' (conectando...)' : ' (sin conexión)');
+      const txt = b.dataset.txt + (o.disponible ? '' : o.estado === 'buscando' || o.estado === 'apagado' ? ' (conectando...)' : ' (sin conexión: tocá acá)');
+      if (b.hidden === en) b.hidden = !en;
+      if (b.textContent !== txt) b.textContent = txt;
     }
   }
 
   // Busca la sala al abrir el juego y vuelve a probar si no apareció (el celular a veces tarda o falla la
   // primera vez), y cada vez que se vuelve a la pestaña
   async iniciar() {
-    const intentar = async () => {
-      if (this.o.disponible || this.buscando) return;
-      this.buscando = true;
-      this.mostrarBotones(); this.refrescar();
-      try { await this.o.reconectar(); } catch (e) { /* queda sin conexión */ }
-      this.buscando = false;
-      this.mostrarBotones(); this.refrescar();
+    const intentar = () => {
+      if (this.o.disponible) return Promise.resolve();
+      if (this.intento) return this.intento; // ya hay una búsqueda en curso: se espera esa
+      this.intento = (async () => {
+        const busqueda = this.o.reconectar(); // arranca la búsqueda (pasa a "conectando")
+        this.mostrarBotones(); this.refrescar();
+        try { await busqueda; } catch (e) { /* queda sin conexión */ }
+        this.intento = null;
+        this.mostrarBotones(); this.refrescar();
+      })();
+      return this.intento;
     };
+    this.reintentar = intentar;
     document.addEventListener('visibilitychange', () => { if (!document.hidden) intentar(); });
     for (let i = 0; i < 8 && !this.o.disponible; i++) {
       await intentar();
       if (!this.o.disponible) await new Promise((r) => setTimeout(r, 5000));
     }
-    this.reintentar = intentar;
   }
 
   // ---------- panel ----------
@@ -74,29 +93,29 @@ export class OnlineUI {
     el('span', '', filaNombre, 'Tu nombre en la sala');
     const nom = el('input', '', filaNombre); nom.maxLength = 24; nom.value = this.o.nombre; aislar(nom);
     nom.addEventListener('change', () => { nom.value = this.o.setNombre(nom.value); });
-    this.h4Salas = el('h4', '', fuera, 'Salas abiertas');
+    const o = this.o;
+    // salas públicas: la lista con cuánta gente hay, para entrar con un toque
+    this.h4Salas = el('h4', '', fuera, o.permitidos.has('pedido') ? 'Salas abiertas' : 'Salas públicas');
     this.lista = el('div', 'online-lista', fuera);
     const resto = el('div', 'online-resto', fuera);
-    el('h4', '', resto, this.o.soloCodigo ? 'Crear una sala privada' : 'Crear una sala');
+    // crear una sala: un nombre y un botón por cada tipo
+    el('h4', '', resto, 'Crear una sala');
     const crear = el('div', 'online-crear', resto);
-    const nomSala = el('input', '', crear); nomSala.maxLength = 24; nomSala.placeholder = `Sala de ${this.o.nombre}`; aislar(nomSala);
-    const tipos = el('div', 'online-tipos', crear);
-    let tipo = this.o.soloCodigo ? 'amigos' : 'publica';
-    for (const t of this.o.soloCodigo ? [] : ['publica', 'amigos', 'pedido']) {
-      const lab = el('label', 'online-tipo', tipos);
-      const r = el('input', '', lab); r.type = 'radio'; r.name = 'online-tipo'; r.value = t; r.checked = t === tipo;
-      r.addEventListener('change', () => { if (r.checked) tipo = t; });
-      el('span', '', lab, TIPO_TXT[t]);
+    const nomSala = el('input', '', crear); nomSala.maxLength = 24; nomSala.placeholder = `Nombre (por ejemplo, Sala de ${o.nombre})`; aislar(nomSala);
+    const botonesCrear = [];
+    for (const t of ['publica', 'amigos', 'pedido']) {
+      if (!o.permitidos.has(t)) continue;
+      const b = el('button', 'online-btn online-crear-btn', crear, TIPO_BOTON[t]);
+      botonesCrear.push(b);
+      b.addEventListener('click', async () => {
+        for (const x of botonesCrear) x.disabled = true;
+        nom.value = o.setNombre(nom.value);
+        const r = await o.crearSala(nomSala.value, t);
+        for (const x of botonesCrear) x.disabled = false;
+        if (!r.ok) this.mensaje(r.error); else this.alEntrar();
+      });
     }
-    const bCrear = el('button', 'online-btn', crear, 'Crear sala');
-    bCrear.addEventListener('click', async () => {
-      bCrear.disabled = true;
-      nom.value = this.o.setNombre(nom.value);
-      const r = await this.o.crearSala(nomSala.value, tipo);
-      bCrear.disabled = false;
-      if (!r.ok) this.mensaje(r.error); else this.alEntrar();
-    });
-    el('h4', '', resto, 'Entrar con código');
+    el('h4', '', resto, 'Entrar a una sala privada con código');
     const cod = el('div', 'online-codigo', resto);
     const inCod = el('input', '', cod); inCod.maxLength = 12; inCod.placeholder = 'Ej.: K7M2QX'; aislar(inCod);
     const bCod = el('button', 'online-btn', cod, 'Entrar');
@@ -104,15 +123,13 @@ export class OnlineUI {
       const id = idDeCodigo(inCod.value);
       if (!id) { this.mensaje('Ese código no es válido.'); return; }
       bCod.disabled = true;
-      nom.value = this.o.setNombre(nom.value);
+      nom.value = o.setNombre(nom.value);
       this.mensaje('Buscando la sala...');
-      const r = await this.o.entrar(id);
+      const r = await o.entrar(id);
       bCod.disabled = false;
       if (!r.ok) this.mensaje(r.error); else this.alEntrar();
     });
-    el('p', 'online-nota', resto, this.o.soloCodigo
-      ? 'Se crea una sala privada y te da un código de 6 letras: pasáselo a quien quieras que entre. Se pueden disparar entre ustedes: cada uno se aplica el daño que recibe.'
-      : 'Solo entran las personas invitadas a esta página con su cuenta. Quien la abre por el link público juega solo. Se pueden disparar entre ustedes: cada uno se aplica el daño que recibe.');
+    el('p', 'online-nota', resto, 'La sala privada te da un código de 6 letras: pasáselo a quien quieras que entre, no aparece en ninguna lista. Se pueden disparar entre ustedes: cada uno se aplica el daño que recibe.');
     // adentro de una sala
     const dentro = el('div', 'online-dentro', pane);
     this.cab = el('div', 'online-cab', dentro);
@@ -159,7 +176,7 @@ export class OnlineUI {
     const o = this.o;
     const enSala = !!o.sala && !o.esperando;
     // solo se rearma si cambió algo que se ve (la sala manda novedades muchas veces por segundo)
-    const firma = JSON.stringify([enSala, this.g.started, enSala ? [o.sala, o.jugadores().map((j) => [j.peer, j.nombre, j.guest]), o.anfitrion() && o.anfitrion().peer, o.pendientes(), [...o.silenciados], o.esAnfitrion()] : o.salasAbiertas(), o.disponible, o.estado, o.motivo]);
+    const firma = JSON.stringify([enSala, this.g.started, enSala ? [o.sala, o.jugadores().map((j) => [j.peer, j.nombre, j.guest]), o.anfitrion() && o.anfitrion().peer, o.pendientes(), [...o.silenciados], o.esAnfitrion()] : o.salasAbiertas(), o.disponible, o.estado, o.motivo, o.diag && o.diag.permiso]);
     if (firma === this.firma) return;
     this.firma = firma;
     this.fuera.hidden = enSala;
@@ -168,25 +185,37 @@ export class OnlineUI {
     this.bJugar.textContent = this.g.started ? 'Volver al juego' : enSala ? 'Empezar a jugar' : 'Jugar solo';
     if (!enSala) {
       this.lista.replaceChildren();
-      this.h4Salas.hidden = this.lista.hidden = o.disponible && o.soloCodigo;
+      this.h4Salas.hidden = this.lista.hidden = o.disponible && !o.listadas;
       if (!o.disponible) {
         const buscando = o.estado === 'buscando' || o.estado === 'apagado';
-        el('p', 'online-vacio', this.lista, buscando ? 'Conectando con el modo online...' : 'No pude conectarme al modo online. Tiene que abrirse el juego con tu cuenta de Claude, desde el link que te compartieron (no el link público). Si ya es así, probá de nuevo o abrilo desde el navegador.');
+        el('p', 'online-vacio', this.lista, buscando ? 'Conectando con el modo online...' : explicacion(o));
         if (!buscando) {
-          const b = el('button', 'online-btn', this.lista, 'Reintentar');
-          b.addEventListener('click', () => { b.disabled = true; this.mensaje('Buscando...'); (this.reintentar ? this.reintentar() : this.o.reconectar()).then(() => { this.mensaje(this.o.disponible ? '' : 'Sigue sin conexión (' + (this.o.motivo || 'sin datos') + ').'); this.refrescar(); }); });
-          if (o.motivo) el('p', 'online-diag', this.lista, 'Dato para ayudar: ' + o.motivo);
+          const permiso = (o.diag || {}).permiso;
+          const probar = (accion) => async (ev) => {
+            const b = ev.currentTarget;
+            b.disabled = true; this.mensaje('Buscando...');
+            if (accion) await accion();
+            await (this.reintentar ? this.reintentar() : this.o.reconectar());
+            this.mensaje(this.o.disponible ? '' : 'Sigue sin conexión.');
+            this.refrescar();
+          };
+          if (hayPermisos() && permiso === 'prompt') el('button', 'online-btn', this.lista, 'Permitir').addEventListener('click', probar(pedirPermiso));
+          if (hayPermisos() && permiso === 'denied') el('button', 'online-btn', this.lista, 'Abrir permisos').addEventListener('click', probar(abrirPermisos));
+          el('button', 'online-btn', this.lista, 'Reintentar').addEventListener('click', probar(null));
+          el('p', 'online-diag', this.lista, 'Dato para ayudar: ' + datoDiag(o));
         }
         return;
       }
-      if (o.soloCodigo) return;
+      if (!o.listadas) return;
       const salas = o.salasAbiertas();
-      if (!salas.length) el('p', 'online-vacio', this.lista, 'No hay salas abiertas. Creá una.');
+      if (!salas.length) el('p', 'online-vacio', this.lista, o.permitidos.has('pedido') ? 'No hay salas abiertas. Creá una.' : 'No hay salas públicas abiertas. Creá una abajo.');
       for (const s of salas) {
         const f = el('div', 'online-fila', this.lista);
         el('b', '', f, s.nombre);
         el('span', 'online-tag', f, s.tipo === 'pedido' ? 'Privada (con pedido)' : 'Pública');
         el('span', 'online-num', f, `${s.j}/${s.max}`);
+        const libres = s.max - s.j;
+        el('span', 'online-cupos', f, libres <= 0 ? 'llena' : libres === 1 ? 'queda 1 lugar' : `quedan ${libres} lugares`);
         const b = el('button', 'online-btn', f, s.tipo === 'pedido' ? 'Pedir entrar' : 'Entrar');
         b.disabled = s.j >= s.max || s.mia;
         b.addEventListener('click', async () => {

@@ -12,6 +12,17 @@ const ESPERA_USE = 12000; // claude.use() responde null a los ~10 s si no hay vi
 let motivo = '';
 export const motivoCanal = () => motivo;
 
+// Lo que se pudo averiguar de esta vista cuando la sala no aparece: si el juego está dentro de Claude o
+// abierto suelto, cuánto tardó la respuesta, qué dice el permiso "room" y si es un celular
+let diag = { marco: null, ms: 0, permiso: '', movil: false };
+let permisos = null;
+export const diagCanal = () => diag;
+export const hayPermisos = () => !!permisos;
+// Desde un botón: pide el permiso de salas (abre el diálogo de Claude) o abre el panel de permisos
+export async function pedirPermiso() { try { return permisos ? await permisos.request(['room']) : null; } catch (e) { return null; } }
+export async function abrirPermisos() { try { if (permisos) await permisos.manage(); } catch (e) { /* no se pudo abrir */ } }
+const conTope = (p, ms, valor = null) => Promise.race([p, new Promise((res) => setTimeout(() => res(valor), ms))]);
+
 // ¿Se está jugando dentro de un Artifact? (en el .exe, el .apk o el archivo suelto no hay salas)
 export function hayArtifact() {
   try { if (new URLSearchParams(location.search).get('red') === 'bc' && typeof BroadcastChannel === 'function') return true; } catch (e) { /* sin URL */ }
@@ -22,13 +33,26 @@ export function hayArtifact() {
 export async function salaDelArtifact() {
   const c = typeof window !== 'undefined' ? window.claude : null;
   if (!c || typeof c.use !== 'function') { motivo = 'sin-artifact'; return null; }
+  const t0 = Date.now();
+  let marco = null;
+  try { marco = window.top !== window.self; } catch (e) { marco = true; }
+  const movil = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
   try {
     let tiempo = false;
     const r = await Promise.race([c.use('room'), new Promise((res) => setTimeout(() => { tiempo = true; res(null); }, ESPERA_USE))]);
     motivo = r ? '' : tiempo ? 'sin-respuesta' : 'sin-permiso';
+    diag = { marco, ms: Date.now() - t0, permiso: '', movil };
+    if (!r && !tiempo) {
+      // la vista respondió que no: ¿es un permiso que falta o rechazado? (sin preguntar nada)
+      try {
+        permisos = await conTope(c.use('permissions'), 3000);
+        diag.permiso = permisos ? await conTope(permisos.state('room'), 2000, '?') : 'sin-panel';
+      } catch (e) { diag.permiso = 'error'; }
+    }
     return r || null;
   } catch (e) {
     motivo = 'error';
+    diag = { marco, ms: Date.now() - t0, permiso: '', movil };
     return null;
   }
 }
