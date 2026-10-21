@@ -38,6 +38,9 @@ export class Input {
     this.wheel = 0;
     this.typed = '';
     this.locked = false;
+    this.blurs = 0; // cuántas veces la ventana perdió el foco (para cortar acciones a medio cargar)
+    this.captureClick = false; // el clic de este cuadro sólo sirvió para capturar el mouse
+    this.lockGrab = false; // el botón que se está apretando es el que capturó el mouse (hasta que se suelta)
     this.touch = { x: 0, y: 0, active: false, buttons: new Set(), pressed: new Set(), lookX: 0, lookY: 0 };
     this.lastMouseMove = 0;
     this.enabled = true;
@@ -56,18 +59,24 @@ export class Input {
       }
     });
     window.addEventListener('keyup', (e) => { this.down.delete(e.code); });
-    window.addEventListener('blur', () => { this.down.clear(); });
+    window.addEventListener('blur', () => { this.down.clear(); this.blurs++; this.lockGrab = false; });
     canvas.addEventListener('mousedown', (e) => {
       const code = 'mouse' + e.button;
       if (!this.down.has(code)) this.pressed.add(code);
       this.down.add(code);
+      if (e.button === 0) this.captureClick = !this.locked && this.wantLock && !this.isTouch && !this.lockDenied;
       if (!this.locked && this.wantLock && !this.isTouch) {
         try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (err) { /* sin pointer lock */ }
       }
     });
-    window.addEventListener('mouseup', (e) => { this.down.delete('mouse' + e.button); });
+    window.addEventListener('mouseup', (e) => { this.down.delete('mouse' + e.button); if (e.button === 0) this.lockGrab = false; });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-    document.addEventListener('pointerlockchange', () => { this.locked = document.pointerLockElement === canvas; });
+    document.addEventListener('pointerlockchange', () => {
+      this.locked = document.pointerLockElement === canvas;
+      if (this.locked) { this.lockDenied = false; if (this.down.has('mouse0')) this.lockGrab = true; }
+    });
+    // si el navegador no deja capturar el mouse, el clic vuelve a contar como clic
+    document.addEventListener('pointerlockerror', () => { this.lockDenied = true; });
     window.addEventListener('mousemove', (e) => {
       if (this.locked) { this.mdx += e.movementX; this.mdy += e.movementY; this.lastMouseMove = performance.now(); }
       else if (this.down.has('mouse0') || this.down.has('mouse2') || this.dragLook) {
@@ -142,6 +151,7 @@ export class Input {
 
   endFrame() {
     this.pressed.clear();
+    this.captureClick = false;
     this.touch.pressed.clear();
     this.wheel = 0;
   }

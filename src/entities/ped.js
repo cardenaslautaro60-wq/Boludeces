@@ -29,6 +29,11 @@ export class Ped {
     this.jumpMul = 1;     // truco SUPERSALTO
     this.climb = null;    // trepando una pared, baranda o auto
     this.landT = 0;       // aterrizaje fuerte
+    this.rollT = 0;       // voltereta al caer de alto corriendo (Vice City / San Andreas)
+    this.sprintBoost = 0; // pique por tocar repetido la tecla de correr
+    this.diving = false;  // buceando (San Andreas)
+    this.swimUp = 0;      // -1 bajar, 1 subir (bajo el agua)
+    this.oxygen = 100;    // aire bajo el agua
     this.mag = {};        // balas en el cargador (solo el jugador recarga)
     this.reloadT = 0;
     this.maxHealth = opts.health || 100;
@@ -101,7 +106,22 @@ export class Ped {
   // saltar un instante después de salir de un cordón ("coyote"). Contra una pared o una
   // baranda baja, el jugador trepa.
   jump() {
-    if (this.swimming || this.vehicle || this.knockT > 0 || this.dead || this.climb) return false;
+    if (this.swimming && this.isPlayer && !this.vehicle && !this.dead) {
+      // en el agua: trepar a un muelle o a la orilla si hay algo adelante; si no, sumergirse
+      if (this.diving) return false;
+      if (this.tryClimb(2.2)) {
+        // el cuerpo nadando se dibuja 0,9 m más abajo: la trepada arranca desde ahí, ya sin brazada
+        this.swimming = false;
+        this.climb.y0 -= 0.9; this.pos.y -= 0.9;
+        this.model.anim.swim = 0; if (this.model.anim.bp !== undefined) this.model.anim.bp = 0;
+        return true;
+      }
+      this.diving = true;
+      this.vy = -2.2;
+      this.game.effects && this.game.effects.splash(this.pos.x, this.pos.z);
+      return true;
+    }
+    if (this.swimming || this.vehicle || this.knockT > 0 || this.dead || this.climb || this.rollT > 0) return false;
     const coyote = !this.onGround && this.airT < 0.14 && this.vy <= 0.5 && !this.jumped;
     if (!this.onGround && !coyote) return false;
     if (this.isPlayer && this.tryClimb()) return true;
@@ -115,6 +135,8 @@ export class Ped {
     this.onGround = false;
     this.jumped = true;
     this.jumpHold = 0.28;
+    // salto en carrera: se tira para adelante con los brazos estirados
+    this.leap = this.isPlayer && Math.hypot(this.vx, this.vz) > 4.4;
     return true;
   }
 
@@ -146,18 +168,23 @@ export class Ped {
     return best;
   }
 
-  tryClimb() {
+  tryClimb(reach = 2.35) {
     const W = this.game.world;
     const fx = Math.sin(this.heading), fz = Math.cos(this.heading);
     const y = this.pos.y;
     for (const d of [0.5, 0.8]) {
       const x = this.pos.x + fx * d, z = this.pos.z + fz * d;
-      const top = Math.max(this.topAt(x, z, y + 2.35, true), W.footGround(x, z));
-      if (top < y + 0.6) continue;
+      const top = Math.max(this.topAt(x, z, y + reach, true), W.footGround(x, z));
+      if (top < y + 0.6 || top < 0.1) continue;
       // ¿hay dónde pararse arriba? Si no (baranda, alambrado), se pasa por encima
       const lx = x + fx * 0.55, lz = z + fz * 0.55;
       const onTop = Math.max(this.topAt(lx, lz, top + 0.3, true), W.footGround(lx, lz)) > top - 0.3;
       const ex = onTop ? lx : x + fx * 1.3, ez = onTop ? lz : z + fz * 1.3;
+      // adentro de un local no se salta por encima de nada que tenga un pozo atrás (la pared de afuera)
+      const ins = this.game.interiors && this.game.interiors.inside;
+      if (!onTop && ins && Math.max(this.topAt(ex, ez, top, true), W.footGround(ex, ez)) < y - 1.5) continue;
+      // ni a nada tan alto que la cabeza quede en el techo (las paredes): de ahí se terminaba afuera del local
+      if (ins && top > this.game.interiors.headroomY) continue;
       this.climb = { t: 0, dur: 0.3 + (top - y) * 0.2, x0: this.pos.x, y0: y, z0: this.pos.z, xm: x, zm: z, top, x1: ex, z1: ez, over: !onTop };
       this.vx = this.vz = this.vy = 0;
       this.onGround = false;
@@ -366,17 +393,41 @@ export class Ped {
     // velocidad objetivo
     const fatPen = this.isPlayer && g.stats ? 1 - g.stats.fat / 400 : 1;
     let spd = [1.7, 4.6, 7.0][this.gait] * this.speedMul * fatPen;
-    if (this.gait === 2 && this.isPlayer) {
-      this.stamina -= dt * (18 + (g.stats ? g.stats.fat / 5 : 0));
+    // resistencia (estadística de San Andreas): cansa menos y se gana corriendo y nadando
+    const res = this.isPlayer && g.stats ? g.stats.stamina / 100 : 0;
+    const boost = this.isPlayer ? this.sprintBoost : 0;
+    if (this.gait === 2 && this.isPlayer && (mag > 0.1 || this.swimming)) {
+      spd *= 1 + boost * 0.22;
+      this.stamina -= dt * (18 + (g.stats ? g.stats.fat / 5 : 0)) * (1 - res * 0.6) * (1 + boost * 0.5);
       if (this.stamina <= 0) { this.stamina = 0; spd = 4.6 * fatPen; }
-    } else this.stamina = Math.min(100, this.stamina + dt * 12);
+      if (g.stats && this.stamina > 0) g.stats.stamina = Math.min(100, g.stats.stamina + dt * (this.swimming ? 0.02 : 0.012));
+    } else this.stamina = Math.min(100, this.stamina + dt * (12 + res * 8));
     if (this.aiming) spd = Math.min(spd, 2.2);
-    if (this.swimming) spd = 2.3;
+    if (this.swimming) {
+      const fast = this.gait === 2 && this.stamina > 0;
+      spd = this.diving ? (fast ? 3.4 : 2.3) : fast ? 4.3 * (1 + boost * 0.18) : 2.1;
+    }
     if (this.landT > 0) spd *= 0.35;
+    // aire bajo el agua: se acaba y empieza a ahogarse (más resistencia = más aire)
+    if (this.isPlayer) {
+      if (this.diving) {
+        this.oxygen -= dt * 100 / (14 + res * 16);
+        if (this.oxygen <= 0) {
+          this.oxygen = 0;
+          this.drownT = (this.drownT || 0) - dt;
+          if (this.drownT <= 0) { this.drownT = 0.6; this.hurt(6, null, null); }
+        }
+      } else this.oxygen = Math.min(100, this.oxygen + dt * 40);
+    }
     const tvx = mx * spd * mag, tvz = mz * spd * mag;
     const air = !this.onGround && !this.swimming;
-    // en el aire se conserva el impulso; con el jugador se puede corregir un poco la dirección
-    if (!air || mag > 0.1) {
+    if (this.rollT > 0) {
+      // voltereta: sigue de largo con el impulso
+      this.rollT -= dt;
+      const k = Math.exp(-1.6 * dt);
+      this.vx *= k; this.vz *= k;
+    } else if (!air || mag > 0.1) {
+      // en el aire se conserva el impulso; con el jugador se puede corregir un poco la dirección
       const k = !air ? 1 - Math.exp(-12 * dt) : 1 - Math.exp(-(this.isPlayer ? 2.6 : 1.5) * dt);
       this.vx = lerp(this.vx, tvx, k);
       this.vz = lerp(this.vz, tvz, k);
@@ -385,7 +436,7 @@ export class Ped {
     // orientación
     if (this.aiming) {
       this.heading = approachAngle(this.heading, Math.atan2(this.aimDir.x, this.aimDir.z), dt * 14);
-    } else if (mag > 0.1 && this.knockT <= 0) {
+    } else if (mag > 0.1 && this.knockT <= 0 && this.rollT <= 0) {
       this.heading = approachAngle(this.heading, Math.atan2(mx, mz), dt * 11);
     }
 
@@ -393,10 +444,19 @@ export class Ped {
 
     const knocked = this.knockT > 0;
     const W = WEAPONS[this.weapon];
+    const hs = Math.hypot(this.vx, this.vz);
+    let swimStyle = null, bodyPitch = 0;
+    if (this.swimming) {
+      // pecho tranquilo, crol con la tecla de correr y buceo (el cuerpo sigue la dirección)
+      swimStyle = this.diving ? 'buceo' : this.gait === 2 && hs > 2.6 ? 'crol' : 'pecho';
+      bodyPitch = this.diving ? Math.PI / 2 - Math.atan2(this.vy, Math.max(0.6, hs)) * 0.8 : hs > 0.6 ? 1.3 : 0.45;
+    }
     this.model.update(dt, {
-      speed: knocked ? 0 : Math.hypot(this.vx, this.vz) * (this.isPlayer ? 1 : 1.05),
+      speed: knocked ? 0 : this.swimming ? Math.max(hs, 0.9) : hs * (this.isPlayer ? 1 : 1.05),
       air: !this.onGround && !this.swimming && !knocked,
-      swim: this.swimming,
+      leap: this.leap && !this.onGround,
+      swim: this.swimming, swimStyle, bodyPitch,
+      roll: this.rollT > 0 ? 1 - this.rollT / 0.62 : 0,
       aim: (this.aiming || (W && !W.melee && this.attackCD > W.rate - 0.12)) && !knocked,
       aimPitch: this.aimPitch,
       twoHanded: W && W.twoHanded,
@@ -418,7 +478,8 @@ export class Ped {
     const W = g.world;
     // viento fuerte empuja (temporal)
     let wx = 0, wz = 0;
-    if (g.env && g.env.windSpeed > 18 && !dead) {
+    const sheltered = g.interiors && g.interiors.inside && this.pos.y > g.interiors.origin.y - 8;
+    if (g.env && g.env.windSpeed > 18 && !dead && !sheltered) {
       const f = (g.env.windSpeed - 18) * 0.05;
       wx = g.env.windDir.x * f; wz = g.env.windDir.y * f;
     }
@@ -430,13 +491,32 @@ export class Ped {
     const water = g.terrain.heightAt(this.pos.x, this.pos.z) < -1.2 && gy < -1;
     if (water && this.pos.y < 0.3) {
       if (!this.swimming && this.vy < -3) g.effects && g.effects.splash(this.pos.x, this.pos.z);
+      // tirarse de cabeza desde alto: entra buceando
+      if (!this.swimming && this.vy < -9 && this.isPlayer && !dead) { this.diving = true; this.vy *= 0.35; }
       this.swimming = true;
-      this.pos.y = lerp(this.pos.y, 0, 1 - Math.exp(-6 * dt));
-      this.vy = 0;
+      this.rollT = 0; this.leap = false;
+      if (this.diving && !dead) {
+        // bajo el agua: se sube o se baja según swimUp, entre el fondo y la superficie
+        const bed = gy + 0.55;
+        this.vy = lerp(this.vy, (this.swimUp || 0) * (this.gait === 2 ? 2.6 : 1.8), 1 - Math.exp(-3 * dt));
+        this.pos.y += this.vy * dt;
+        if (this.pos.y < bed) { this.pos.y = bed; if (this.vy < 0) this.vy = 0; }
+        if (this.pos.y > -0.3 && this.vy > 0.2) { this.diving = false; this.pos.y = -0.3; this.vy = 0; g.effects && g.effects.splash(this.pos.x, this.pos.z); }
+        else if (this.pos.y > -0.3) this.pos.y = -0.3;
+      } else if (dead && this.pos.y < -0.35) {
+        // ahogado: el cuerpo sube despacio hasta la superficie (la cámara lo sigue bajo el agua)
+        this.pos.y = Math.min(-0.3, this.pos.y + 1.2 * dt);
+        this.vy = 0;
+      } else {
+        this.diving = false;
+        this.pos.y = lerp(this.pos.y, 0, 1 - Math.exp(-6 * dt));
+        this.vy = 0;
+      }
       this.onGround = false;
-      if (dead) this.pos.y = -0.3;
+      if (dead && !this.diving) this.pos.y = -0.3;
     } else {
       this.swimming = false;
+      this.diving = false;
       // mantener el salto apretado: menos gravedad mientras sube
       const hold = this.holdJump && this.vy > 0 && this.jumpHold > 0;
       if (this.jumpHold > 0) this.jumpHold -= dt;
@@ -445,15 +525,32 @@ export class Ped {
       this.pos.y += this.vy * dt;
       // techos de autos, contenedores, muros: se puede parar arriba (solo el jugador y si ya está arriba)
       let sy = gy;
-      if (this.isPlayer || !this.onGround) sy = Math.max(gy, this.topAt(this.pos.x, this.pos.z, this.pos.y + 0.3, this.isPlayer));
+      // (también los que andan en altura: el compañero adentro de un local, en un techo)
+      if (this.isPlayer || !this.onGround || this.pos.y > gy + 1.5) sy = Math.max(gy, this.topAt(this.pos.x, this.pos.z, this.pos.y + 0.3, this.isPlayer));
       if (this.pos.y <= sy) {
-        const fall = this.jumpMul > 1 ? 30 : 14;
-        if (vy0 < -fall && !dead) this.hurt((-vy0 - fall) * 6, null, null);
-        if (vy0 < -9 && !dead && this.isPlayer) {
+        // caída de alto: corriendo se rueda (como en Vice City) y duele menos; de muy alto
+        // se cae de cara al piso
+        const hs = Math.hypot(this.vx, this.vz);
+        const knockV = this.jumpMul > 1 ? 30 : 19; // con SUPERSALTO se aguanta más
+        const roll = this.isPlayer && !dead && vy0 < -9.5 && vy0 > -knockV && hs > 2.6 && this.knockT <= 0;
+        const fall = (this.jumpMul > 1 ? 30 : 14) + (roll ? 3 : 0);
+        if (vy0 < -fall && !dead) this.hurt((-vy0 - fall) * (roll ? 4 : 6), null, null);
+        if (roll && !this.dead) {
+          this.rollT = 0.62;
+          const k = Math.max(hs, 4.2) / (hs || 1);
+          this.vx *= k; this.vz *= k;
+          g.effects && g.effects.dustPuff && g.effects.dustPuff(this.pos.x, sy + 0.1, this.pos.z, 3, 0.7);
+          g.audio && g.audio.thud && g.audio.thud(this.pos, 0.25);
+        } else if (vy0 < -knockV && !dead && this.isPlayer && !this.dead) {
+          this.knockdown(this.vx * 0.3, this.vz * 0.3, 0);
+          this.knockT = 1.2;
+          g.audio && g.audio.thud && g.audio.thud(this.pos, 0.5);
+        } else if (vy0 < -9 && !dead && this.isPlayer) {
           this.landT = 0.3;
           g.effects && g.effects.dustPuff && g.effects.dustPuff(this.pos.x, sy + 0.1, this.pos.z, 4, 0.8);
-          if (g.cameraRig) g.cameraRig.shake = Math.max(g.cameraRig.shake, Math.min(0.6, -vy0 * 0.03));
         }
+        if (vy0 < -9 && !dead && this.isPlayer && g.cameraRig) g.cameraRig.shake = Math.max(g.cameraRig.shake, Math.min(0.6, -vy0 * 0.03));
+        this.leap = false;
         this.pos.y = sy;
         this.vy = 0;
         this.onGround = true;

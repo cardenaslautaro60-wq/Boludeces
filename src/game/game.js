@@ -25,6 +25,7 @@ import { Saltos } from './saltos.js';
 import { Densidad } from './densidad.js';
 import { Cruces } from './cruces.js';
 import { Prensa } from './prensa.js';
+import { Interiors } from './interiores.js';
 import { SaveSystem } from './save.js';
 import { Brain } from './ai.js';
 import { HUD } from '../ui/hud.js';
@@ -107,6 +108,7 @@ export class Game {
     this.npcs = new NPCs(this);
     this.events = new WorldEvents(this);
     this.prensa = new Prensa(this);
+    this.interiors = new Interiors(this);
     this.saves = new SaveSystem(this);
     this.menus = new Menus(this);
     this.touch = new Touch(this);
@@ -305,6 +307,8 @@ export class Game {
 
   canSwitch() {
     if (!this.companionActive || this.companion.dead || this.companion.hidden) return false;
+    // adentro de un local solo si el otro entró con vos (si no, quedaría en un cuarto invisible)
+    if (this.interiors && this.interiors.inside && !this.interiors.companionIn) return false;
     if (this.missions && this.missions.active && !this.missions.active.allowSwitch) return false;
     return true;
   }
@@ -312,6 +316,7 @@ export class Game {
   switchCharacter() {
     const a = this.player, b = this.companion;
     a.isPlayer = false; b.isPlayer = true;
+    a.diving = false; a.swimUp = 0; // el que queda como compañero sale a flote
     a.brain = new Brain(this, a, 'follow');
     b.brain = null;
     a.isFriend = true; b.isFriend = false;
@@ -342,7 +347,10 @@ export class Game {
   }
 
   revive(p) {
-    p.dead = false; p.health = p.maxHealth; p.deadT = 0; p.knockT = 0; p.model.anim.dead = 0;
+    p.dead = false; p.health = p.maxHealth; p.deadT = 0; p.knockT = 0; p.model.anim.dead = 0; p.model.anim.bp = 0;
+    // sin restos del movimiento de antes (rolido, buceo, trepada)
+    p.rollT = 0; p.landT = 0; p.leap = false; p.climb = null; p.vx = p.vz = p.vy = 0;
+    p.diving = false; p.swimUp = 0; p.oxygen = 100; p.drownT = 0; p.sprintBoost = 0;
   }
 
   // ---------- Entidades ----------
@@ -530,6 +538,7 @@ export class Game {
     const p = this.player;
     this.env.update(dt, this.camera.position, this.time);
     if (this.realSky) this.realSky.update(dt);
+    this.interiors.applyLight();
     this.controller.update(dt, this.input);
     // entidades
     for (let i = 0; i < this.peds.length; i++) {
@@ -539,23 +548,29 @@ export class Game {
       q.update(dt);
       if (q.say) { q.say.t -= dt; if (q.say.t <= 0) q.say = null; }
     }
+    // adentro de un local la calle queda quieta: los autos no se mueven (su IA tampoco corre)
+    const frozen = !!this.interiors.inside;
     for (let i = 0; i < this.vehicles.length; i++) {
       const v = this.vehicles[i];
-      if (v.removed) continue;
+      if (v.removed || frozen) continue;
       const dCam = Math.abs(v.pos.x - this.camera.position.x) + Math.abs(v.pos.z - this.camera.position.z);
       if (dCam > 500 && !v.driver && !v.persistent) continue; // congelar autos lejanos estacionados
       v.update(dt);
     }
     this.collidePedsVehicles(dt);
     this.collideVehicles();
-    this.densidad.update(dt);
-    this.cruces.update(dt);
-    this.traffic.update(dt);
-    this.population.update(dt);
-    this.vida.update(dt);
+    // adentro de un local la calle queda quieta (está 300 m más abajo): tampoco se reparte gente ni autos
+    if (!this.interiors.inside) {
+      this.densidad.update(dt);
+      this.cruces.update(dt);
+      this.traffic.update(dt);
+      this.population.update(dt);
+      this.vida.update(dt);
+    }
     this.police.update(dt);
     this.pickups.update(dt);
     this.activities.update(dt);
+    this.interiors.update(dt);
     this.missions.update(dt);
     this.npcs.update(dt, this.input);
     this.events.update(dt);
@@ -567,21 +582,60 @@ export class Game {
     this.world.updateVisibility(this.camera.position, dt);
     // jugador muerto / ahogado
     if (p.dead && !this.respawning) this.wasted(false);
-    if (p.vehicle && p.vehicle.sinking > 1.5) { p.exitVehicle(); this.effects.splash(p.pos.x, p.pos.z); }
+    if (p.vehicle && p.vehicle.sinking > 1.5) { p.exitVehicle(); this.effects.splash(p.pos.x, p.pos.z); this.audio.stopRadio(); }
     // zona
     this.zoneT = (this.zoneT || 0) - dt;
     if (this.zoneT <= 0) {
       this.zoneT = 0.5;
       const pp = p.vehicle ? p.vehicle.pos : p.pos;
-      this.hud.showZone(this.world.zoneAt(pp.x, pp.z));
+      this.hud.showZone(this.interiors.inside ? this.interiors.inside.name : this.world.zoneAt(pp.x, pp.z));
     }
     // música de persecución: con 4 estrellas o más suena Novishok
     if (this.police.level >= 4) { this.chaseOffT = 0; if (!this.audio.chase) this.audio.startChase(); }
     else if (this.audio.chase) { this.chaseOffT = (this.chaseOffT || 0) + dt; if (this.chaseOffT > 3) this.audio.stopChase(); }
     this.cameraRig.update(dt, this.input);
+    this.underwaterLook(); // después de mover la cámara: si no, al zambullirse parpadea un cuadro
     this.hud.update(dt);
     this.audio.update(dt, this);
     this.menus.checkInGameKeys();
+  }
+
+  // Bajo el agua (buceando): niebla verde azulada y la superficie vista desde abajo
+  underwaterLook() {
+    const c = this.camera.position;
+    const under = c.y < -0.08 && this.terrain.heightAt(c.x, c.z) < -0.5;
+    if (!this.waterCeil) {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), new THREE.MeshBasicMaterial({ color: 0x2a7a88, transparent: true, opacity: 0.94, depthWrite: false, side: THREE.BackSide, fog: false }));
+      m.rotation.x = -Math.PI / 2;
+      m.renderOrder = 5;
+      m.visible = false;
+      this.scene.add(m);
+      this.waterCeil = m;
+    }
+    this.waterCeil.visible = under;
+    // desde abajo la superficie del mar se ve con ruido: se la reemplaza por el "techo" de agua
+    if (this.world.water) this.world.water.visible = !under;
+    // el cielo no lleva niebla: bajo el agua se esconde (si no, se ve una franja clara en el horizonte)
+    const rs = this.realSky;
+    if (under !== !!this.wasUnder) {
+      this.wasUnder = under;
+      if (!under) {
+        this.scene.background = null;
+        // en realista el cielo de noche lo maneja realSky cada cuadro (si se apaga acá, las estrellas parpadean)
+        if (rs) rs.sky.visible = true;
+        else this.env.sky.visible = true;
+      }
+    }
+    if (!under) return;
+    this.env.sky.visible = false;
+    if (rs) { rs.sky.visible = false; if (rs.flare) rs.flare.visible = false; }
+    this.waterCeil.position.set(c.x, -0.05, c.z);
+    const light = 0.35 + this.env.dayLight * 0.65;
+    this.waterCeil.material.color.setHex(0x2a7a88).multiplyScalar(0.2 + this.env.dayLight * 0.8);
+    const f = this.env.fog;
+    f.color.setRGB(0.05, 0.2, 0.24).multiplyScalar(light);
+    f.near = 0.5; f.far = 26;
+    this.scene.background = f.color;
   }
 
   updateLighting() {
@@ -609,16 +663,21 @@ export class Game {
     const f = this.env && this.env.filter;
     const u = this.post.mat.uniforms;
     if (!f) return;
+    // adentro de un local la luz es la del local: sin el tinte de la hora ni del clima de afuera
+    const w = this.interiors && this.interiors.inside ? 0 : f.w;
     const lum = f.x * 0.299 + f.y * 0.587 + f.z * 0.114 || 1;
-    const r = 1 + (f.x / lum - 1) * f.w, gg = 1 + (f.y / lum - 1) * f.w, b = 1 + (f.z / lum - 1) * f.w;
+    const r = 1 + (f.x / lum - 1) * w, gg = 1 + (f.y / lum - 1) * w, b = 1 + (f.z / lum - 1) * w;
     if (u.uFilter) u.uFilter.value.set(r, gg, b);
     else if (u.uTint) u.uTint.value.set(1.04 * r, gg, 0.94 * b);
   }
 
   collidePedsVehicles(dt) {
+    // adentro de un local los autos de afuera quedan quietos: conservan la velocidad para cuando salís,
+    // pero no pisan a nadie ni llevan gente en el techo
+    const frozen = !!(this.interiors && this.interiors.inside);
     for (const v of this.vehicles) {
       if (v.removed) continue;
-      const sp = v.speed;
+      const sp = frozen ? 0 : v.speed;
       const f = v.fwd;
       const lx = f.z, lz = -f.x;
       for (const p of this.peds) {
@@ -632,7 +691,7 @@ export class Game {
         // arriba del techo (o trepando): no choca; si el auto anda, lo lleva ("surfear" el techo)
         if (p.climb) continue;
         if (p.pos.y > v.pos.y + v.type.H - 0.4) {
-          if (p.onGround && Math.abs(lf) < v.type.L / 2 && Math.abs(ll) < v.type.W / 2) { p.pos.x += v.vx * dt; p.pos.z += v.vz * dt; p.pos.y = Math.max(p.pos.y, v.pos.y + v.type.H); }
+          if (p.onGround && Math.abs(lf) < v.type.L / 2 && Math.abs(ll) < v.type.W / 2) { if (!frozen) { p.pos.x += v.vx * dt; p.pos.z += v.vz * dt; } p.pos.y = Math.max(p.pos.y, v.pos.y + v.type.H); }
           continue;
         }
         // dentro de la caja: ¿atropello o empujón?
