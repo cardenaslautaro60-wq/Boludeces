@@ -254,7 +254,8 @@ export class Ped {
       this.attackCD = W.rate;
       this.model.anim.punch = 1;
       this.punchSide = -this.punchSide;
-      setTimeout(() => { if (!this.dead) melee(this.game, this); }, 140);
+      if (this.isPlayer && this.game.red) this.game.red.miGolpeMano();
+      setTimeout(() => { if (!this.dead) conArma(this.game, () => melee(this.game, this)); }, 140);
       return true;
     }
     if ((this.ammo[this.weapon] || 0) <= 0) {
@@ -265,7 +266,7 @@ export class Ped {
     if (this.isPlayer && this.magOf(this.weapon) <= 0) { this.reload(); return false; }
     this.attackCD = W.rate;
     const dir = this.aiming || this.vehicle ? this.aimDir : tmpV.set(Math.sin(this.heading), 0, Math.cos(this.heading)).clone();
-    shoot(this.game, this, dir);
+    conArma(this.game, () => shoot(this.game, this, dir));
     if (this.isPlayer && !this.infiniteAmmo && this.mag[this.weapon] !== undefined) {
       this.mag[this.weapon] = Math.max(0, this.mag[this.weapon] - 1);
       if (this.mag[this.weapon] <= 0) this.reload();
@@ -571,6 +572,13 @@ export class Ped {
     if (this.group.parent) this.group.parent.remove(this.group);
     this.removed = true;
   }
+}
+
+// Mientras corre, el daño que se reparte salió de un arma (los demás jugadores solo cobran ese:
+// atropellos, choques y explosiones los calcula cada uno en su juego)
+function conArma(game, fn) {
+  game.enArma = true;
+  try { return fn(); } finally { game.enArma = false; }
 }
 
 export function sayLine(ped, text, dur = 2.5) {

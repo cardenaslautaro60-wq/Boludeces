@@ -85,7 +85,7 @@ export function fireRay(game, shooter, ox, oy, oz, dx, dy, dz, range) {
   }
   // personajes
   for (const p of game.peds) {
-    if (p === shooter || p.removed || (p.dead && p.deadT > 0.5) || p.vehicle) continue;
+    if (p === shooter || p.removed || p.hidden || (p.dead && p.deadT > 0.5) || p.vehicle) continue;
     const rx = p.pos.x - ox, ry = p.pos.y - oy, rz = p.pos.z - oz;
     const along = rx * dx + ry * dy + rz * dz;
     if (along < 0 || along > best.t) continue;
@@ -152,7 +152,7 @@ export function melee(game, ped) {
   const f = { x: Math.sin(ped.heading), z: Math.cos(ped.heading) };
   let hit = null, bd = W.range + 0.4;
   for (const p of game.peds) {
-    if (p === ped || p.dead || p.vehicle || p.removed) continue;
+    if (p === ped || p.dead || p.vehicle || p.removed || p.hidden) continue;
     const dx = p.pos.x - ped.pos.x, dz = p.pos.z - ped.pos.z;
     const d = Math.hypot(dx, dz);
     if (d > bd || Math.abs(p.pos.y - ped.pos.y) > 1.2) continue;
