@@ -23,6 +23,17 @@ export async function pedirPermiso() { try { return permisos ? await permisos.re
 export async function abrirPermisos() { try { if (permisos) await permisos.manage(); } catch (e) { /* no se pudo abrir */ } }
 const conTope = (p, ms, valor = null) => Promise.race([p, new Promise((res) => setTimeout(() => res(valor), ms))]);
 
+// Solo en el modo de prueba (?red=bc): ?acceso=publica,pedido enciende esos tipos de sala para las pruebas.
+// En un Artifact de verdad no hace nada, así que nadie cambia lo que ve agregando algo al link.
+export function accesoDePrueba() {
+  try {
+    const q = new URLSearchParams(location.search);
+    if (q.get('red') !== 'bc' || !q.has('acceso')) return {};
+    const t = (q.get('acceso') || '').split(',');
+    return { publica: t.includes('publica'), pedido: t.includes('pedido') };
+  } catch (e) { return {}; }
+}
+
 // ¿Se está jugando dentro de un Artifact? (en el .exe, el .apk o el archivo suelto no hay salas)
 export function hayArtifact() {
   try { if (new URLSearchParams(location.search).get('red') === 'bc' && typeof BroadcastChannel === 'function') return true; } catch (e) { /* sin URL */ }

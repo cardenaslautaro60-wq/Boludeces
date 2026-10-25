@@ -11,7 +11,7 @@ const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 let fallas = 0;
 const ok = (cond, msg) => { console.log((cond ? '  ok  ' : '  MAL ') + msg); if (!cond) fallas++; };
 const prefijo = 'prueba-' + Date.now() + '-';
-const TODO = { publica: true, pedido: true }, SOLO_CODIGO = { publica: false, pedido: false };
+const TODO = { publica: true, pedido: true };
 const nuevo = async (nombre, acceso = TODO, pref = prefijo) => {
   const o = new Online({ acceso, canal: { tipo: 'bc', room: salaPestanas({ prefijo: pref }) } });
   o.setNombre(nombre);
@@ -98,9 +98,9 @@ ok(e && !e.auto, 'un auto que no existe se ignora');
 ok(e && e.golpes.length === 1, 'los golpes mal formados se descartan');
 ok(textoChat('hola\u0000‮ mundo<script>'.repeat(10)).length <= 100 && !/[\u0000‮]/.test(textoChat('a\u0000‮b')), 'el chat saca caracteres de control y se corta en 100');
 
-console.log('Acceso solo por código (lo que queda hasta que se decida)');
+console.log('Acceso por defecto: solo código (decisión del 25/10)');
 {
-  const dani = await nuevo('Dani', SOLO_CODIGO), eli = await nuevo('Eli', SOLO_CODIGO);
+  const dani = await nuevo('Dani', {}), eli = await nuevo('Eli', {}); // {} = lo de por defecto
   const x = await dani.crearSala('Quiere ser pública', 'publica');
   ok(x.ok && x.sala.tipo === 'amigos', 'aunque pida pública o con pedido, la sala sale privada con código');
   await esperar(400);
@@ -112,10 +112,11 @@ console.log('Acceso solo por código (lo que queda hasta que se decida)');
   for (const o of [dani, eli]) { await o.salir(true); o.canal.room.cerrarTodo(); }
 }
 
-console.log('Acceso por defecto: salas públicas con lista y privadas con código; "con pedido" apagada');
+console.log('Salas públicas con lista (apagadas por defecto: se prueban encendiéndolas) y "con pedido" apagada');
 {
   const aparte = prefijo + 'defecto-'; // un lobby propio, sin las salas que quedaron de las pruebas de arriba
-  const fer = await nuevo('Fer', {}, aparte), gus = await nuevo('Gus', {}, aparte), hugo = await nuevo('Hugo', {}, aparte);
+  const LISTA = { publica: true, pedido: false };
+  const fer = await nuevo('Fer', LISTA, aparte), gus = await nuevo('Gus', LISTA, aparte), hugo = await nuevo('Hugo', LISTA, aparte);
   const x = await fer.crearSala('Los de la costanera', 'publica');
   ok(x.ok && x.sala.tipo === 'publica', 'se puede crear una sala pública');
   await esperar(400);

@@ -1,6 +1,7 @@
-// Pantalla "Online": nombre, salas abiertas, crear sala (pública, privada con código o privada con
-// pedido de entrada), entrar con código y, adentro de una sala, la lista de jugadores. Más el contador
-// de la sala y el chat en el HUD. Todo lo que escribió otro jugador se muestra como texto (textContent).
+// Pantalla "Online": nombre, crear sala, entrar con código y, adentro de una sala, la lista de jugadores.
+// Por defecto solo hay salas privadas con código; la lista de salas públicas y la privada "con pedido"
+// de entrada están hechas pero apagadas (ver ACCESO en red/sala.js). Más el contador de la sala y el chat
+// en el HUD. Todo lo que escribió otro jugador se muestra como texto (textContent).
 import { MAX_SALA, codigoDe, idDeCodigo } from '../red/sala.js';
 import { escapar, colorDe } from '../red/jugadores.js';
 import { hayPermisos, pedirPermiso, abrirPermisos } from '../red/canal.js';
@@ -99,7 +100,7 @@ export class OnlineUI {
     this.lista = el('div', 'online-lista', fuera);
     const resto = el('div', 'online-resto', fuera);
     // crear una sala: un nombre y un botón por cada tipo
-    el('h4', '', resto, 'Crear una sala');
+    el('h4', '', resto, o.listadas ? 'Crear una sala' : 'Crear una sala privada');
     const crear = el('div', 'online-crear', resto);
     const nomSala = el('input', '', crear); nomSala.maxLength = 24; nomSala.placeholder = `Nombre (por ejemplo, Sala de ${o.nombre})`; aislar(nomSala);
     const botonesCrear = [];
@@ -185,7 +186,8 @@ export class OnlineUI {
     this.bJugar.textContent = this.g.started ? 'Volver al juego' : enSala ? 'Empezar a jugar' : 'Jugar solo';
     if (!enSala) {
       this.lista.replaceChildren();
-      this.h4Salas.hidden = this.lista.hidden = o.disponible && !o.listadas;
+      this.h4Salas.hidden = !o.listadas; // sin lista no hay título de salas (solo el aviso de conexión, si hace falta)
+      this.lista.hidden = o.disponible && !o.listadas;
       if (!o.disponible) {
         const buscando = o.estado === 'buscando' || o.estado === 'apagado';
         el('p', 'online-vacio', this.lista, buscando ? 'Conectando con el modo online...' : explicacion(o));

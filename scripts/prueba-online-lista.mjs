@@ -10,7 +10,7 @@ import path from 'node:path';
 const archivo = path.resolve('dist/gta-san-jorge-compacto.html');
 const srv = http.createServer((q, s) => { s.writeHead(200, { 'content-type': 'text/html' }); fs.createReadStream(archivo).pipe(s); });
 await new Promise((r) => srv.listen(0, r));
-const url = `http://127.0.0.1:${srv.address().port}/juego.html?red=bc`;
+const url = `http://127.0.0.1:${srv.address().port}/juego.html?red=bc&acceso=publica`; // la lista pública está apagada por defecto: acá se enciende
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 let fallas = 0;
 const ok = (c, m) => { console.log((c ? '  ok  ' : '  MAL ') + m); if (!c) fallas++; };

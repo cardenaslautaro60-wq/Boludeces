@@ -7,7 +7,7 @@
 // creó, mientras siga); él anuncia la sala en el lobby, acepta pedidos y puede echar a alguien. Quien
 // juega con el juego tal cual respeta todo eso; un jugador con un juego modificado podría saltearlo
 // (está en los riesgos del plan). Todo lo que llega se valida: nombres como texto, tamaños acotados.
-import { conseguirCanal, hayArtifact, motivoCanal, diagCanal } from './canal.js';
+import { conseguirCanal, hayArtifact, motivoCanal, diagCanal, accesoDePrueba } from './canal.js';
 
 export const MAX_SALA = 8;
 export const TIPOS = ['publica', 'amigos', 'pedido'];
@@ -34,15 +34,16 @@ export function idDeCodigo(txt) {
 }
 
 // Qué tipos de sala se pueden crear y encontrar. La privada con código (no sale en ninguna lista) siempre está.
+// Por defecto es lo único que hay (decisión del 25/10: "Solo código"). Las otras dos están hechas y probadas, apagadas:
 //   publica: salas públicas, que aparecen en una lista con cuánta gente hay y cualquiera puede entrar.
-//   pedido:  privadas que aparecen en la lista pero el anfitrión tiene que aceptar a cada uno (apagado hasta que
-//            Nicolás diga que la quiere; está hecho y probado).
-export const ACCESO = { publica: true, pedido: false };
+//   pedido:  privadas que aparecen en la lista pero el anfitrión tiene que aceptar a cada uno.
+// Se encienden acá, o solo para las pruebas con ?red=bc&acceso=publica,pedido (ver canal.js).
+export const ACCESO = { publica: false, pedido: false };
 
 export class Online {
   constructor(opts = {}) {
     this.opts = opts;
-    const acceso = { ...ACCESO, ...(opts.acceso || {}) };
+    const acceso = { ...ACCESO, ...accesoDePrueba(), ...(opts.acceso || {}) };
     this.permitidos = new Set(['amigos', ...(acceso.publica ? ['publica'] : []), ...(acceso.pedido ? ['pedido'] : [])]);
     this.listadas = this.permitidos.has('publica') || this.permitidos.has('pedido'); // ¿hay lista de salas?
     this.canal = null; // { tipo: 'room' | 'bc', room }
