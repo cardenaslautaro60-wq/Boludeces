@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { WORLD, POI, FRAME, fromAB, satColor } from '../world/mapdata.js';
 import { formatMoney, clamp } from '../util.js';
 import { WEAPONS } from '../game/weapons.js';
+import { LoadingScreen } from './carga.js';
 
 const el = (tag, cls, parent, html) => {
   const e = document.createElement(tag);
@@ -89,6 +90,7 @@ export class HUD {
     this._v = new THREE.Vector3();
     this.bars = el('div', 'hud-letterbox', root, '<div></div><div></div>');
     this.fade = el('div', 'hud-fade', root);
+    this.loading = new LoadingScreen(root);
     this.toast = el('div', 'hud-toast', root);
     this.charTag = el('div', 'hud-char', root);
     this.prompt = el('div', 'hud-prompt', root);

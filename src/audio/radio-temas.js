@@ -5,8 +5,8 @@
 export const RADIO_TEMAS = {
   'rock-local': [
     { archivo: 'rock-local/escampar-pasaras.mp3', titulo: 'Escampar — Pasarás' },
-    { archivo: 'rock-local/al-700-mix.mp3', titulo: 'Al 700 (mix)' },
-    { archivo: 'rock-local/tema-wa0037.mp3', titulo: 'Rock de Comodoro' },
+    { archivo: 'rock-local/al-700-mix.mp3', titulo: 'Aerosol — Al 700 (mix)' },
+    { archivo: 'rock-local/tema-wa0037.mp3', titulo: 'Escampar' },
   ],
   urbano: [
     { archivo: 'urbano/lexx-en-el-party.mp3', titulo: 'Lexx — En el Party (RKT romántico)' },
