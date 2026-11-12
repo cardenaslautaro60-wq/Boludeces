@@ -7,6 +7,7 @@ import { DriverAI } from './traffic.js';
 import { randomLook, LOOKS } from '../entities/humanoid.js';
 import { signTexture } from '../render/textures.js';
 import { dist, rand, pick, clamp } from '../util.js';
+import { capitulo2 } from './capitulo2.js';
 
 class MissionFail extends Error {}
 class MissionAbort extends Error {}
@@ -244,7 +245,7 @@ export class Missions {
     const pos = next.start();
     const marker = new Marker(g, pos.x, pos.z, 0xffd21a, { r: 1.5 });
     // como en el San Andreas, el ícono de la próxima misión queda en el borde del radar aunque esté lejos
-    const blip = { x: pos.x, z: pos.z, letter: next.giver, bg: next.giver === 'N' ? '#1c2f6b' : '#c89a10', name: `Misión: ${next.title}`, legend: true, edge: true };
+    const blip = { x: pos.x, z: pos.z, letter: next.giver, bg: next.giver === 'N' ? '#1c2f6b' : next.giver === 'C' ? '#2f6a5a' : '#c89a10', name: `Misión: ${next.title}`, legend: true, edge: true };
     g.blips.push(blip);
     this.starters.push({ def: next, marker, blip });
   }
@@ -862,10 +863,12 @@ export class Missions {
             await c.fade(false, 1);
           });
           g.removePed(ten);
-          g.hud.bigText('¡FIN DE LA HISTORIA!', 'Gracias por jugar · Aguante Comodoro<br><small>Seguí jugando: bolsitas, saltos, remís y malabares</small>', 8);
+          g.hud.bigText('¡FIN DEL CAPÍTULO 1!', 'Se viene el Capítulo 2: <b>El boom</b><br><small>Buscá la <b>P</b> amarilla en tu semáforo de San Martín</small>', 8);
           void pul;
         },
       },
+      // Capítulo 2: "El boom" (game/capitulo2.js)
+      ...capitulo2(g, M, garage),
     ];
   }
 }
