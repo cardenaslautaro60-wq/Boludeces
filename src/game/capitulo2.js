@@ -556,6 +556,8 @@ export function capitulo2(g, M, garage) {
         c.cleanup.push(() => { if (conPetroca && !g.companionActive) g.setCompanionActive(true, G.pos.x + 2, G.pos.z + 2); });
         if (!G.owned.includes('pistola')) G.give('pistola', 40); else G.ammo.pistola = Math.max(G.ammo.pistola || 0, 40);
         G.setWeapon('pistola');
+        G.armor = Math.max(G.armor || 0, 50);
+        g.hud.showToast('El Petroca te dio un chaleco.', 2);
         const O = M().torreCrudo || M().terminal;
         const of = vereda(O.x, O.z, 1.4);
         const cajero = quieto(c, c.spawnPed('civil', of.x, of.z, { name: 'Cajero de Crudo S.A.', exact: true, look: { ...randomLook('civil'), shirt: 0xe8e8e8, shirtHex: '#e8e8e8', glasses: true } }));
@@ -580,7 +582,6 @@ export function capitulo2(g, M, garage) {
           prev = c.t;
           g.hud.setCounter('bolso', 'BOLSO', `$${plata().toLocaleString('es-AR')}`);
           if (t > 20 && g.police.level < 3) { g.police.setLevel(3); g.hud.showToast('¡Más patrulleros!', 1.5); }
-          if (t > 32 && g.police.level < 4) { g.police.setLevel(4); g.hud.showToast('¡Llegó la Infantería!', 1.5); }
           if (t >= 40) return true;
           if (d > 14 && t < 15) { t = 0; return false; }
           return d > 14 && t >= 15;

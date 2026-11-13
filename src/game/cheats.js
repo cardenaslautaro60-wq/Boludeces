@@ -43,6 +43,14 @@ export class Cheats {
       ANIVERSARIO: ['Fuegos artificiales del aniversario', (g) => g.events.start('aniversario')],
       APAGON: ['Corte de luz', (g) => g.events.start('apagon')],
       CARAVANA: ['Caravana del Lobo', (g) => g.events.start('caravana')],
+      ELBOOM: ['Saltar al Capítulo 2: El boom', (g) => {
+        if (g.missions.active) { g.hud.showToast('Terminá la misión primero.', 2.5); return; }
+        const cap1 = g.missions.list.filter((d) => !d.chapter).map((d) => d.id);
+        for (const id of cap1) if (!g.missions.done.includes(id)) g.missions.done.push(id);
+        if (!g.companionActive) g.setCompanionActive(true, g.player.pos.x + 2, g.player.pos.z + 2);
+        g.missions.refresh();
+        g.hud.showToast('Capítulo 2 desbloqueado: buscá la <b>P</b> amarilla en tu semáforo.', 4);
+      }],
     };
   }
 
